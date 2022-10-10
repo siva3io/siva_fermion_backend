@@ -1,0 +1,92 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "purchase_return_id": "PO-1219876",
+    "reference_id": "6780881",
+    "link_purchase_order":{
+      "id": 2,
+      "name": "PO-017455"
+    },
+    "expected_delivery": "13/08/22",
+    "currency": {
+      "id": 1,
+      "name": "INR"
+    },
+    "vendor_delivery_address": {
+      "vendor_name": "John Doe",
+      "delivery_location": {
+        "id": 1,
+        "location_name": "AnandVihar",
+        "pick_up_address": {
+          "address_line1": "1 Palam Vihar Marg",
+          "address_line2": "Gurgaon, Uttar Pradesh",
+          "country": {
+            "id": 1,
+            "name": "India"
+          },
+          "pincode": 122071
+        },
+        "location_incharge": "Sonam"
+      }
+    },
+    "billing_address": {
+      "id": 1,
+      "location_name": "AnandVihar",
+      "pick_up_address": {
+        "address_line1": "1 Palam Vihar Marg",
+        "address_line2": "Gurgaon, Uttar Pradesh",
+        "country": {
+          "id": 2,
+          "name": "India"
+        },
+        "pincode": "122071"
+      },
+      "location_incharge": "Sonam"
+    },
+    "order_lines": {
+      "page": 1,
+      "page_size": 20,
+      "count": 5,
+      "more_records": true,
+      "results": [
+        {
+          "id": 1,
+          "product_sku": "SKU-2567861",
+          "product_name": "Shirt",
+          "description": "dummy data",
+          "price": 600,
+          "quantity": 1500,
+          "discount": 15,
+          "tax": 18,
+          "amount": 200000
+        }
+      ]
+    },
+    "notes": "notes",
+    "terms_and_conditions": "terms and conditions",
+    "attachments": "Attachment Name.extension",
+    "payment_details": {
+      "select_payment_terms": {
+        "id": 1,
+        "term": 3
+      },
+      "payment_due_date": "27/08/22",
+      "currency": {
+        "id": 1,
+        "name": "INR"
+      },
+      "payment_details": {
+        "sub_total": 2000.0,
+        "tax": 100.0,
+        "shipping_charges": 50.0,
+        "customer_credits": 2000.0,
+        "adjustments": 200.0,
+        "total_amount": 2630.0
+      }
+    }
+  }
+}

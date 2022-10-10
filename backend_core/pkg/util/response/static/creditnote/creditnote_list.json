@@ -1,0 +1,48 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": "True",
+    "result":[{
+    
+        "id": 1,
+        "cn_date": "04/08/22",
+        "credit_note_id": "CN00001",
+        "reference_id": "REF-SI-00001",
+        "invoice_id": "SI-00001",
+        "customer_name": "Namrata Singh",
+        "status": "draft",
+        "payment_amount": "2,00,000"
+    },
+    {
+        "id": 2,
+        "cn_date": "04/08/22",
+        "credit_note_id": "CN00002",
+        "reference_id": "REF-SI-00002",
+        "invoice_id": "SI-00002",
+        "customer_name": "Surendra",
+        "status": "draft",
+        "payment_amount": "3,00,000"
+    },
+    {
+        "id": 3,
+        "cn_date": "04/08/22",
+        "credit_note_id": "CN00003",
+        "reference_id": "REF-SI-00003",
+        "invoice_id": "SI-00003",
+        "customer_name": "Sai",
+        "status": "draft",
+        "payment_amount": "3,00,000"
+    },
+    {
+        "id": 4,
+        "cn_date": "04/08/22",
+        "credit_note_id": "CN00003",
+        "reference_id": "REF-SI-00003",
+        "invoice_id": "SI-00003",
+        "customer_name": "Satya",
+        "status": "draft",
+        "payment_amount": "3,00,000"
+    }
+    ]
+}

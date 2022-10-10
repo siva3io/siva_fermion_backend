@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+    "product_name": "Shopclues",
+    "sku_id": "1888678",
+    "category": {
+      "id": 2,
+      "name": "Clothes,Fashion"
+    },
+    "subcategory": {
+      "id": 1,
+      "name": "Jewellery"
+    },
+    "mrp": 1700,
+    "month": "May",
+    "opening_stock": 1500,
+    "closing_stock": 1000,
+    "sales_price": 2000,
+    "quantity_in_hand": 1700
+  },
+  "store_name": "Eunimart warehouse",
+  "location_type":{
+    "id": 2,
+    "name": "Home"
+  },
+  "city": "Hyderabad",
+  "state":{
+    "id": 1,
+    "name": "Telangana"
+  },
+  "country":{
+    "id": 2,
+    "name": "India"
+  },
+  "pincode": "500018"
+}

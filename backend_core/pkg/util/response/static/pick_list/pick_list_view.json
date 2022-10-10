@@ -1,0 +1,100 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "pick_list_id": 1,
+        "pick_list_name": "PL00001",
+        "pick_list_creation_date": "2022-03-14 12:16:47",
+        "reference_id": "REF-PL00001",
+        "assignee": {
+            "id": 45,
+            "name": "Ramesh Kumar"
+        },
+        "warehouse": {
+            "id": 12,
+            "name": "RK Warehouse"
+        },
+        "source_document_type": {
+            "id": 4,
+            "name": "Sales Order"
+        },
+        "source_document": {
+            "id": 4,
+            "name": "SO00004",
+            "path": "https://picsum.photos/200/300"
+        },
+        "customers": [
+            {
+                "id": 12,
+                "name": "Marc"
+            },
+            {
+                "id": 16,
+                "name": "James"
+            }
+        ],
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "product_varient": {
+                        "id": 4,
+                        "name": "Blue Color"
+                    },
+                    "sales_document": {
+                        "id": 4,
+                        "name": "SO00004"
+                    },
+                    "customer": {
+                        "id": 12,
+                        "name": "Marc"
+                    },
+                    "ordered_quantity": 200,
+                    "quantity_to_pack": 200
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+                    "product_sku": "SKU-3456789",
+                    "product_varient": {
+                        "id": 7,
+                        "name": "Round Neck"
+                    },
+                    "sales_document": {
+                        "id": 4,
+                        "name": "SO00004"
+                    },
+                    "customer": {
+                        "id": 16,
+                        "name": "James"
+                    },
+                    "ordered_quantity": 150,
+                    "quantity_to_pack": 130
+                }
+            ]
+        },
+        "notes": false,
+        "attachments": [
+            {
+                "id": 1,
+                "name": "File1",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "File2",
+                "file_path": "https://picsum.photos/200/300"
+            }
+        ]
+    }
+}

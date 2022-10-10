@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "name": "Ramesh babu",
+    "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+    "business_type": {
+      "id": 1,
+      "name": "Vendor"
+    },
+    "parent_id": {
+      "id": 1,
+      "name": "Pariag Parik Industries"
+    },
+    "phone": "9815963259",
+    "email": "PPindus89@gmail.com",
+    "contact_type": {
+      "id": 1,
+      "name": "Individual"
+    },
+    "first_name": "Ramesh",
+    "last_name": "Babu",
+    "company_name": "Pariag Parik Industries",
+    "category_ids": [
+      {
+        "id": 50,
+        "name": "Seller"
+      }
+    ],
+    "address_ids": [
+      {
+        "id": 1,
+        "name": "Shamshabad Warehouse",
+        "type": "other",
+        "street": "street 1",
+        "street2": "street 2",
+        "street3": "street 3",
+        "landmark": "Near to shop",
+        "zip": "560037",
+        "country_id": {
+          "id": 63,
+          "name": "Ecuador"
+        },
+        "state_id": {
+          "id": 1384,
+          "name": "Azuay (EC)"
+        },
+        "city": "Soma",
+        "gst_number": "43567890-567",
+        "contact_name": "Rahul",
+        "contact_phone": "9815963259"
+      }
+    ],
+    "name_on_account": "Ramesh Babu",
+    "bank_acc_number": "123456789",
+    "bank_name": "HDFC",
+    "ifsc_code": "HDFC0001",
+    "upi_id": "rameshbabu@upi",
+    "date_of_birth": "2018-01-01",
+    "emergency_contact": "9815963259",
+    "work_info": "Some Text",
+    "note": "Dummy Data",
+    "additional_info": "Some Text",
+    "work_phone": "9815963259",
+    "custom_field": "Some Text",
+    "additional_phone": "9815963259",
+    "gst_document": "https://freesvg.org/img/abstract-user-flat-4.png",
+    "gst_number": "43567890-567"
+  }
+}

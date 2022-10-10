@@ -1,0 +1,56 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "result": [
+    {
+      "id": 1,
+      "name": "LK8987654",
+      "reference_id": "AWB-LK8987654",
+      "awb_number": "AWB-LK8987654",
+      "consignee": "Marc Demo",
+      "booking_date": "2022-03-14 12:16:47",
+      "return_date": "2022-04-07 12:16:47",
+      "rto_cost": 100.0,
+      "psdd": "2022-04-08 12:16:47",
+      "esdd": "2022-04-24 12:16:47",
+      "payment_type": "COD",
+      "shipping_partner": "Delivery",
+      "quantity": 250,
+      "status": "Waiting Shipment"
+    },
+    {
+      "id": 2,
+      "name": "LK8987655",
+      "reference_id": "AWB-LK8987655",
+      "awb_number": "AWB-LK8987655",
+      "consignee": "Marc Demo",
+      "booking_date": "2022-03-14 12:16:47",
+      "return_date": "2022-04-07 12:16:47",
+      "rto_cost": 100.0,
+      "psdd": "2022-04-08 12:16:47",
+      "esdd": "2022-04-24 12:16:47",
+      "payment_type": "COD",
+      "shipping_partner": "Delivery",
+      "quantity": 250,
+      "status": "Waiting Shipment"
+    },
+    {
+      "id": 3,
+      "name": "LK8987656",
+      "reference_id": "AWB-LK8987656",
+      "awb_number": "AWB-LK8987654",
+      "consignee": "Marc Demo",
+      "booking_date": "2022-03-14 12:16:47",
+      "return_date": "2022-04-07 12:16:47",
+      "rto_cost": 100.0,
+      "psdd": "2022-04-08 12:16:47",
+      "esdd": "2022-04-24 12:16:47",
+      "payment_type": "COD",
+      "shipping_partner": "Delivery",
+      "quantity": 250,
+      "status": "Waiting Shipment"
+    }
+  ]
+}

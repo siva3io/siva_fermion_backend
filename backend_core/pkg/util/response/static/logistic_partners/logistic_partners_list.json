@@ -1,0 +1,53 @@
+{
+    "page": 1,
+    "PageSize": 20,
+    "Count":5,
+    "MoreRecords":"True",
+    "result":[{
+        "my_shipping_partners":[{
+            "id":1,
+            "shipping_partner_name":"Janio",
+            "shipping_type":"DOMESTIC"
+            },{
+                "id":2,
+                "shipping_partner_name":"Aramex",
+                "shipping_type":"INTERNATIONAL"
+            },{
+                "id":3,
+                "shipping_partner_name":"Delhivery",
+                "shipping_type":"Domestic"
+            }],
+        "available_shipping_partners":[
+            {
+            "id":1,
+            "shipping_partner_name":"Janio",
+            "shipping_type":"DOMESTIC"
+            },
+            {
+                "id":2,
+                "shipping_partner_name":"Aramex",
+                "shipping_type":"INTERNATIONAL"
+            },
+            {
+                "id":3,
+                "shipping_partner_name":"Delhivery",
+                "shipping_type":"Domestic"
+            },
+            {
+                "id":4,
+                "shipping_partner_name":"Aramex",
+                "shipping_type":"INTERNATIONAL"
+            },
+            { 
+                "id":5,
+                "shipping_partner_name":"Bambino",
+                "shipping_type":"Domestic"
+            },
+            {
+                "id":6,
+                "shipping_partner_name":"Bambino",
+                "shipping_type":"INTERNATIONAL"
+            }
+        ]}
+        ]
+}

@@ -1,0 +1,95 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "customer_name": "Magesh Sahu",
+    "number": "SR- 454852",
+    "link_documents_number":{
+      "id": 1,
+      "name": "SO-017455"
+    },
+    "currency": {
+      "id": 1,
+      "name": "INR"
+    },
+    "reference_id": "SO-2552223",
+    "expected_delivery_date": "24/04/2022",
+    "reason": "Deactive",
+    "customer_pickup_address": {
+      "id": 10,
+      "location_name": "some building name",
+      "registered_address": {
+        "address_line1": "1 Palam Vihar Marg",
+        "address_line2": "Gurgaon, Uttar Pradesh",
+        "country": {
+          "id": "1",
+          "name": "India"
+        },
+        "pincode": "122071"
+      },
+      "location_incharge": "Sonam",
+      "customer_billing_details": {
+        "id": 5,
+        "location_name": "some building name",
+        "registered_address": {
+          "address_line1": "1 Palam Vihar Marg",
+          "address_line2": "Gurgaon, Uttar Pradesh",
+          "country": {
+            "id": "1",
+            "name": "India"
+          },
+          "pincode": "122071"
+        },
+        "location_incharge": "Sonam"
+      },
+      "order_lines": {
+        "page": 1,
+        "page_size": 20,
+        "count": 5,
+        "more_records": true,
+        "results": [
+          {
+            "id": 5,
+            "product_sku_id": 23,
+            "product_name": "[E-COM12] Conference Chair (Steel)",
+            "quantity_sold": 10,
+            "unit_of_measure": 10,
+            "return_type": 10,
+            "lot_or_serial_number_returned": 10,
+            "quantity_returned": 100,
+            "rate": 1,
+            "return_location": 1,
+            "discount": 10,
+            "tax": 12,
+            "tax_format": "percent",
+            "amount": 30000.00
+          }
+        ]
+      },
+      "credit_method": "Create credit on reciept",
+      "notes": "notes",
+      "terms_and_conditions": "terms and conditions",
+      "attachments": "Attachment Name.extension",
+      "shipping_details":{
+        "shipping_type": "Express",
+        "payment_method": "COD",
+        "package_direction": "Forword Shipping",
+        "shipment_type": "Surface",
+        "pickup_date_and_time": "22/02/20222 , 10:00 AM to 12:00 PM",
+        "order_date": "12/12/2021",
+        "awb_number": "000122524684163"
+      },
+      "payment_details":{
+        "sub_total": 2000.00,
+        "tax": 100.00,
+        "shipping_charges": 50.00,
+        "customer_credits": 2000.00,
+        "adjustments": 200.00,
+        "total_amount": 2630.00
+      }
+    }
+  }
+}

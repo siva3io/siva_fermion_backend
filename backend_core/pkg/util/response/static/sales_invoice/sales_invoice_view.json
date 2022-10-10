@@ -1,0 +1,124 @@
+{
+    "meta": {
+      "message": "string",
+      "success": true
+},
+    "data": {
+        "id": 1,
+        "invoice_id": "SI-12091021",
+        "reference_id": "REF-SI-0000001",
+        "invoice_date": "12/09/2022",
+        "expected_shipment_date": "22/09/2022",
+        "invoice_currency": {
+            "id": 1,
+            "name": "INR"
+        },
+        "sales_order": [
+            {
+                "id": 1,
+                "name": "doc1"
+            },
+            {
+                "id": 2,
+                "name": "doc2"
+            },
+            {
+                "id": 3,
+                "name": "doc3"
+            }
+        ],
+        "delivery_address": {
+            "id": 1,
+            "customer_name": "suresh",
+            "mobile": 9889898891,
+            "email": "abcd@gmail.com",
+            "address_line1": "64-4-9/A",
+            "address_line2": "Ashok nagar",
+            "address_line3":"Vihar colony",
+            "zip": 523400,
+            "city": "Hyderabad",
+            "state": {
+                "id": 1,
+                "name":"Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name":"India"
+            }
+        },
+        "billing_address": {
+            "id": 2,
+            "customer_name": "suresh",
+            "mobile": 9889898891,
+            "email": "abcd@gmail.com",
+            "address_line1": "64-4-9/A",
+            "address_line2": "Ashok nagar",
+            "address_line3": "Vihar colony",
+            "zip": 523400,
+            "city": "Hyderabad",
+            "state": {
+                "id": 1,
+                "name":"Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name":"India"
+            }
+        },
+        "internal_notes": "sample",
+        "payment_due_date": "21/09/2022",
+        "payment_terms": {
+            "id": 1,
+            "name": "Net 60"
+        },
+        "order_lines": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+            {
+                "id": 56,
+                "product_image": "https://picsum.photos/200/300",
+                "product_sku_id": 23,
+                "product_name": "[E-COM12] Conference Chair (Steel)",
+                "warehouse": "warehouse",
+                "inventory_id": 2,
+                "serial_no": 12,
+                "description": "desc",
+                "uom": "uom",
+                "price": 1000,
+                "quantity": 20,
+                "discount": 150,
+                "tax%": 15,
+                "amount": 20000
+            }
+        ]
+        },
+        "external_notes": "sample notes",
+        "terms_and_conditions": "lorem",
+        "attachments": [
+            {
+                "id": 1,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 3,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            }
+        ],
+        "subtotal": 2000,
+        "shipping_charges": 50,
+        "adjustments": 200,
+        "tax": 100,
+        "customer_credits": 2000,
+        "total_amount": 2630
+      }
+}

@@ -1,0 +1,110 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "id": 1,
+        "channel_details": {
+            "channel_name": {
+                "id": 1,
+                "name": "HK Creations"
+            },
+            "currency": {
+                "id": 1,
+                "type": "INR"
+            },
+            "price_list": {
+                "id": 1,
+                "name": "INR"
+            },
+            "orders_tag": [
+                {
+                    "id": 1,
+                    "channel_status": {
+                        "id": 1,
+                        "status": "active"
+                    }
+                }
+            ]
+        }
+    },
+    "fullfilment_details": {
+        "enable_fba_fbf_to_fullfil_orders": true,
+        "select_the_3pl_facility": {
+            "id": 1,
+            "type": "facility_1"
+        }
+    },
+    "inventory_details": {
+        "select_source_facility": {
+            "id": 1,
+            "type": "actual_inventory"
+        },
+        "type_of_source": "available",
+        "fixed_inventory": 2000
+    },
+    "order_details": {
+        "assign_auto_fullfilment": true,
+        "select_source_facility": {
+            "id": 1,
+            "type": "facility_1"
+        }
+    },
+    "advanced_channel_configuration": {
+        "prices_include_taxes": {
+            "id": 1,
+            "name": "inclusive"
+        },
+        "partial_fullfilment_shipping": true,
+        "email_for_shipping_orders": true,
+        "payment_mapping": {
+            "id": 1,
+            "payment_method": {
+                "id": 1,
+                "name": "online"
+            },
+            "payment_method_name": {
+                "id": 1,
+                "name": "GPay"
+            },
+            "payment_method_description": "online"
+        },
+        "automation": {
+            "inventory_type": {
+                "id": 1,
+                "name": "centralized"
+            },
+            "select_source_facility": {
+                "id": 1,
+                "type": "facility_1"
+            },
+            "sync_inventory": true,
+            "sync_price": true
+        },
+        "pre_sync_configuration": {
+            "pause_inventory_update": true,
+            "pause_price_update": true,
+            "pause_order_update": true,
+            "start_date": "11/04/22",
+            "sync_configuration": {
+                "id": 1,
+                "store_url": "xyz.com",
+                "consumer_key": {
+                    "id": 1,
+                    "name": "KHL009079"
+                },
+                "store_name": {
+                    "id": 1,
+                    "name": "HK Creative"
+                },
+                "consumer_secret": "KL009079"
+            },
+            "sync_fetch_data": {
+                "products": true,
+                "orders": true,
+                "inventory": true
+            }
+        }
+    }
+}

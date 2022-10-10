@@ -1,0 +1,28 @@
+{
+    "page": 1,
+    "PageSize": 20,
+    "Count":5,
+    "MoreRecords":"True",
+    "result":[{
+            "id":1,
+            "payment_term_name":"Net30",
+            "account_type":"Vendor",
+            "date_created":"12/03/2022",
+            "payment_terms":"Net7"
+            },
+            {
+                "id":2,
+                "payment_term_name":"Net30",
+                "account_type":"customer",
+                "date_created":"12/03/2022",
+                "payment_terms":"Net7"
+            },
+            {
+                "id":3,
+                "payment_term_name":"Net30",
+                "account_type":"All",
+                "date_created":"12/03/2022",
+                "payment_terms":"Net7"
+            }
+        ]
+}       

@@ -1,0 +1,51 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": "True",
+    "result":{
+    "my_market_places":[{
+        "id": 1,
+        "store_name": "HK Creative",
+        "token": "BK-0256553",
+        "store_url": "xyz.store.com",
+        "consumer_key": "KHL009079",
+        "customer_key": "KLY90090",
+        "created_date": "08/04/2022",
+        "created_time": "11:30 PM"
+    },
+    {
+        "id": 2,
+        "store_name": "HK Creative",
+        "token": "BK-0256553",
+        "store_url": "xyz.store.com",
+        "consumer_key": "KHL009079",
+        "customer_key": "KLY90090",
+        "created_date": "08/04/22",
+        "created_time": "11:30 PM"
+     }
+    ],
+    
+    "Available_market_places":[{
+        "id": 1,
+        "store_name": "HK Creative",
+        "token": "BK-0256553",
+        "store_url": "xyz.store.com",
+        "consumer_key": "KHL009079",
+        "customer_key": "KLY90090",
+        "created_date": "08/04/22",
+        "created_time": "11:30 PM"
+    },
+    {
+        "id": 2,
+        "store_name": "HK Creative",
+        "token": "BK-0256553",
+        "store_url": "xyz.store.com",
+        "consumer_key": "KHL009079",
+        "customer_key": "KLY90090",
+        "created_date": "08/04/22",
+        "created_time": "11:30 PM"
+    }
+    ]
+}
+}

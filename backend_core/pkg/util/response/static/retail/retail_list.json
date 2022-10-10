@@ -1,0 +1,44 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "results": [
+      {
+        "id": 1,
+        "name": "Mango stores",
+        "address": "Banjara hills",
+        "gst_number": 123456,
+        "date": "23-02-2022"
+
+      },
+      {
+        "id": 9,
+        "name": "Mango stores",
+        "address": "Banjara hills",
+        "gst_number": 123456,
+        "date": "23-02-2022"
+      },
+      {
+        "id": 2,
+        "name": "Mango stores",
+        "address": "Banjara hills",
+        "gst_number": 123456,
+        "date": "23-02-2022"
+      },
+      {
+        "id": 3,
+        "name": "Mango stores",
+        "address": "Banjara hills",
+        "gst_number": 123456,
+        "date": "23-02-2022"
+      },
+      {
+        "id": 4,
+        "name": "Mango stores",
+        "address": "Banjara hills",
+        "gst_number": 123456,
+        "date": "23-02-2022"
+      }
+    ]
+  }

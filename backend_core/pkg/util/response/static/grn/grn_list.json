@@ -1,0 +1,41 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "results": [
+    {
+      "grn_id": 1,
+      "gsn_date": "2022-03-14 12:16:47",
+      "grn_number": "GRN-000001",
+      "asn_number": "ASN-000001",
+      "reference_number": "Ref-GRN-000001",
+      "warehouse_name": "LK Warehouse",
+      "status": "Received",
+      "putaway_status": "Completed",
+      "putaway_location": "Sanket Store"
+    },
+    {
+      "grn_id": 2,
+      "gsn_date": "2022-03-14 12:16:47",
+      "grn_number": "GRN-000002",
+      "asn_number": "ASN-000002",
+      "reference_number": "Ref-GRN-000002",
+      "warehouse_name": "MK Warehouse",
+      "status": "Partially Received",
+      "putaway_status": " Not Completed",
+      "putaway_location": "Sanket Store"
+    },
+    {
+      "grn_id": 3,
+      "gsn_date": "2022-03-14 12:16:47",
+      "grn_number": "GRN-000003",
+      "asn_number": "ASN-000003",
+      "reference_number": "Ref-GRN-000003",
+      "warehouse_name": "LK Warehouse",
+      "status": "Rejected",
+      "putaway_status": "Completed",
+      "putaway_location": "Sanket Store"
+    }
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "scrap_name": "Scrap-00001",
+    "scrap_date": "2022-03-14 12:16:47",
+    "scrapping_reason": {
+      "id": 0,
+      "name": false
+    },
+    "product_details": {
+      "page": 1,
+      "page_size": 20,
+      "count": 5,
+      "more_records": true,
+      "results": [
+        {
+          "order_line_id": 14,
+          "product_id": 31,
+          "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+          "product_sku": "SKU-3456788",
+          "product_description": "Acoustic Bloc Screens",
+          "lot_number": 234,
+          "unit_of_measure": {
+            "id": 2,
+            "name": "Sale UOM"
+          },
+          "scrap_quantity": 5.0,
+          "product_total": 1475.0
+        }
+      ]
+    },
+    "scrap_details": {
+      "customer_id": 11,
+      "customer_name": "Gemini Furniture",
+      "email": "abc@gmail.com",
+      "mobile_number": "+91-9876543211",
+      "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "12345",
+      "city": "Hyderabad",
+      "state": {
+        "id": 9,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 1,
+        "name": "India"
+      },
+      "location_incharge": {
+        "id": 12,
+        "name": "Sanam"
+      }
+    },
+    "dispatch_details": {
+      "sender_id": 1,
+      "sender_name": "Eunimart",
+      "email": "eunimart@gmail.com",
+      "mobile_number": "+91-9876543210",
+      "customer_address_1": "Hyderabad, India",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "500035",
+      "city": "Hyderabad",
+      "state": {
+        "id": 9,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 1,
+        "name": "India"
+      },
+      "location_incharge": {
+        "id": 17,
+        "name": "Prem"
+      }
+    },
+    "shipping_details": {
+      "shipping_type_id": 5,
+      "shipping_type": {
+        "id": 2,
+        "name": "Express"
+      },
+      "shipping_preferance": {
+        "id": 0,
+        "name": false
+      },
+      "carrier": {
+        "id": 0,
+        "name": false
+      },
+      "awb_number": {
+        "id": 0,
+        "name": false
+      },
+      "package_length": 15.0,
+      "package_height": 25.5,
+      "package_width": 10.5,
+      "package_weight": 500.0,
+      "volumetric_weight": 803.25,
+      "shipping_partner": {
+        "id": 3,
+        "name": "DTDC",
+        "shipping_charges": 420.0,
+        "cod_charges": 155.0,
+        "order_deliver_duration": "5-6 days"
+      }
+    },
+    "eunimart_wallet_amount": 0.0,
+    "set_order_pickup_date": "2022-04-15",
+    "set_order_pickup_time": "02:30:00"
+  }
+}

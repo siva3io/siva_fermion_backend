@@ -1,0 +1,60 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "cycle_count_id": 1,
+        "cycle_count_name": "CY00001",
+        "cycle_count_created_date": "2022-03-15 12:16:47",
+        "warehouse": {
+            "id": 12,
+            "name": "RK Warehouse"
+        },
+        "count_method": {
+            "id": 5,
+            "name": "Products"
+        },
+        "assign_to": {
+            "id": 17,
+            "name": "Joh Doe"
+        },
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "recorded_quantity": 500,
+                    "current_count": 350,
+                    "disprecancy_count": 150,
+                    "disprecancy_level": 0.25,
+                    "reason_for_disprecancy": {
+                        "id": 5,
+                        "name": "Reason"
+                    }
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "recorded_quantity": 230,
+                    "current_count": 220,
+                    "disprecancy_count": 10,
+                    "disprecancy_level": 0.05,
+                    "reason_for_disprecancy": {
+                        "id": 5,
+                        "name": "Reason"
+                    }
+                }
+            ]
+        },
+        "schedule_cycle_count": "2022-04-20 12:16:47"
+    }
+}

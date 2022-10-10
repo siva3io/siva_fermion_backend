@@ -1,0 +1,24 @@
+{
+    "page": 1,
+    "PageSize": 20,
+    "Count":5,
+    "MoreRecords":"True",
+    "result":[{
+            "id":1,
+            "warehouse_name":"Srikanth Warehouse",
+            "warehouse_address":"Mistantroad,Telangana,Hyderabad",
+            "linked_shipping_partner":"DHL",
+            "linked_channel_sale":"10",
+            "manage":"manage"
+            },
+            {
+                "id":2,
+                "warehouse_name":"Thripati's Warehouse",
+                "warehouse_address":"Banjarahills,Telangana,Hyderabad",
+                "linked_shipping_partner":"DHL",
+                "linked_channel_sale":"10",
+                "manage":"manage"
+                }
+        ]
+        
+}

@@ -1,0 +1,32 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "result": [
+        {
+            "cycle_count_id": 1,
+            "cycle_count_name": "CY00001",
+            "item": "Nike T-shirt",
+            "assign_to": "Joh Doe",
+            "cycle_count_creation_date": "2022-03-14 12:16:47",
+            "status": "Draft"
+        },
+        {
+            "cycle_count_id": 2,
+            "cycle_count_name": "CY00002",
+            "item": "Nike T-shirt",
+            "assign_to": "Joh Doe",
+            "cycle_count_creation_date": "2022-03-14 12:16:47",
+            "status": "Complete"
+        },
+        {
+            "cycle_count_id": 3,
+            "cycle_count_name": "CY00003",
+            "item": "Nike T-shirt",
+            "assign_to": "Joh Doe",
+            "cycle_count_creation_date": "2022-03-14 12:16:47",
+            "status": "Pending"
+        }
+    ]
+}

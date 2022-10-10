@@ -1,0 +1,60 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "results": [
+    {
+      "id": 1,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-2589652",
+    "physical_location": {
+      "id": 10,
+      "address": "Banjara Hills, Main Office"
+    },
+      "quantity": 250,
+      "bin_tag": "A1Z3R2R3B4",
+      "inventory_count": 20
+    },
+    {
+      "id": 2,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-25896896",
+      "physical_location": {
+        "id": 11,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": 200,
+      "bin_tag": "A1Z3R2R3B4",
+      "inventory_count": 50
+      },
+    {
+      "id": 3,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-25856898",
+      "physical_location": {
+        "id": 12,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": 250,
+      "bin_tag": "A1Z3R2R3B4",
+      "inventory_count": 10
+    },
+    {
+      "id": 4,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-25896632",
+      "physical_location": {
+        "id": 15,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": 243,
+      "bin_tag": "A1Z3R2R3C6",
+      "inventory_count": 50
+    }
+  ]
+}

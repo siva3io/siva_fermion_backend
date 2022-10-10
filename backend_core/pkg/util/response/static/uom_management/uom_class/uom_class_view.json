@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "code": "Class Code 1",
+    "name": "Class 1",
+    "description": "This is a unit name",
+    "base_uom": "UOM Type 1"
+  }
+}

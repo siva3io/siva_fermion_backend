@@ -1,0 +1,189 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "delivery_order_id": 1,
+        "delivery_order_name": "DO00001",
+        "refernce_id": "REF-DO-00001",
+        "source_warehouse": {
+            "id": 32,
+            "name": "XYZ"
+        },
+        "delivery_order_created_date": "2022-03-14 12:16:47",
+        "payment_due_date": "2022-05-24 12:16:47",
+        "expected_delivery_date": "2022-04-15 12:16:47",
+        "do_currency": {
+            "id": 4,
+            "name": "INR"
+        },
+        "price_list": {
+            "id": 23,
+            "name": "UVWX"
+        },
+        "payment_term": {
+            "id": 5,
+            "name": "NET 30"
+        },
+        "source_document": {
+            "id": 1,
+            "name": "SO00001"
+        },
+        "delivery_details": {
+            "customer_id": 11,
+            "customer": "Gemini Furniture",
+            "email": "abc@gmail.com",
+            "mobile_number": "+91-9876543211",
+            "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "12345",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            },
+            "location_incharge": {
+                "id": 12,
+                "name": "Sanam"
+            }
+        },
+        "sender_details": {
+            "sender_id": 1,
+            "sender_name": "Eunimart",
+            "email": "eunimart@gmail.com",
+            "mobile_number": "+91-9876543210",
+            "customer_address_1": "Hyderabad, India",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "500035",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            },
+            "location_incharge": {
+                "id": 17,
+                "name": "Prem"
+            }
+        },
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "inventory_details": {
+                        "id": 9,
+                        "name": "XYZ"
+                    },
+                    "serial_no": 5,
+                    "product_description": "Acoustic Bloc Screens",
+                    "unit_of_measure": {
+                        "id": 2,
+                        "name": "Sale UOM"
+                    },
+                    "product_quantity": 5.0,
+                    "product_unitprice": 295.0,
+                    "product_taxes": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "discount_type": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "payment_term": {
+                        "id": 5,
+                        "name": "NET 30"
+                    },
+                    "product_total": 1475.0
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+                    "product_sku": "SKU-3456789",
+                    "inventory_name": {
+                        "id": 45,
+                        "name": "XY"
+                    },
+                    "serial_no": 3,
+                    "product_description": "Three-Seat Sofa",
+                    "unit_of_measure": {
+                        "id": 3,
+                        "name": "Product UOM"
+                    },
+                    "product_quantity": 1.0,
+                    "product_unitprice": 173.0,
+                    "product_taxes": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "discount_type": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "payment_term": {
+                        "id": 5,
+                        "name": "NET 30"
+                    },
+                    "product_total": 173.0
+                }
+            ]
+        },
+        "shipping_details": {
+            "shipping_type_id": 5,
+            "shipping_type": "Express",
+            "package_length": 15.0,
+            "package_height": 25.5,
+            "package_width": 10.5,
+            "package_weight": 500.0,
+            "volumetric_weight": 803.25,
+            "shipping_partner": {
+                "id": 3,
+                "name": "DTDC",
+                "shipping_charges": 420.0,
+                "cod_charges": 155.0,
+                "order_deliver_duration": "5-6 days"
+            }
+        },
+        "eunimart_wallet_amount": 250.0,
+        "set_order_pickup_date": "2022-04-15",
+        "set_order_pickup_time": "02:30:00",
+        "notes": false,
+        "terms_and_conditions": "Terms and Conditions",
+        "attachments": [
+            {
+                "id": 1,
+                "name": "File1",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "File2",
+                "file_path": "https://picsum.photos/200/300"
+            }
+        ],
+        "available_vendor_credits": 0.0,
+        "sub_total": 1775.0,
+        "tax": 0.0,
+        "shipping_charges": 550.0,
+        "vendor_credits_used": 0.0,
+        "total_amount": 2010.0
+    }
+}

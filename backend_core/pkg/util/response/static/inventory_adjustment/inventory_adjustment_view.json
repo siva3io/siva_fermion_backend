@@ -1,0 +1,70 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "adjustment_id": 1,
+        "adjustment_name": "IADJ00001",
+        "adjustment_type": {
+            "id": 1,
+            "name": "Increase"
+        },
+        "warehouse_name": {
+            "id": 5,
+            "name": "MK Warehouse"
+        },
+        "reference_number": "REF-IADJ00001",
+        "reason": {
+            "id": 2,
+            "name": "Reason"
+        },
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "product_description": "Acoustic Bloc Screens",
+                    "stock_in_hand": 200,
+                    "unitprice": 295.0,
+                    "adjusted_price": 300.0,
+                    "adjusted_quantity": 150,
+                    "balance_quantity": 50
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+                    "product_sku": "SKU-3456789",
+                    "product_description": "Three-Seat Sofa",
+                    "stock_in_hand": 90,
+                    "unitprice": 480.0,
+                    "adjusted_price": 550.0,
+                    "adjusted_quantity": 45,
+                    "balance_quantity": 45
+                }
+            ]
+        },
+        "total_change_in_inventory": 25,
+        "total_change_in_inventory_count": 45,
+        "attach_files": [
+            {
+                "id": 1,
+                "name": "File1",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "File2",
+                "file_path": "https://picsum.photos/200/300"
+            }
+        ],
+        "notes": "Notes"
+    }
+}

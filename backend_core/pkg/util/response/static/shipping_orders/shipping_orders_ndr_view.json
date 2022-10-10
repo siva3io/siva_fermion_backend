@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "name": "LK8987654",
+    "ndr_requests": [
+      {        
+        "attempt": 1,
+        "name": "LK8987654",
+        "ndr_raised_date": "2022-03-14 12:16:47",
+        "payment_type": {
+          "id": 2,
+          "name": "COD"
+        },
+        "amount": 2675.0,
+        "last_delivery_attempt": "2022-03-14 12:16:47",
+        "failure_reason": {
+          "id": 2,
+          "name": "Reason"
+        }
+      },
+      {
+        "attempt": 2,
+        "name": "LK8987654",
+        "ndr_raised_date": "2022-04-12 12:16:47",
+        "payment_type": {
+          "id": 2,
+          "name": "COD"
+        },
+        "amount": 2675.0,
+        "last_delivery_attempt": "2022-03-14 12:16:47",
+        "failure_reason": {
+          "id": 2,
+          "name": "Reason"
+        }
+      }
+    ],
+      "delivery_attempts_left": 3
+  }
+}

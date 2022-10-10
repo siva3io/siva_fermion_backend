@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "name": "LK8987654",
+    "discrepancy_raised_date": "2022-03-14 12:16:47",
+    "reference_id": "REF-LK8987654",
+    "transaction_id": "2345678",
+    "awb_number": {
+      "id": 34,
+      "name": "AWB-LK8987654"
+    },
+    "initial_weight": 298.5,
+    "initial_weight_taken": {
+      "id": 1,
+      "name": "KG"
+    },
+    "final_weight": 300.0,
+    "final_weight_taken": {
+      "id": 1,
+      "name": "KG"
+    },
+    "initial_amount": 2175.0,
+    "final_amount": 2675.0,
+    "discrepancy_amount": 500.0,
+    "weight_discrepancy_proof": [
+      {
+        "id": 1,
+        "name": "File1",
+        "file_path": "https://picsum.photos/200/300"
+      },
+      {
+        "id": 2,
+        "name": "File2",
+        "file_path": "https://picsum.photos/200/300"
+      }
+    ]
+  }
+}

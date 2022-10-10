@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "grn_name": "GRN00001",
+    "source_document": {
+      "id": 4,
+      "name": "SO00004"
+    },
+    "reference_number": "Ref-GRN-000001",
+    "product_details": {
+      "page": 1,
+      "page_size": 20,
+      "count": 5,
+      "more_records": true,
+      "results": [
+        {
+          "order_line_id": 14,
+          "product_id": 31,
+          "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+          "product_sku": "SKU-3456789",
+          "inventory_name": {
+            "id": 45,
+            "name": "XY"
+          },
+          "lot_serial_no": 5,
+          "product_description": "Acoustic Bloc Screens",
+          "unit_of_measure": {
+            "id": 3,
+            "name": "Product UOM"
+          },
+          "ordered_units": 50.0,
+          "received_units": 45.0,
+          "pending_units": 5.0,
+          "is_quality_checked": true,
+          "shelf_location": {
+            "id": 35,
+            "name": "Sanket Store"
+          },
+          "rejected_quantities": 3.0,
+          "reason_of_reject": {
+            "id": 2,
+            "name": "Reason"
+          }
+        },
+        {
+          "order_line_id": 15,
+          "product_id": 35,
+          "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+          "product_sku": "SKU-3456788",
+          "inventory_details": {
+            "id": 9,
+            "name": "XYZ"
+          },
+          "lot_serial_no": 3,
+          "product_description": "Three-Seat Sofa",
+          "unit_of_measure": {
+            "id": 2,
+            "name": "Sale UOM"
+          },
+          "ordered_units": 30.0,
+          "received_units": 27.0,
+          "pending_units": 3.0,
+          "is_quality_checked": true,
+          "shelf_location": {
+            "id": 35,
+            "name": "Sanket Store"
+          },
+          "rejected_quantities": 2.0,
+          "reason_of_reject": {
+            "id": 2,
+            "name": "Reason"
+          }
+        }
+      ]
+    }
+  }
+}

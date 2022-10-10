@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "name": "Shamshabad Warehouse",
+    "type": "other",
+    "street": "street 1",
+    "street2": "street 2",
+    "street3": "street 3",
+    "landmark": "Near to shop",
+    "zip": "560037",
+    "country_id": {
+      "id": 63,
+      "name": "Ecuador"
+    },
+    "state_id": {
+      "id": 1384,
+      "name": "Azuay (EC)"
+    },
+    "city": "Soma",
+    "gst_number": "43567890-567",
+    "contact_name": "Rahul",
+    "contact_phone": "9815963259"
+  }
+}

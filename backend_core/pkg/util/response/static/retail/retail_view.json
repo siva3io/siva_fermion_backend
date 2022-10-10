@@ -1,0 +1,86 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+},
+    "data": {
+        "id": 1,
+        "store_name": "SI-12091021",
+        "currency": {
+          "id": 1,
+          "name": "INR"
+        },
+        "price_list": 
+          {
+            "id": 1,
+            "name": "price"
+          },
+        "order_tags": [
+          {
+            "id": 1,
+            "name": "tag1"
+          },
+          {
+            "id": 2,
+            "name": "tag2"
+          },
+          {
+            "id": 3,
+            "name": "tag3"
+          }
+        ],
+        "retail_store_activity": "deactivate",
+        "allow_back_orders": "Not allowed",
+        "select_source_facility": {
+            "id": 1,
+            "name": "Selected Warehouse"
+        },
+        "store_address": {
+            "id": 1,
+            "store_incharge_name": "suresh",
+            "mobile": 9889898891,
+            "email": "abcd@gmail.com",
+            "address_line1": "64-4-9/A",
+            "address_line2": "Ashok nagar",
+            "landmark":"Vihar colony",
+            "zip": 523400,
+            "city": "Hyderabad",
+            "state": {
+              "id": 1,
+              "name":"Telangana"
+          },
+          "country": {
+              "id": 1,
+              "name":"India"
+          }
+        },
+        "contact_details": {
+            "id": 2,
+            "contact_name": "suresh",
+            "mobile": 9889898891,
+            "email": "abcd@gmail.com",
+            "address_line1": "64-4-9/A",
+            "address_line2": "Ashok nagar",
+            "landmark": "Vihar colony",
+            "zip": 523400,
+            "city": "Hyderabad",
+            "state": {
+              "id": 1,
+              "name":"Telangana"
+          },
+          "country": {
+              "id": 1,
+              "name":"India"
+          }
+        },
+        "prices_include_tax": "Inclusive",
+        "email_notification": "Active",
+        "partial_fulfilment": "Active",
+        "payment_methods":  [
+          {
+            "id": 1,
+            "name": "payment"
+          }
+        ]
+      }
+}

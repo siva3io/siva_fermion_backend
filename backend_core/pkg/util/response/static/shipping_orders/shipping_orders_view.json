@@ -1,0 +1,163 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "shipping_order_name": "SHIP00001",
+    "shipping_type": {
+      "id": 1,
+      "name": "Domestic"
+    },
+    "payment_method": {
+      "id": 2,
+      "name": "COD"
+    },
+    "origin_zipcode": 2345678,
+    "destination_zipcode": 987654,
+    "package_direction": {
+      "id": 1,
+      "name": "Forward Shipping"
+    },
+    "shipment_type": {
+      "id": 3,
+      "name": "Surface"
+    },
+    "awb_number": 12345678,
+    "order_date": "2022-03-14 12:16:47",
+    "shipping_partner_details": {
+      "shipping_partner_id": 5,
+      "shipping_partner": "DTDC",
+      "shipping_charges": 420.0,
+      "cod_charges": 155.0,
+      "order_deliver_duration": "5-6 days"
+    },
+    "cod_remittance": {
+      "cod_status": {
+        "id": 2,
+        "name": "Not Received"
+      },
+      "amount_due": 200.0,
+      "amount_received": 0.0,
+      "date_time_of_receiving": false
+    },
+    "eunimart_wallet_amount": 25.0,
+    "customer_details": {
+      "customer_id": 11,
+      "customer": "Gemini Furniture",
+      "email": "abc@gmail.com",
+      "mobile_number": "+91-9876543211",
+      "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "12345",
+      "city": "Hyderabad",
+      "state": {
+        "id": 10,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 7,
+        "name": "India"
+      }
+    },
+    "sender_details": {
+      "sender_id": 1,
+      "sender": "Eunimart",
+      "email": "eunimart@gmail.com",
+      "mobile_number": "+91-9876543210",
+      "customer_address_1": "Hyderabad, India",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "500035",
+      "city": "Hyderabad",
+      "state": {
+        "id": 10,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 7,
+        "name": "India"
+      }
+    },
+    "product_details": {
+      "page": 1,
+      "page_size": 20,
+      "count": 5,
+      "more_records": true,
+      "results": [
+        {
+          "order_line_id": 14,
+          "product_id": 31,
+          "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+          "product_sku": "SKU-3456788",
+          "product_category": {
+            "id": 7,
+            "name": "Clothing"
+          },
+          "serial_no": 5,
+          "product_description": "Acoustic Bloc Screens",
+          "product_quantity": 5.0,
+          "product_unitprice": 295.0,
+          "product_taxes": {
+            "id": 0,
+            "name": false
+          },
+          "hsn_code": 34567890,
+          "gst_code": 987654,
+          "discount_type": {
+            "id": 2,
+            "name": "Percentage",
+            "value": 5
+          }
+        },
+        {
+          "order_line_id": 15,
+          "product_id": 35,
+          "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+          "product_sku": "SKU-3456789",
+          "product_category": {
+            "id": 7,
+            "name": "Clothing"
+          },
+          "serial_no": 3,
+          "product_description": "Three-Seat Sofa",
+          "product_quantity": 1.0,
+          "product_unitprice": 173.0,
+          "product_taxes": {
+            "id": 0,
+            "name": false
+          },
+          "hsn_code": 34567890,
+          "gst_code": 987654,
+          "discount_type": {
+            "id": 2,
+            "name": "Percentage",
+            "value": 5
+          }
+        }
+      ]
+    },
+    "market_place_details": {
+      "order_channel": {
+        "id": 2,
+        "name": "Amazon"
+      },
+      "order_details": {
+        "id": 1,
+        "name": "SO00001"
+      },
+      "order_date": "2022-03-14 12:16:47"
+    },
+    "package_details": {
+      "package_length": 15.0,
+      "package_height": 25.5,
+      "package_width": 10.5,
+      "package_weight": 500.0,
+      "volumetric_weight": 803.25
+    },
+    "set_order_pickup_date": "2022-04-15",
+    "set_order_pickup_time": "02:30:00"
+  }
+}

@@ -1,0 +1,80 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "results": [
+        {
+            "id": 1,
+            "adjustment_date": "29-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09563",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 9,
+            "adjustment_date": "23-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09090",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 2,
+            "adjustment_date": "09-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09090",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 3,
+            "adjustment_date": "15-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09085",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 4,
+            "adjustment_date": "21-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09090",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 10,
+            "adjustment_date": "19-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09856",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 7,
+            "adjustment_date": "21-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09143",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        },
+        {
+            "id": 8,
+            "adjustment_date": "09-03-2022",
+            "adjustment_reason": "This is the reason",
+            "adjustment_type": "increase",
+            "reference": "REF09091",
+            "warehouse_name": "MKwarehouse",
+            "performed_by": "Mr Singhania"
+        }
+    ]
+}

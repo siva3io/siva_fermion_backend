@@ -1,0 +1,91 @@
+{
+    "meta": {
+      "message": "string",
+      "success": true
+},
+    "data": {
+        "id": 1,
+        "invoice_id": "PI-12091021",
+        "reference_id": "REF-SO-0000001",
+        "vendor_name": {
+            "id": 1,
+            "name": "Ramesh"
+        },
+        "invoice_currency": {
+            "id": 1,
+            "name": "INR"
+        },
+        "invoice_date": "12/09/2022",
+        "expected_delivery_date": "22/09/2022",
+        "vendor_delivery_address": {
+            "id": 1,
+            "location_name": "Anand vihar",
+            "address": "62-3-8/b",
+            "location_incharge": "Suresh"
+        },
+        "delivery_address": {
+            "id": 2,
+            "location_name": "Ashok nagar",
+            "address": "plot no:201",
+            "location_incharge": "Praveen"
+        },
+        "internal_notes": "sample",
+        "payment_due_date": "21/09/2022",
+        "payment_terms": {
+            "id": 1,
+            "name": "Net 60"
+        },
+        "order_lines": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+            {
+                "id": 56,
+                "product_image": "https://picsum.photos/200/300",
+                "product_sku_id": 23,
+                "product_name": "[E-COM12] Conference Chair (Steel)",
+                "warehouse": {
+                    "id": 1,
+                    "name": "Warehouse"
+                },
+                "inventory_id": 20,
+                "serial_no": 12,
+                "description": "desc",
+                "uom": "uom",
+                "price": 1000,
+                "quantity": 20,
+                "discount": 150,
+                "tax%": 15,
+                "amount": 20000
+            }
+        ]
+        },
+        "external_notes": "sample notes",
+        "terms_and_conditions": "lorem",
+        "attachments": [
+            {
+                "id": 1,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 3,
+                "name": "dummy",
+                "url": "https://picsum.photos/200/300"
+            }
+        ],
+        "subtotal": 2000,
+        "shipping_charges": 50,
+        "adjustments": 200,
+        "tax": 100,
+        "customer_credits": 2000,
+        "total_amount": 2630
+      }
+}

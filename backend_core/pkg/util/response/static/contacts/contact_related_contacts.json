@@ -1,0 +1,72 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "parent_ids": [
+      {
+        "id": 1,
+        "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+        "name": "John Doe",
+        "company": "Pariag Parik Industries",
+        "phone": "9815963259",
+        "email": "PPindus89@gmail.com",
+        "business_type": "Seller",
+        "address": "MG Road, Hyderabad, Telangana",
+        "contact_type": "Individual",
+        "note": "Dummy Data"
+      }
+    ],
+    "child_ids": [
+      {
+        "id": 1,
+        "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+        "name": "John Doe",
+        "company": "Pariag Parik Industries",
+        "phone": "9815963259",
+        "email": "PPindus89@gmail.com",
+        "business_type": "Seller",
+        "address": "MG Road, Hyderabad, Telangana",
+        "contact_type": "Individual",
+        "note": "Dummy Data"
+      },
+      {
+        "id": 2,
+        "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+        "name": "John Doe",
+        "company": "Pariag Parik Industries",
+        "phone": "9815963259",
+        "email": "PPindus89@gmail.com",
+        "business_type": "Seller",
+        "address": "MG Road, Hyderabad, Telangana",
+        "contact_type": "Individual",
+        "note": "Dummy Data"
+      },
+      {
+        "id": 3,
+        "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+        "name": "John Doe",
+        "company": "Pariag Parik Industries",
+        "phone": "9815963259",
+        "email": "PPindus89@gmail.com",
+        "business_type": "Seller",
+        "address": "MG Road, Hyderabad, Telangana",
+        "contact_type": "Individual",
+        "note": "Dummy Data"
+      },
+      {
+        "id": 4,
+        "image": "https://freesvg.org/img/abstract-user-flat-4.png",
+        "name": "John Doe",
+        "company": "Pariag Parik Industries",
+        "phone": "9815963259",
+        "email": "PPindus89@gmail.com",
+        "business_type": "Seller",
+        "address": "MG Road, Hyderabad, Telangana",
+        "contact_type": "Individual",
+        "note": "Dummy Data"
+      }
+    ]
+  }
+}

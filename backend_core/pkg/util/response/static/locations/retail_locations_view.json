@@ -1,0 +1,120 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 2,
+    "location_name": "punjagutta",
+    "location_type": {
+      "id": 10,
+      "name": "local warehouse"
+    },
+    "location_id": "L-900900",
+    "parent_location": {
+      "id": 5,
+      "name": "panjagutta"
+    },
+    "address_line_1": "ABC Pvt ltd",
+    "address_line_2": "M D Road",
+    "address_line_3": "banjarahills",
+    "land_mark": "Near PM Mall",
+    "pincode": "500032",
+    "country": {
+      "id": 1,
+      "name": "India"
+    },
+    "state": {
+      "id": 2,
+      "name": "Telangana"
+    },
+    "city": "Hyderabad",
+    "gst_number": "Attachment Name.extension",
+    "gst_attachment": {
+      "id": 10,
+      "name": "GSTIN1234567891",
+      "path": "https://picsum.photos/200/300"
+    },
+    "latitude": "YX",
+    "longitude": "XY",
+    "drop_location_pin": "Open Map"
+  },
+  "selected_serviceable_area": [
+    {
+      "id": 10,
+      "address_line1": "ABC Pvt. Ltd",
+      "address_line2": "MD Road, Krishna Nagar Hyderabad"
+    },
+    {
+      "id": 15,
+      "address_line1": "ABC Pvt. Ltd",
+      "address_line2": "MD Road, Krishna Nagar Hyderabad"
+    }
+  ],
+  "store_name": "Mango Store Private Limited",
+  "currency": {
+    "id": 4,
+    "name": "USD"
+  },
+  "price_list": "Price list name",
+  "order_tags": [
+    {
+      "id": 5,
+      "name": "Some TAG"
+    },
+    {
+      "id": 1,
+      "name": "Other TAG"
+    },
+    {
+      "id": 2,
+      "name": "Better Tag"
+    }
+  ],
+  "store_activity": "Deactive",
+  "allow_back_orders": "Not allowed",
+  "advance_channel_configurations": {
+    "price_include_tax": "Inclusive",
+    "email_notification": "Active",
+    "partial_fulfillment": "Active"
+  },
+  "select_source_facility": [
+    {
+      "id": 10,
+      "name": "Source Facility 1"
+    },
+    {
+      "id": 12,
+      "name": "Source Facility 2"
+    }
+  ],
+  "payment_mapping": {
+    "payment_method": "Online",
+    "payment_method_name": "Payment 1",
+    "payment_method_description": "This is the payment method description"
+  },
+  "location_incharge_details": {
+    "id": 10,
+    "incharge_name": "john doe",
+    "email": "john.doe@gmail.com",
+    "company_name": "PK Electromates",
+    "mobile_no": 9848022338,
+    "role": "seller",
+    "upload_profile_picture": "https://picsum.photos/200/300"
+  },
+  "name": "Eunimartwarehouse",
+  "location_type":{
+    "id": 2,
+    "name": "Home"
+  },
+  "city": "Hyderabad",
+  "state": {
+    "id": 2,
+    "name": "Telangana"
+  },
+  "country": {
+    "id": 3,
+    "name": "India"
+  },
+  "pincode": "500018"
+}

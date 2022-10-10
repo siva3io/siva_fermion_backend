@@ -1,0 +1,56 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "result": [
+    {
+      "id": 1,
+      "scrap_name": "Scrap-00002",
+      "scrap_date": "2022-03-14 12:16:47",
+      "reference_number": "REF-Scrap-00002",
+      "source_location": "LK Warehouse",
+      "scrap_location": "Magan Scrap",
+      "status": "draft",
+      "gsn_status": "approved",
+      "shipping_mode": "Eunimart Shipping",
+      "expected_shipping_date": "2022-04-24 12:16:47"
+    },
+    {
+      "id": 2,
+      "scrap_name": "Scrap-00003",
+      "scrap_date": "2022-03-14 12:16:47",
+      "reference_number": "REF-Scrap-00003",
+      "source_location": "LK Warehouse",
+      "scrap_location": "Magan Scrap",
+      "status": "draft",
+      "gsn_status": "approved",
+      "shipping_mode": "Eunimart Shipping",
+      "expected_shipping_date": "2022-04-24 12:16:47"
+    },
+    {
+      "id": 3,
+      "scrap_name": "Scrap-00004",
+      "scrap_date": "2022-03-14 12:16:47",
+      "reference_number": "REF-Scrap-00004",
+      "source_location": "LK Warehouse",
+      "scrap_location": "Magan Scrap",
+      "status": "draft",
+      "gsn_status": "approved",
+      "shipping_mode": "Eunimart Shipping",
+      "expected_shipping_date": "2022-04-24 12:16:47"
+    },
+    {
+      "id": 4,
+      "scrap_name": "Scrap-00005",
+      "scrap_date": "2022-03-14 12:16:47",
+      "reference_number": "REF-Scrap-00005",
+      "source_location": "LK Warehouse",
+      "scrap_location": "Magan Scrap",
+      "status": "draft",
+      "gsn_status": "approved",
+      "shipping_mode": "Eunimart Shipping",
+      "expected_shipping_date": "2022-04-24 12:16:47"
+    }
+  ]
+}

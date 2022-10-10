@@ -1,0 +1,92 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "id": 1,
+        "debit_note_id": "DN00001",
+        "reference_id": "REF-SI-00001",
+        "purchase_invoice_id": {
+            "id": 1,
+            "name": "PO-12091021"
+        },
+        "vendor_name": {
+            "id": 1,
+            "name": "Namrata Singh"
+        },
+        "debit_note_date": "11-04-22",
+        "currency": {
+            "id": 1,
+            "name": "INR"
+        },
+        "reason": {
+            "id": 1,
+            "name": "Dummy Data"
+        },
+        "vendor_delivery_address": {
+            "delivery_location": {
+                "id": 1,
+                "name": "Anand Vihar",
+                "picking_up_location": {
+                    "id": 1,
+                    "name": "India"
+                },
+                "location_incharge": "Sonam"
+            },
+            "billing_location": {
+                "id": 1,
+                "location_name": "Anand Vihar",
+                "picking_up_location": {
+                    "id": 1,
+                    "name": "India"
+                },
+                "location_incharge": "Sonam"
+            },
+            "available_vendor_credits": 2000
+        },
+        "order_lines": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "product_details": {
+                        "id": 1,
+                        "product_sku": "SKU-2567861",
+                        "product_name": "Shirt",
+                        "description": "dummy data",
+                        "price": 1200,
+                        "quantity": 1500,
+                        "discount": 15,
+                        "tax": 18,
+                        "amount": 200000
+                    }
+                }
+            ]
+        },
+        "notes": "dummy data",
+        "terms_and_conditions": "dummy data",
+        "attachments": [
+            {
+                "id": 1,
+                "name": "dummy",
+                "path": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 1,
+                "name": "dummy",
+                "path": "https://picsum.photos/200/300"
+            }
+        ]
+    },
+    "payment_details": {
+        "sub_total": 2000,
+        "tax": 100,
+        "shipping_charges": 50,
+        "customer_credits": 2000,
+        "adjustments": 200,
+        "total_amount": 2630
+    }
+}

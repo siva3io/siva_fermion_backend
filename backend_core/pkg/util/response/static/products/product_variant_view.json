@@ -1,0 +1,125 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 16,
+    "name": "Customizable Desk",
+    "default_code": "DESK0004",
+    "parent_default_code": "559724FURN",
+    "detailed_type": {
+      "id": 1,
+      "name": "Can be sold"
+    },
+    "currency_id": {
+      "id": 20,
+      "name": "INR"
+    },
+    "list_price": 750,
+    "barcode": "3456789",
+    "standard_price": 500,
+    "std_product_type": "gtin",
+    "std_product_code": "1234567890123",
+    "product_condition": {
+      "id": 1,
+      "name": "New"
+    },
+    "brand_id": {
+      "id": 1,
+      "name": "Nike"
+    },
+    "product_length": 54,
+    "product_breadth": 44,
+    "product_height": 25,
+    "product_weight": 5000,
+    "dimensions_uom_id": {
+      "id": 1,
+      "name": "Nos"
+    },
+    "parent_category_id": {
+      "id": 1,
+      "name": "Furniture"
+    },
+    "category_id": {
+      "id": 1,
+      "name": "Furniture"
+    },
+    "description": "<p>Dummy description in html</p>",
+    "keyword_ids": [
+      {
+        "id": 1,
+        "name": "Furniture"
+      },
+      {
+        "id": 2,
+        "name": "Desk"
+      }
+    ],
+    "images": [
+      {
+        "id": 1,
+        "name": "Customizable Desk",
+        "url": "https://cdn.shopclues.com/images1/thumbnails/108076/320/320/150179000-108076424-1592756400.jpg"
+      },
+      {
+        "id": 2,
+        "name": "Customizable Desk",
+        "url": "https://cdn.shopclues.com/images1/thumbnails/108076/320/320/150179000-108076424-1592756400.jpg"
+      }
+    ],
+    "package_materials": [
+      {
+        "id": 1,
+        "name": "Wood"
+      },
+      {
+        "id": 2,
+        "name": "Plastic"
+      }
+    ],
+    "package_cost": 500,
+    "package_height": 24,
+    "package_length": 24,
+    "package_weight": 24,
+    "package_breadth": 24,
+    "package_uom_id": {
+      "id": 1,
+      "name": "Nos"
+    },
+    "package_note": "This is a dummy package note",
+    "package_volume": 24,
+    "vendor_ids": [
+      {
+        "id": 31,
+        "name": {
+          "id": 27,
+          "name": "Nicole Ford"
+        },
+        "product_name": "Customizable Desk",
+        "vendor_sku_id": "VEN-SKU-001",
+        "vendor_lead_time": "10 Hrs",
+        "min_qty": 10,
+        "price": 200,
+        "vendor_credit_days": 10
+      }
+    ],
+    "tax_included": false,
+    "shipping_cost": 100,
+    "Shipping_included": false,
+    "shipping_note": "This is a dummy shipping note",
+    "forecast_selling_price": 500,
+    "forecast_package_cost": 500,
+    "forecast_overall_cost": 500,
+    "forecast_landing_cost": 1100,
+    "forecast_forwarding_cost": 100,
+    "forecast_inventory_cost": 500,
+    "annual_demand": 100,
+    "forecast_demand": 100,
+    "supply_load_time": "10 Hrs",
+    "holding_cost": 100,
+    "delivery_load_time": "10 Hrs",
+    "safety_stock": 10,
+    "EOQ": 10
+  }
+}

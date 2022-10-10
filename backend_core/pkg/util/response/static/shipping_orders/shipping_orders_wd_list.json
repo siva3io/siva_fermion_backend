@@ -1,0 +1,68 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "result": [
+    {
+      "id": 1,
+      "name": "LK8987654",
+      "reference_id": "AWB-LK8987654",
+      "transaction_id": "2345678",
+      "awb_number": "AWB-LK8987654",
+      "courier_partner_proof": {
+        "id": 1,
+        "name": "File",
+        "path": "https://picsum.photos/200/300"
+      },
+      "raised_date": "2022-03-14 12:16:47",
+      "initial_weight": 298.5,
+      "initial_weight_taken": "KG",
+      "final_weight": 300.0,
+      "final_weight_taken": "KG",
+      "initial_amount": 2175.0,
+      "final_amount": 2675.0,
+      "discrepancy_amount": 500.0
+    },
+    {
+      "id": 2,
+      "name": "LK8987655",
+      "reference_id": "AWB-LK8987655",
+      "transaction_id": "2345679",
+      "awb_number": "AWB-LK8987655",
+      "courier_partner_proof": {
+        "id": 2,
+        "name": "File",
+        "path": "https://picsum.photos/200/300"
+      },
+      "raised_date": "2022-03-14 12:16:47",
+      "initial_weight": 298.5,
+      "initial_weight_taken": "KG",
+      "final_weight": 300.0,
+      "final_weight_taken": "KG",
+      "initial_amount": 2175.0,
+      "final_amount": 2675.0,
+      "discrepancy_amount": 500.0
+    },
+    {
+      "id": 3,
+      "name": "LK8987656",
+      "reference_id": "AWB-LK8987656",
+      "transaction_id": "2345680",
+      "awb_number": "AWB-LK8987656",
+      "courier_partner_proof": {
+        "id": 3,
+        "name": "File",
+        "path": "https://picsum.photos/200/300"
+      },
+      "raised_date": "2022-03-14 12:16:47",
+      "initial_weight": 298.5,
+      "initial_weight_taken": "KG",
+      "final_weight": 300.0,
+      "final_weight_taken": "KG",
+      "initial_amount": 2175.0,
+      "final_amount": 2675.0,
+      "discrepancy_amount": 500.0
+    }
+  ]
+}

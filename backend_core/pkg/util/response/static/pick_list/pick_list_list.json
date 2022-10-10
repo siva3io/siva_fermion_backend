@@ -1,0 +1,64 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "result": [
+        {
+            "pick_list_id": 1,
+            "pick_list_name": "PL00001",
+            "pick_list_creation_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-PL00001",
+            "source_document": {
+                "id": 1,
+                "name": "File",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            "assignee_name": "Ramesh Kumar",
+            "warehouse_name": "RK Warehouse",
+            "item_list": [
+                {
+                    "product_id": 1,
+                    "product_name": "T-shirt"
+                },
+                {
+                    "product_id": 2,
+                    "product_name": "Jeans"
+                },
+                {
+                    "product_id": 3,
+                    "product_name": "Sneakers"
+                }
+            ],
+            "status": "Completed"
+        },
+        {
+            "pick_list_id": 2,
+            "pick_list_name": "PL00002",
+            "pick_list_creation_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-PL00002",
+            "source_document": {
+                "id": 1,
+                "name": "File",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            "assignee_name": "Ramesh Kumar",
+            "warehouse_name": "MK Warehouse",
+            "item_list": [
+                {
+                    "product_id": 1,
+                    "product_name": "T-shirt"
+                },
+                {
+                    "product_id": 2,
+                    "product_name": "Jeans"
+                },
+                {
+                    "product_id": 3,
+                    "product_name": "Sneakers"
+                }
+            ],
+            "status": "On hold"
+        }
+    ]
+}

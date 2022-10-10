@@ -1,0 +1,93 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "results": [
+    {
+      "id": 1,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-2589652",
+      "physical_location": {
+        "id": 10,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": "250",
+      "bin_tag": "A1Z3R2R3B4",
+      "virtual_location": {
+        "id": 10,
+        "address": "Virtual Warehouse Name"
+      },
+      "on_hand_quantity": 125,
+      "planned_in_quantity": 25,
+      "planned_out_quantity": 35,
+      "stock_expected": 70,
+      "committed_stock": 10,
+      "available_stock": 20
+    },
+    {
+      "id": 2,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-2589652",
+      "physical_location": {
+        "id": 1,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": 250,
+      "bin_tag": "A1Z3R2R3B4",
+      "virtual_location": {
+        "id": 3,
+        "address": "Virtual Warehouse Name"
+      },
+      "on_hand_quantity": 125,
+      "planned_in_quantity": 25,
+      "planned_out_quantity": 35,
+      "stock_expected": 70,
+      "committed_stock": 10,
+      "available_stock": 20
+    },
+    {
+      "id": 3,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-2589652",
+      "physical_location": null,
+      "quantity": null,
+      "bin_tag": null,
+      "virtual_location": {
+        "id": 2,
+        "address": "Virtual Warehouse Name"
+      },
+      "on_hand_quantity": 125,
+      "planned_in_quantity": 23,
+      "planned_out_quantity": 40,
+      "stock_expected": 50,
+      "committed_stock": 10,
+      "available_stock": 20
+    },
+    {
+      "id": 5,
+      "image": "https://cdn.shopclues.com/images/thumbnails/46412/320/320/IMG20161028WA001014776517401477651878.jpg",
+      "name": "Necklace",
+      "default_code": "SKU-2589652",
+      "physical_location": {
+        "id": 15,
+        "address": "Banjara Hills, Main Office"
+      },
+      "quantity": 250,
+      "bin_tag": "A1Z3R2R3B4",
+      "virtual_location": {
+        "id": 2,
+        "address": "Virtual Warehouse Name"
+      },
+      "on_hand_quantity": 125,
+      "planned_in_quantity": 25,
+      "planned_out_quantity": 35,
+      "stock_expected": 70,
+      "committed_stock": 10,
+      "available_stock": 20
+    }
+  ]
+}

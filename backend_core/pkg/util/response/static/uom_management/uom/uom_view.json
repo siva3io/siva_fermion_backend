@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "item_type": "Storable",
+    "code": "Unit Code 1",
+    "name": "Unit 1",
+    "description": "This is Unit Description",
+    "class_code": "Class Code",
+    "class_name": "UOM Class 1, UOM Class 1",
+    "base_uom_name": "UOM Base 1",
+    "conversion_type": "Multiplier",
+    "conversion_factor": 90
+  }
+}

@@ -1,0 +1,28 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "results": [
+      {
+        "id": 1,
+        "name": "Virtual Warehouse1"
+      },
+      {
+        "id": 9,
+        "name": "Virtual Warehouse2"
+      },
+      {
+        "id": 2,
+        "name": "Virtual Warehouse3"
+      },
+      {
+        "id": 3,
+        "name": "Virtual Warehouse4"
+      },
+      {
+        "id": 4,
+        "name": "Virtual Warehouse5"
+      }
+    ]
+  }

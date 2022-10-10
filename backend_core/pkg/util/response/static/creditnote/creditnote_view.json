@@ -1,0 +1,113 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "id": 1,
+        "vendor_name": {
+            "id": 1,
+            "name": "Ramesh Kumar"
+        },
+        "credit_note_date": "11-04-22",
+        "reference_id": "REF-DN-00001",
+        "purchase_invoice_id": {
+            "id": 1,
+            "name": "PO-12091021"
+        },
+        "currency": {
+            "id": 1,
+            "name": "INR"
+        },
+        "reason": {
+            "id": 1,
+            "name": "Dummy Data"
+        },
+        "customer_shipping_address": {
+            "id": 1,
+            "customer_name": "Anand Vihar",
+            "phone_number": 9848022338,
+            "email": "xyz@gmail.com",
+            "address_line_1": "Punjagutta",
+            "address_line_2": "Punjagutta",
+            "address_line_3": "Punjagutta",
+            "city": "Hyd",
+            "zipcode": 500072,
+            "state": {
+                "id": 1,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            }
+        },
+        "customer_billing_address": {
+            "id": 1,
+            "customer_name": "Anand Vihar",
+            "mobile_number": 9848022338,
+            "email": "xyz@gmail.com",
+            "address_line_1": "Punjagutta",
+            "address_line_2": "Punjagutta",
+            "address_line_3": "Punjagutta",
+            "city": "Hyd",
+            "zipcode": 500072,
+            "state": {
+                "id": 1,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            }
+        },
+        "order_lines": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "product_details": {
+                        "id": 1,
+                        "product_sku": "SKU-2567861",
+                        "product_name": "Shirt",
+                        "description": "dummy data",
+                        "price": 600,
+                        "unit_of_measurement": {
+                            "id": 1,
+                            "name": "uom_1"
+                        },
+                        "quantity": 1500,
+                        "discount": 15,
+                        "tax": 18,
+                        "amount": 200000
+                    }
+                }
+            ]
+        },
+        "additional_information": {
+            "notes": "dummy data",
+            "terms_and_conditions": "dummy data",
+            "attachments": [
+                {
+                    "id": 1,
+                    "name": "dummy",
+                    "path": "https://picsum.photos/200/300"
+                },
+                {
+                    "id": 2,
+                    "name": "dummy",
+                    "path": "https://picsum.photos/200/300"
+                }
+            ]
+        },
+        "payment_details": {
+            "sub_total": 2000,
+            "tax": 100,
+            "shipping_charges": 50,
+            "customer_credits": 2000,
+            "total_amount": 2630
+        }
+    }
+}

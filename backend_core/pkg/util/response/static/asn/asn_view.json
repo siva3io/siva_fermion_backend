@@ -1,0 +1,147 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "asn_number": "ASN-000005",
+    "source_document": {
+      "id": 4,
+      "name": "SO00004"
+    },
+    "reference_number": "Ref-ASN-000005",
+    "product_details": {
+      "page": 1,
+      "page_size": 20,
+      "count": 5,
+      "more_records": true,
+      "results": [
+        {
+          "order_line_id": 14,
+          "product_id": 31,
+          "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+          "product_sku": "SKU-3456789",
+          "price": 1500.0,
+          "package_type": {
+            "id": 4,
+            "name": "Box"
+          },
+          "unit_per_box": 25,
+          "unit_of_measure": {
+            "id": 2,
+            "name": "CM"
+          },
+          "package_dimensions": {
+            "package_length": 15.5,
+            "package_height": 20.0,
+            "package_width": 10.0
+          },
+          "package_weight": 500.0,
+          "no_of_boxes": 15,
+          "cross_docking_req": false
+        },
+        {
+          "order_line_id": 15,
+          "product_id": 35,
+          "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+          "product_sku": "SKU-3456788",
+          "price": 430.0,
+          "package_type": {
+            "id": 4,
+            "name": "Box"
+          },
+          "unit_per_box": 25,
+          "unit_of_measure": {
+            "id": 2,
+            "name": "CM"
+          },
+          "package_dimensions": {
+            "package_length": 15.5,
+            "package_height": 20.0,
+            "package_width": 10.0
+          },
+          "package_weight": 500.0,
+          "no_of_boxes": 15,
+          "cross_docking_req": false
+        }
+      ]
+    },
+    "delivery_location": {
+      "customer_id": 11,
+      "customer_name": "Gemini Furniture",
+      "email": "abc@gmail.com",
+      "mobile_number": "+91-9876543211",
+      "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "12345",
+      "city": "Hyderabad",
+      "state": {
+        "id": 9,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 1,
+        "name": "India"
+      },
+      "location_incharge": {
+        "id": 12,
+        "name": "Sanam"
+      }
+    },
+    "dispatch_location": {
+      "sender_id": 1,
+      "sender_name": "Eunimart",
+      "email": "eunimart@gmail.com",
+      "mobile_number": "+91-9876543210",
+      "customer_address_1": "Hyderabad, India",
+      "customer_address_2": false,
+      "customer_address_3": false,
+      "zipcode": "500035",
+      "city": "Hyderabad",
+      "state": {
+        "id": 9,
+        "name": "Telangana"
+      },
+      "country": {
+        "id": 1,
+        "name": "India"
+      },
+      "location_incharge": {
+        "id": 17,
+        "name": "Prem"
+      }
+    },
+    "shipping_details": {
+      "shipping_id": 5,
+      "shipping_preferance": {
+        "id": 2,
+        "name": "Eunimart"
+      },
+      "carrier": {
+        "id": 0,
+        "name": false
+      },
+      "awb_number": {
+        "id": 0,
+        "name": false
+      },
+      "package_length": 15.0,
+      "package_height": 25.5,
+      "package_width": 10.5,
+      "package_weight": 500.0,
+      "volumetric_weight": 803.25,
+      "shipping_partner": {
+        "id": 3,
+        "name": "DTDC",
+        "shipping_charges": 420.0,
+        "cod_charges": 155.0,
+        "order_delivery_duration": "5-6 days"
+      }
+    },
+    "eunimart_wallet_amount": 250.0,
+    "set_order_pickup_date": "2022-04-15",
+    "set_order_pickup_time": "02:30:00"
+  }
+}

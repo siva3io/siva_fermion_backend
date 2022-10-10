@@ -1,0 +1,40 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "results": [
+    {
+      "id": 1,
+      "code": "UOM90909",
+      "name": "UOM 1",
+      "description": "This is description",
+      "class": "UOM Class 1",
+      "base_uom": "Base UOM 1"
+    },
+    {
+      "id": 2,
+      "code": "UOM909010",
+      "name": "UOM 2",
+      "description": "This is description",
+      "class": "UOM Class 2",
+      "base_uom": "Base UOM 2"
+    },
+    {
+      "id": 3,
+      "code": "UOM90911",
+      "name": "UOM 3",
+      "description": "This is description",
+      "class": "UOM Class 3",
+      "base_uom": "Base UOM 3"
+    },
+    {
+      "id": 4,
+      "code": "UOM90912",
+      "name": "UOM 4",
+      "description": "This is description",
+      "class": "UOM Class 4",
+      "base_uom": "Base UOM 4"
+    }
+  ]
+}

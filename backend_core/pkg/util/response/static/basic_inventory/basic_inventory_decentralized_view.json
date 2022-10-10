@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "item_id": "SKU-2589652",
+    "name": "Nike Shoe",
+    "physical_location":{
+      "id": 1,
+      "address": "Banajara Hill Main Office"
+    },
+    "virtual_location":{
+      "id": 2,
+      "address": "Amazon USA"
+    },
+    "available_stock": 150,
+    "no_of_units": 150
+  }
+}

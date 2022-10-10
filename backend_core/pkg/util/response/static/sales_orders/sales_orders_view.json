@@ -1,0 +1,149 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "sales_order_id": 1,
+        "sales_order_name": "S00001",
+        "reference_number": "REF-S00001",
+        "sales_order_creation_date": "2022-03-14 12:16:47",
+        "sales_order_currency": {
+            "id": 4,
+            "name": "INR"
+        },
+        "customer_details": {
+            "customer_id": 11,
+            "customer_name": "Gemini Furniture",
+            "email": "abc@gmail.com",
+            "mobile_number": "+91-9876543211",
+            "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "12345",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            }
+        },
+        "sender_details": {
+            "sender_id": 1,
+            "sender_name": "Eunimart",
+            "email": "eunimart@gmail.com",
+            "mobile_number": "+91-9876543210",
+            "customer_address_1": "Hyderabad, India",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "500035",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            }
+        },
+        "payment_terms": {
+            "id": 4,
+            "name": "Net-15"
+        },
+        "payment_due_date": "2022-04-24 12:16:47",
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "inventory_details": {
+                        "id": 9,
+                        "name": "XYZ"
+                    },
+                    "serial_no": 5,
+                    "product_description": "Acoustic Bloc Screens",
+                    "unit_of_measure": {
+                        "id": 2,
+                        "name": "Sale UOM"
+                    },
+                    "product_quantity": 5.0,
+                    "product_unitprice": 295.0,
+                    "product_taxes": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "discount_type": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "payment_term": {
+                        "id": 5,
+                        "name": "NET 30"
+                    },
+                    "product_total": 1475.0
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+                    "product_sku": "SKU-3456789",
+                    "inventory_name": {
+                        "id": 45,
+                        "name": "XY"
+                    },
+                    "serial_no": 3,
+                    "product_description": "Three-Seat Sofa",
+                    "unit_of_measure": {
+                        "id": 3,
+                        "name": "Product UOM"
+                    },
+                    "product_quantity": 1.0,
+                    "product_unitprice": 173.0,
+                    "product_taxes": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "discount_type": {
+                        "id": 0,
+                        "name": false
+                    },
+                    "payment_term": {
+                        "id": 5,
+                        "name": "NET 30"
+                    },
+                    "product_total": 173.0
+                }
+            ]
+        },
+        "notes": false,
+        "terms_and_conditions": "Terms and Conditions",
+        "attachments": [
+            {
+                "id": 1,
+                "name": "File1",
+                "file_path": "https://picsum.photos/200/300"
+            },
+            {
+                "id": 2,
+                "name": "File2",
+                "file_path": "https://picsum.photos/200/300"
+            }
+        ],
+        "sub_total_amount": 2000.0,
+        "tax_amount": 200.0,
+        "shipping_charges": 500.0,
+        "customer_credits": 100.0,
+        "adjustment_amount": 100.0,
+        "sales_order_total_amount": 2600.0
+    }
+}

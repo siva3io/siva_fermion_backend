@@ -1,0 +1,78 @@
+{
+    "page": 1,
+    "page_size": 20,
+    "count": 100,
+    "more_records": true,
+    "result": [
+        {
+            "internal_transfer_id": 33,
+            "internal_transfer_name": "WH/OUT/00017",
+            "delivery_location": "Stock",
+            "sender_location": false,
+            "internal_transfer_created_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-SI-00033",
+            "no_of_items": 250,
+            "total_quantity": 120,
+            "shipping_mode": "Eunimart",
+            "grn_status": true,
+            "delivery_date": "2022-04-24 12:16:47",
+            "state": "confirmed"
+        },
+        {
+            "internal_transfer_id": 30,
+            "internal_transfer_name": "WH/OUT/00014",
+            "delivery_location": "Stock",
+            "sender_location": false,
+            "internal_transfer_created_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-SI-00033",
+            "no_of_items": 250,
+            "total_quantity": 120,
+            "shipping_mode": "Eunimart",
+            "grn_status": true,
+            "delivery_date": "2022-04-24 12:16:47",
+            "state": "assigned"
+        },
+        {
+            "internal_transfer_id": 7,
+            "internal_transfer_name": "WH/OUT/00007",
+            "delivery_location": "Stock",
+            "sender_location": "Wood Corner",
+            "internal_transfer_created_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-SI-00033",
+            "no_of_items": 250,
+            "total_quantity": 120,
+            "shipping_mode": "Eunimart",
+            "grn_status": true,
+            "delivery_date": "2022-04-24 12:16:47",
+            "state": "done"
+        },
+        {
+            "internal_transfer_id": 21,
+            "internal_transfer_name": "WH/OUT/00008",
+            "delivery_location": "Stock",
+            "sender_location": "Wood Corner",
+            "internal_transfer_created_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-SI-00033",
+            "no_of_items": 250,
+            "total_quantity": 120,
+            "shipping_mode": "Eunimart",
+            "grn_status": true,
+            "delivery_date": "2022-04-24 12:16:47",
+            "state": "assigned"
+        },
+        {
+            "internal_transfer_id": 2,
+            "internal_transfer_name": "WH/OUT/00002",
+            "delivery_location": "Stock",
+            "sender_location": "Wood Corner",
+            "internal_transfer_created_date": "2022-03-14 12:16:47",
+            "reference_number": "REF-SI-00033",
+            "no_of_items": 250,
+            "total_quantity": 120,
+            "shipping_mode": "Eunimart",
+            "grn_status": true,
+            "delivery_date": "2022-04-24 12:16:47",
+            "state": "done"
+        }
+    ]
+}

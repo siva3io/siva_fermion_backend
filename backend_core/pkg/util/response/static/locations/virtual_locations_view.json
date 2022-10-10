@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "location_details": {
+      "location_name": "punjagutta",
+      "location_type": {
+        "id": 10,
+        "name": "local warehouse"
+      },
+      "location_id": "L-900900",
+      "parent_location": {
+        "id": 5,
+        "name": "panjagutta"
+      },
+      "address_line_1": "ABC Pvt ltd",
+      "address_line_2": "M D Road",
+      "address_line_3": "banjarahills",
+      "land_mark": "Near PM Mall",
+      "pincode": "500032",
+      "country": {
+        "id": "1",
+        "name": "India"
+      },
+      "state": {
+        "id": 1,
+        "name": "Telangana"
+      },
+      "city": "Hyderabad",
+      "gst_number": "Attachment Name.extension",
+      "gst_attachment": {
+        "id": 10,
+        "name": "GSTIN1234567891",
+        "path": "https://picsum.photos/200/300"
+      },
+      "latitude": "YX",
+      "longitude": "XY",
+      "drop_location_pin": "Open Map"
+    },
+    "selected_serviceable_area": [
+      {
+        "id": 10,
+        "address_line1": "ABC Pvt. Ltd",
+        "address_line2": "MD Road, Krishna Nagar Hyderabad"
+      },
+      {
+        "id": 15,
+        "address_line1": "BBC Pvt. Ltd",
+        "address_line2": "MD Road, Krishna Nagar Hyderabad"
+      }
+    ],
+    "external_details": {
+      "external_id": "MK 258526325",
+      "external_url": "http://pdvndb.url",
+      "external_salt": "XYZ"
+    },
+    "payment_mapping": {
+      "payment_method": "Online",
+      "payment_method_name": "Payment 1",
+      "payment_method_description": "This is the payment method description"
+    },
+    "incharge_name": "john doe",
+    "email": "john.doe@gmail.com",
+    "company_name": "PK Electromates",
+    "mobile_no": 9848022338,
+    "role": "seller",
+    "upload_profile_picture": "https://picsum.photos/200/300",
+    "store_name": "Eunimart Warehouse",
+    "location_type":{
+      "id": 2,
+      "name": "Home"
+    },
+    "city": "Hyderabad",
+    "state": {
+      "id": 2,
+      "name": "Telangana"
+    },
+    "country": {
+      "id": 3,
+      "name": "India"
+    },
+    "pincode": "500018"
+  }
+}

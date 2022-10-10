@@ -1,0 +1,146 @@
+{
+    "meta": {
+        "message": "string",
+        "success": true
+    },
+    "data": {
+        "id": 1,
+        "ist_name": "IST00001",
+        "date_of_delivery": "2022-04-15 12:16:47",
+        "reason": {
+            "id": 0,
+            "name": false
+        },
+        "receipt_routing": {
+            "id": 1,
+            "name": "Standard"
+        },
+        "delivery_details": {
+            "customer_id": 11,
+            "customer_name": "Gemini Furniture",
+            "email": "abc@gmail.com",
+            "mobile_number": "+91-9876543211",
+            "customer_address_1": "Gemini Furniture\n317 Fairchild Dr\n\nFairfield CA 94535\nUnited States",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "12345",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            },
+            "location_incharge": {
+                "id": 12,
+                "name": "Sanam"
+            }
+        },
+        "sender_details": {
+            "sender_id": 1,
+            "sender_name": "Eunimart",
+            "email": "eunimart@gmail.com",
+            "mobile_number": "+91-9876543210",
+            "customer_address_1": "Hyderabad, India",
+            "customer_address_2": false,
+            "customer_address_3": false,
+            "zipcode": "500035",
+            "city": "Hyderabad",
+            "state": {
+                "id": 9,
+                "name": "Telangana"
+            },
+            "country": {
+                "id": 1,
+                "name": "India"
+            },
+            "location_incharge": {
+                "id": 17,
+                "name": "Prem"
+            }
+        },
+        "product_details": {
+            "page": 1,
+            "page_size": 20,
+            "count": 5,
+            "more_records": true,
+            "results": [
+                {
+                    "order_line_id": 14,
+                    "product_id": 31,
+                    "product_name": "S00007 - [FURN_6666] Acoustic Bloc Screens",
+                    "product_sku": "SKU-3456788",
+                    "inventory_details": {
+                        "id": 9,
+                        "name": "XYZ"
+                    },
+                    "serial_no": 5,
+                    "product_description": "Acoustic Bloc Screens",
+                    "unit_of_measure": {
+                        "id": 2,
+                        "name": "Sale UOM"
+                    },
+                    "source_stock": 100.0,
+                    "is_scrap": true,
+                    "destination_stock": 20.0,
+                    "transfer_quantity": 5.0
+                },
+                {
+                    "order_line_id": 15,
+                    "product_id": 35,
+                    "product_name": "S00007 - [FURN_8999] Three-Seat Sofa",
+                    "product_sku": "SKU-3456789",
+                    "inventory_name": {
+                        "id": 45,
+                        "name": "XY"
+                    },
+                    "serial_no": 3,
+                    "product_description": "Three-Seat Sofa",
+                    "unit_of_measure": {
+                        "id": 3,
+                        "name": "Product UOM"
+                    },
+                    "source_stock": 100.0,
+                    "is_scrap": true,
+                    "destination_stock": 20.0,
+                    "transfer_quantity": 1.0
+                }
+            ]
+        },
+        "shipping_details": {
+            "shipping_type_id": 5,
+            "shipping_type": {
+                "id": 2,
+                "name": "Express"
+            },
+            "shipping_preferance": {
+                "id": 0,
+                "name": false
+            },
+            "carrier": {
+                "id": 0,
+                "name": false
+            },
+            "awb_number": {
+                "id": 0,
+                "name": false
+            },
+            "package_length": 15.0,
+            "package_height": 25.5,
+            "package_width": 10.5,
+            "package_weight": 500.0,
+            "volumetric_weight": 803.25,
+            "shipping_partner": {
+                "id": 3,
+                "name": "DTDC",
+                "shipping_charges": 420.0,
+                "cod_charges": 155.0,
+                "order_deliver_duration": "5-6 days"
+            }
+        },
+        "set_order_pickup_date": "2022-04-15",
+        "set_order_pickup_time": "02:30:00"
+    }
+}

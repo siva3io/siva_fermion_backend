@@ -1,0 +1,42 @@
+{
+    "page": 1,
+    "PageSize": 20,
+    "Count":5,
+    "MoreRecords":"True",
+    "result":[{
+                "id":1,
+                "quote_country":"United States Of America",
+                "quote_currency":"$USD",
+                "base_currency":"INR",
+                "break_down_intervals":"5",
+                "rate_converstion_factor":"0.3459",
+                "start_date_and_time":"01/02/2022,10:00Hrs",
+                "end_date_and_time":"01/02/2022,10:00Hrs",
+                "rate_tracking":"Manual"
+            },
+            {
+                "id":2,
+                "quote_country":"CANADA",
+                "quote_currency":"$CAN",
+                "base_currency":"INR",
+                "break_down_intervals":"5",
+                "rate_converstion_factor":"0.3459",
+                "start_date_and_time":"01/02/2022,10:00Hrs",
+                "end_date_and_time":"01/02/2022,10:00Hrs",
+                "rate_tracking":"Manual"
+            },
+            {
+                "id":3,
+                "quote_country":"BANGLADESH",
+                "quote_currency":"$BDT",
+                "base_currency":"INR",
+                "break_down_intervals":"5",
+                "rate_converstion_factor":"0.3459",
+                "start_date_and_time":"01/02/2022,10:00Hrs",
+                "end_date_and_time":"01/02/2022,10:00Hrs",
+                "rate_tracking":"Manual"
+            }
+        
+            ]
+}
+        

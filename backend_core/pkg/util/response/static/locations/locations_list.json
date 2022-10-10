@@ -1,0 +1,58 @@
+{
+  "page": 1,
+  "page_size": 20,
+  "count": 100,
+  "more_records": true,
+  "results": [
+    {
+      "id": 1,
+      "name": "Srikant Warehouse",
+      "location_id": "SR 1888678",
+      "phone": 9852636525,
+      "email": "SrikantBaid85@gmail.com",
+      "location_type": "Local Warehouse",
+      "address": "Mistant Raod, Hyderabad, Telangana",
+      "notes": "Dummy Data"
+    },
+    {
+      "id": 2,
+      "name": "Srikant Warehouse",
+      "location_id": "SR 1888678",
+      "phone": 9852636525,
+      "email": "SrikantBaid85@gmail.com",
+      "location_type": "Local Warehouse",
+      "address": "Mistant Raod, Hyderabad, Telangana",
+      "notes": "Dummy Data"
+    },
+    {
+      "id": 3,
+      "name": "Srikant Warehouse",
+      "location_id": "SR 1888678",
+      "phone": 9852636525,
+      "email": "SrikantBaid85@gmail.com",
+      "location_type": "Local Warehouse",
+      "address": "Mistant Raod, Hyderabad, Telangana",
+      "notes": "Dummy Data"
+    },
+    {
+      "id": 4,
+      "name": "Srikant Warehouse",
+      "location_id": "SR 1888678",
+      "phone": 9852636525,
+      "email": "SrikantBaid85@gmail.com",
+      "location_type": "Local Warehouse",
+      "address": "Mistant Raod, Hyderabad, Telangana",
+      "notes": "Dummy Data"
+    },
+    {
+      "id": 5,
+      "name": "Srikant Warehouse",
+      "location_id": "SR 1888678",
+      "phone": 9852636525,
+      "email": "SrikantBaid85@gmail.com",
+      "location_type": "Local Warehouse",
+      "address": "Mistant Raod, Hyderabad, Telangana",
+      "notes": "Dummy Data"
+    }
+  ]
+}

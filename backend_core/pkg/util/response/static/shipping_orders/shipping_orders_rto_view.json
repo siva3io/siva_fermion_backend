@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "message": "string",
+    "success": true
+  },
+  "data": {
+    "id": 1,
+    "name": "LK8987654",
+    "payment_type": {
+      "id": 2,
+      "name": "COD"
+    },
+    "total_amount": 2500.0,
+    "psdd": "2022-04-08 12:16:47",
+    "esdd": "2022-04-24 12:16:47",
+    "rto_cost": 100.0
+  }
+}
