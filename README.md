@@ -2,7 +2,7 @@
 
 Fermion is a user-friendly commerce platform that helps businesses manage their online and offline store (channel of sales), supply chains, finances, marketing, and other commercial operations through one streamlined dashboard. Fermion delivers a full suite of business management tools/apps. Essentials include product sourcing, sales and inventory tracking, payment processing, shipping, customer accounts, marketing, reporting, etc. Plus, you can expand your Fermion app stores/toolkit quickly with hundreds of Fermion Apps
 
-# tech stack used
+# Tech stack used
 
 Golang
 GORM
