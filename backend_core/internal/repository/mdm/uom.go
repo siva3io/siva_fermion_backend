@@ -41,25 +41,29 @@ type Uom interface {
 	FindOneUom(query map[string]interface{}) (mdm.Uom, error)
 	FindOneUomClass(query map[string]interface{}) (mdm.UomClass, error)
 
-	FindAllUom(query interface{}, p *pagination.Paginatevalue) ([]mdm.Uom, error)
-	FindAllUomClass(query interface{}, p *pagination.Paginatevalue) ([]mdm.UomClass, error)
-
-	SearchUom(query string) ([]mdm.Uom, error)
-	SearchUomClass(query string) ([]mdm.UomClass, error)
+	FindAllUom(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.Uom, error)
+	FindAllUomClass(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.UomClass, error)
 }
 
 type uom struct {
-	db *gorm.DB
+	Db *gorm.DB
 }
 
+var uomRepository *uom //singleton object
+
+// singleton function
 func NewUom() *uom {
+	if uomRepository != nil {
+		return uomRepository
+	}
 	db := db.DbManager()
-	return &uom{db}
+	uomRepository = &uom{db}
+	return uomRepository
 }
 
 func (r *uom) UomSave(data *mdm.Uom) error {
 
-	err := r.db.Model(&mdm.Uom{}).Create(data).Error
+	err := r.Db.Model(&mdm.Uom{}).Create(data).Error
 	if err != nil {
 		return err
 	}
@@ -67,7 +71,7 @@ func (r *uom) UomSave(data *mdm.Uom) error {
 }
 func (r *uom) UomClassSave(data *mdm.UomClass) error {
 
-	err := r.db.Model(&mdm.UomClass{}).Create(data).Error
+	err := r.Db.Model(&mdm.UomClass{}).Create(data).Error
 	if err != nil {
 		return err
 	}
@@ -75,53 +79,75 @@ func (r *uom) UomClassSave(data *mdm.UomClass) error {
 }
 func (r *uom) UpdateUom(query map[string]interface{}, data *mdm.Uom) error {
 
-	err := r.db.Model(&mdm.Uom{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.Db.Model(&mdm.Uom{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *uom) UpdateUomClass(query map[string]interface{}, data *mdm.UomClass) error {
 
-	err := r.db.Model(&mdm.UomClass{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.Db.Model(&mdm.UomClass{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *uom) DeleteUom(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
-	err := r.db.Model(&mdm.Uom{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.Db.Model(&mdm.Uom{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *uom) DeleteUomClass(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
+
+	//=========delete class related uom's=============================
+	uomDeleteQuery := map[string]interface{}{
+		"uom_class_id": query["id"],
+		"user_id":      query["user_id"],
+		"company_id":   query["company_id"],
+	}
+	r.DeleteUom(uomDeleteQuery)
+
 	delete(query, "user_id")
-	err := r.db.Model(&mdm.UomClass{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	//=========== delete uom class ==================================
+	err := r.Db.Model(&mdm.UomClass{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *uom) FindOneUom(query map[string]interface{}) (mdm.Uom, error) {
 	var data mdm.Uom
-	err := r.db.Preload(clause.Associations).Model(&mdm.Uom{}).Where(query).First(&data)
+	err := r.Db.Preload(clause.Associations).Model(&mdm.Uom{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -130,42 +156,26 @@ func (r *uom) FindOneUom(query map[string]interface{}) (mdm.Uom, error) {
 }
 func (r *uom) FindOneUomClass(query map[string]interface{}) (mdm.UomClass, error) {
 	var data mdm.UomClass
-	err := r.db.Preload(clause.Associations).Model(&mdm.UomClass{}).Where(query).First(&data)
+	err := r.Db.Preload(clause.Associations).Model(&mdm.UomClass{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
 	return data, nil
 }
-func (r *uom) FindAllUom(query interface{}, p *pagination.Paginatevalue) ([]mdm.Uom, error) {
+func (r *uom) FindAllUom(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.Uom, error) {
 	var data []mdm.Uom
-	err := r.db.Preload(clause.Associations).Model(&mdm.Uom{}).Scopes(helpers.Paginate(&mdm.Uom{}, p, r.db)).Where(query).Find(&data).Error
+	err := r.Db.Preload(clause.Associations).Model(&mdm.Uom{}).Scopes(helpers.Paginate(&mdm.Uom{}, p, r.Db)).Where(query).Find(&data).Error
 	if err != nil {
 		return data, err
 	}
 	return data, nil
 }
-func (r *uom) FindAllUomClass(query interface{}, p *pagination.Paginatevalue) ([]mdm.UomClass, error) {
+func (r *uom) FindAllUomClass(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.UomClass, error) {
 	var data []mdm.UomClass
-	err := r.db.Preload(clause.Associations).Model(&mdm.UomClass{}).Scopes(helpers.Paginate(&mdm.UomClass{}, p, r.db)).Where(query).Find(&data).Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *uom) SearchUom(query string) ([]mdm.Uom, error) {
-	var data []mdm.Uom
-	err := r.db.Model(&mdm.Uom{}).Find(&data, "name ILIKE ? ", "%"+query+"%").Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *uom) SearchUomClass(query string) ([]mdm.UomClass, error) {
-	var data []mdm.UomClass
-	err := r.db.Model(&mdm.UomClass{}).Find(&data, "name ILIKE ? ", "%"+query+"%").Error
+	err := r.Db.Preload(clause.Associations).Model(&mdm.UomClass{}).Scopes(helpers.Paginate(&mdm.UomClass{}, p, r.Db)).Where(query).Find(&data).Error
 	if err != nil {
 		return data, err
 	}

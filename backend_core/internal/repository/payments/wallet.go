@@ -40,9 +40,16 @@ type Wallets struct {
 	db *gorm.DB
 }
 
+var WalletsRepository *Wallets //singleton object
+
+// singleton function
 func NewWallet() *Wallets {
+	if WalletsRepository != nil {
+		return WalletsRepository
+	}
 	db := db.DbManager()
-	return &Wallets{db}
+	WalletsRepository = &Wallets{db}
+	return WalletsRepository
 
 }
 

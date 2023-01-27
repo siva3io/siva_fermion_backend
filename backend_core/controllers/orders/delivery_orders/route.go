@@ -24,15 +24,15 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.AllDeliveryOrders, cmiddleware.Authorization)
 	g.GET("/dropdown", h.AllDeliveryOrdersDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.FindDeliveryOrders, cmiddleware.Authorization)
-	g.POST("/create", h.CreateDeliveryOrders, cmiddleware.Authorization, DeliveryOrdersCreateValidate)
+	g.POST("/create", h.CreateDeliveryOrdersEvent, cmiddleware.Authorization, DeliveryOrdersCreateValidate)
 	g.POST("/bulkcreate", h.BulkCreateDeliveryOrders, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdateDeliveryOrders, cmiddleware.Authorization, DeliveryOrdersUpdateValidate)
+	g.POST("/:id/update", h.UpdateDeliveryOrdersEvent, cmiddleware.Authorization, DeliveryOrdersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteDeliveryOrders, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_products", h.DeleteDeliveryOrderLines, cmiddleware.Authorization)
 
 	g.POST("/:id/send_email", h.SendEmailDeliveryOrders, cmiddleware.Authorization)
 	g.POST("/:id/download_pdf", h.DownloadDeliveryOrdersPDF, cmiddleware.Authorization)
-	g.POST("/:id/generate_pdf", h.GenerateDeliveryOrdersPDF, cmiddleware.Authorization)
+	g.GET("/:id/generate_pdf", h.GenerateDeliveryOrdersPDF, cmiddleware.Authorization)
 
 	g.POST("/:id/favourite", h.FavouriteDeliveryOrders, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouriteDeliveryOrders, cmiddleware.Authorization)

@@ -35,9 +35,16 @@ type accountingBase struct {
 	db *gorm.DB
 }
 
+var accountingBaseRepository *accountingBase //singleton object
+
+// singleton function
 func NewAccountingBase() *accountingBase {
-	database := db.DbManager()
-	return &accountingBase{database}
+	if accountingBaseRepository != nil {
+		return accountingBaseRepository
+	}
+	db := db.DbManager()
+	accountingBaseRepository = &accountingBase{db}
+	return accountingBaseRepository
 
 }
 

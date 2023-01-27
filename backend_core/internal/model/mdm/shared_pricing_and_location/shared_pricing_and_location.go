@@ -21,98 +21,98 @@ import (
  You should have received a copy of the GNU Lesser General Public License v3.0
  along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+
 //====================================================Pricings===========================================================================
 
 type Pricing struct {
 	model_core.Model
-	Price_list_name     string                `json:"price_list_name" gorm:"type:varchar(100);UNIQUE"`
-	Currency_id         *uint                 `json:"currency_id"`
-	Price_list_currency model_core.Currency   `json:"currency" gorm:"foreignkey:Currency_id;references:ID"`
-	StartDate           datatypes.Date        `json:"start_date" gorm:"type:date"`
-	EndDate             datatypes.Date        `json:"end_date" gorm:"type:date"`
-	Description         string                `json:"description" gorm:"type:text"`
-	Price_list_rule     string                `json:"price_list_rule" gorm:"type:text"`
-	StatusId            *uint                 `json:"status_id" gorm:"type:integer"`
-	Status              model_core.Lookupcode `json:"status" gorm:"foreignKey:StatusId; references:ID"`
+	PriceListName     string                `json:"price_list_name" gorm:"type:varchar(100)"`
+	CurrencyId        *uint                 `json:"currency_id"`
+	PriceListCurrency *model_core.Currency  `json:"currency" gorm:"foreignkey:CurrencyId;references:ID"`
+	StartDate         datatypes.Date        `json:"start_date" gorm:"type:date"`
+	EndDate           datatypes.Date        `json:"end_date" gorm:"type:date"`
+	Description       string                `json:"description" gorm:"type:text"`
+	PriceListRule     string                `json:"price_list_rule" gorm:"type:text"`
+	StatusId          *uint                 `json:"status_id" gorm:"type:integer"`
+	Status            model_core.Lookupcode `json:"status" gorm:"foreignKey:StatusId; references:ID"`
 
-	//-----------**Price_list_id** field holds the value of which table we need to do the operation------------------------------------------
-	//----------------------1.sales   2.purchase   3.transfer-------------------------------------------------------------------------------
-
-	Price_list_id       uint               `json:"price_list_id"`
-	SalesPriceListId    *uint              `json:"sales_price_list_id,omitempty"`
-	SalesPriceList      *SalesPriceList    `json:"sales_price_list,omitempty" gorm:"foreignkey:SalesPriceListId; references:ID"`
-	PurchasePriceListId *uint              `json:"purchase_price_list_id,omitempty"`
-	PurchasePriceList   *PurchasePriceList `json:"purchase_price_list,omitempty" gorm:"foreignkey:PurchasePriceListId; references:ID"`
-	TransferPriceListId *uint              `json:"transfer_price_list_id,omitempty"`
-	TransferPriceList   *TransferPriceList `json:"transfer_price_list,omitempty" gorm:"foreignkey:TransferPriceListId; references:ID"`
+	// ========== **Price_list_id** field holds the value of which table we need to do the operation ===============================================
+	// ========== 1.sales   2.purchase   3.transfer ================================================================================================
+	PriceListId         uint              `json:"price_list_id"`
+	SalesPriceListId    *uint             `json:"sales_price_list_id,omitempty"`
+	SalesPriceList      SalesPriceList    `json:"sales_price_list,omitempty" gorm:"foreignkey:SalesPriceListId; references:ID"`
+	PurchasePriceListId *uint             `json:"purchase_price_list_id,omitempty"`
+	PurchasePriceList   PurchasePriceList `json:"purchase_price_list,omitempty" gorm:"foreignkey:PurchasePriceListId; references:ID"`
+	TransferPriceListId *uint             `json:"transfer_price_list_id,omitempty"`
+	TransferPriceList   TransferPriceList `json:"transfer_price_list,omitempty" gorm:"foreignkey:TransferPriceListId; references:ID"`
 }
 
-// -----------------------------------Sales Price List------------------------------------------------------------------------------------
+// ====================== Sales Price List =========================================================================================================
 type SalesPriceList struct {
 	model_core.Model
-	CustomerName           string                `json:"customer_name" gorm:"type:varchar(100)"`
-	Enter_Manually         *bool                 `json:"enter_manually" gorm:"type:boolean"`
-	Add_channel_of_sale_id *uint                 `json:"add_channel_of_sale_id" gorm:"type:integer"`
-	Add_channel_of_sale    model_core.Lookupcode `json:"add_channel_of_sale" gorm:"foreignKey:Add_channel_of_sale_id; references:ID"`
-	Select_type            *bool                 `json:"select_type" gorm:"type:boolean"`
-	Percentage             float64               `json:"percentage" gorm:"type:double precision"`
-	SalesLineItems         []SalesLineItems      `json:"sales_line_items,omitempty" gorm:"foreignkey:SPL_id; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Shipping_cost          float64               `json:"shipping_cost" gorm:"type:double precision"`
+	CustomerName       string                `json:"customer_name" gorm:"type:varchar(100)"`
+	EnterManually      *bool                 `json:"enter_manually" gorm:"type:boolean"`
+	AddChannelOfSaleId *uint                 `json:"add_channel_of_sale_id" gorm:"type:integer"`
+	AddChannelOfSale   model_core.Lookupcode `json:"add_channel_of_sale" gorm:"foreignKey:AddChannelOfSaleId; references:ID"`
+	SelectType         *bool                 `json:"select_type" gorm:"type:boolean"`
+	Percentage         float64               `json:"percentage" gorm:"type:double precision"`
+	SalesLineItems     []SalesLineItems      `json:"sales_line_items,omitempty" gorm:"foreignkey:SalesPriceListId; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	ShippingCost       float64               `json:"shipping_cost" gorm:"type:double precision"`
 }
 type SalesLineItems struct {
 	model_core.Model
-	SPL_id                 uint
-	Product_id             uint                  `json:"product_id"`
-	Product                mdm.ProductVariant    `json:"product_details" gorm:"foreignkey:Product_id; references:ID"`
-	CategoryCommission     int                   `json:"category_commission" gorm:"type:int"`
-	Uom_id                 *uint                 `json:"uom_id"`
-	UOM                    mdm.Uom               `json:"uom_details" gorm:"foreignkey:Uom_id; references:ID"`
-	QuantityValue          datatypes.JSON        `json:"quantity_value" gorm:"type:json; default:'[]'; not null"`
-	Quantity_value_type_id *uint                 `json:"quantity_value_type_id" gorm:"type:integer"`
-	Quantity_value_type    model_core.Lookupcode `json:"quantity_value_type" gorm:"foreignKey:Quantity_value_type_id; references:ID"`
-	Mrp                    float64               `json:"mrp"`
-	SaleRate               float64               `json:"sale_rate"`
-	Duties                 float64               `json:"duties"` //product_taxes
-	Pricing_options_id     *uint                 `json:"pricing_options_id" gorm:"type:integer"`
-	Pricing_options        model_core.Lookupcode `json:"pricing_options" gorm:"foreignKey:Pricing_options_id; references:ID"`
-	Price                  float64               `json:"price"`
+	SalesPriceListId    uint                  `json:"spl_id"`
+	ProductVariantId    *uint                 `json:"product_id"`
+	Product             mdm.ProductVariant    `json:"product_details" gorm:"foreignkey:ProductVariantId; references:ID"`
+	CategoryCommission  int                   `json:"category_commission" gorm:"type:int"`
+	UomId               *uint                 `json:"uom_id"`
+	Uom                 mdm.Uom               `json:"uom_details" gorm:"foreignkey:UomId; references:ID"`
+	QuantityValue       datatypes.JSON        `json:"quantity_value" gorm:"type:json; default:'[]'; not null"`
+	QuantityValueTypeId *uint                 `json:"quantity_value_type_id" gorm:"type:integer"`
+	QuantityValueType   model_core.Lookupcode `json:"quantity_value_type" gorm:"foreignKey:QuantityValueTypeId; references:ID"`
+	Mrp                 float64               `json:"mrp"`
+	SaleRate            float64               `json:"sale_rate"`
+	Duties              float64               `json:"duties"` //product_taxes
+	PricingOptionsId    *uint                 `json:"pricing_options_id" gorm:"type:integer"`
+	PricingOptions      model_core.Lookupcode `json:"pricing_options" gorm:"foreignKey:PricingOptionsId; references:ID"`
+	CostPrice           float64               `json:"price"`
 }
 
-// -----------------------------------Purchase Price List------------------------------------------------------------------------------------
+// ====================== Purchase Price List =====================================================================================================
 type PurchasePriceList struct {
 	model_core.Model
-	Vendor_name_id           *uint                    `json:"vendor_name_id"`
-	Vendor_name              mdm.Vendors              `json:"vendor_name" gorm:"foreignkey:Vendor_name_id; references:ID"`
-	PurchaseLineItems        []PurchaseLineItems      `json:"purchase_line_items,omitempty" gorm:"foreignkey:PPL_id; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	VendorId                 *uint                    `json:"vendor_name_id"`
+	VendorDetails            *mdm.Vendors             `json:"vendor_name" gorm:"foreignkey:VendorId; references:ID"`
+	PurchaseLineItems        []PurchaseLineItems      `json:"purchase_line_items,omitempty" gorm:"foreignkey:PurchasePriceListId; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	PurchaseListOtherdetails PurchaseListOtherdetails `json:"other_details,omitempty" gorm:"embedded"`
 }
 type PurchaseLineItems struct {
 	model_core.Model
-	PPL_id                 uint
-	Product_id             uint                  `json:"product_id"`
-	Product                mdm.ProductVariant    `json:"product_details" gorm:"foreignkey:Product_id; references:ID"`
-	MinimumOrderQuantity   int                   `json:"minimum_order_quantity" gorm:"type:int"`
-	QuantityValue          datatypes.JSON        `json:"quantity_value" gorm:"type:json; default:'[]'; not null"`
-	Quantity_value_type_id *uint                 `json:"quantity_value_type_id" gorm:"type:integer"`
-	Quantity_value_type    model_core.Lookupcode `json:"quantity_value_type" gorm:"foreignKey:Quantity_value_type_id; references:ID"`
-	Price                  float64               `json:"price" gorm:"type:double precision"`
-	Mrp                    float64               `json:"mrp"`
-	Price_quantity         float64               `json:"price_quantity" gorm:"type:double precision"`
-	Vendor_rate            int                   `json:"vendor_rate" gorm:"type:int"`
-	SalesPeriod            string                `json:"sales_period" gorm:"type:varchar(100)"`
-	CreditPeriod           string                `json:"credit_period" gorm:"type:varchar(100)"`
-	ExpectedDeliveryTime   string                `json:"expected_delivery_time" gorm:"type:varchar(100)"`
-	LeadTime               string                `json:"lead_time" gorm:"type:varchar(100)"`
+	PurchasePriceListId  uint                  `json:"ppl_id"`
+	ProductVariantId     *uint                 `json:"product_id"`
+	Product              mdm.ProductVariant    `json:"product_details" gorm:"foreignkey:ProductVariantId; references:ID"`
+	MinimumOrderQuantity int                   `json:"minimum_order_quantity" gorm:"type:int"`
+	QuantityValue        datatypes.JSON        `json:"quantity_value" gorm:"type:json; default:'[]'; not null"`
+	QuantityValueTypeId  *uint                 `json:"quantity_value_type_id" gorm:"type:integer"`
+	QuantityValueType    model_core.Lookupcode `json:"quantity_value_type" gorm:"foreignKey:QuantityValueTypeId; references:ID"`
+	CostPrice            float64               `json:"price" gorm:"type:double precision"`
+	Mrp                  float64               `json:"mrp"`
+	PriceQuantity        float64               `json:"price_quantity" gorm:"type:double precision"`
+	VendorRate           int                   `json:"vendor_rate" gorm:"type:int"`
+	SalesPeriod          string                `json:"sales_period" gorm:"type:varchar(100)"`
+	CreditPeriod         string                `json:"credit_period" gorm:"type:varchar(100)"`
+	ExpectedDeliveryTime string                `json:"expected_delivery_time" gorm:"type:varchar(100)"`
+	LeadTime             string                `json:"lead_time" gorm:"type:varchar(100)"`
 }
 type PurchaseListOtherdetails struct {
-	Shipping_cost int `json:"shipping_cost" gorm:"type:int"`
+	ShippingCost int `json:"shipping_cost" gorm:"type:int"`
 }
 
-// -----------------------------------Transfer Price List------------------------------------------------------------------------------------
+// ======================= Transfer Price List ====================================================================================================
 type TransferPriceList struct {
 	model_core.Model
 	ContractDetails          ContractDetails          `json:"contract_details" gorm:"embedded"`
-	TransferLineItems        []TransferLineItems      `json:"transfer_line_items" gorm:"foreignkey:TPL_id; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	TransferLineItems        []TransferLineItems      `json:"transfer_line_items" gorm:"foreignkey:TransferPriceListId; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 	TransferListOtherDetails TransferListOtherDetails `json:"transfer_list_other_details" gorm:"embedded"`
 }
 
@@ -122,47 +122,47 @@ type ContractDetails struct {
 }
 
 type TransferLineItems struct {
-	TPL_id         uint
-	Product_id     uint               `json:"product_id"`
-	Product        mdm.ProductVariant `json:"product_details" gorm:"foreignkey:Product_id; references:ID"`
-	Price          float64            `json:"price" gorm:"type:double precision"`
-	Price_quantity float64            `json:"price_quantity" gorm:"type:double precision"`
-	Product_rate   float64            `json:"product_rate" gorm:"type:double precision"`
+	TransferPriceListId uint               `json:"tpl_id"`
+	ProductVariantId    *uint              `json:"product_id"`
+	Product             mdm.ProductVariant `json:"product_details" gorm:"foreignkey:ProductVariantId; references:ID"`
+	Price               float64            `json:"price" gorm:"type:double precision"`
+	PriceQuantity       float64            `json:"price_quantity" gorm:"type:double precision"`
+	ProductRate         float64            `json:"product_rate" gorm:"type:double precision"`
 	model_core.Model
 }
 
 type TransferListOtherDetails struct {
-	FromAddressLocationId *uint     `json:"from_address_location_id"`
-	LocationFromAddress   Locations `json:"location_from_address" gorm:"foreignkey:FromAddressLocationId; references:ID"`
-	ToAddressLocationId   *uint     `json:"to_address_location_id"`
-	LocationToAddress     Locations `json:"location_to_address" gorm:"foreignkey:ToAddressLocationId; references:ID"`
-	SalesPeriod           string    `json:"sales_period" gorm:"type:varchar(100)"`
-	CreditPeriod          string    `json:"credit_period" gorm:"type:varchar(100)"`
-	ExpectedDeliveryTime  string    `json:"expected_delivery_time" gorm:"type:varchar(100)"`
-	LeadTime              string    `json:"lead_time" gorm:"type:varchar(100)"`
-	Shipping_cost         int       `json:"shipping_cost" gorm:"type:int"`
+	FromAddressLocationId *uint      `json:"from_address_location_id"`
+	LocationFromAddress   *Locations `json:"location_from_address" gorm:"foreignkey:FromAddressLocationId; references:ID"`
+	ToAddressLocationId   *uint      `json:"to_address_location_id"`
+	LocationToAddress     *Locations `json:"location_to_address" gorm:"foreignkey:ToAddressLocationId; references:ID"`
+	SalesPeriod           string     `json:"sales_period" gorm:"type:varchar(100)"`
+	CreditPeriod          string     `json:"credit_period" gorm:"type:varchar(100)"`
+	ExpectedDeliveryTime  string     `json:"expected_delivery_time" gorm:"type:varchar(100)"`
+	LeadTime              string     `json:"lead_time" gorm:"type:varchar(100)"`
+	ShippingCost          int        `json:"shipping_cost" gorm:"type:int"`
 }
 
 //====================================================Locations===========================================================================
 
 type Locations struct {
 	model_core.Model
-	Name               string                `json:"name" gorm:""`
-	LocationTypeId     uint                  `json:"location_type_id" gorm:""`
-	LocationType       model_core.Lookupcode `json:"location_type" gorm:"foreignkey:LocationTypeId;references:ID"`
-	LocationCode       string                `json:"location_id" gorm:""`
-	ParentLocationId   *uint                 `json:"parent_id"`
-	Parent             *Locations            `json:"parent_location" gorm:"foreignkey:ParentLocationId"`
-	ChildLocationIds   []*Locations          `json:"child_locations" gorm:"foreignkey:ParentLocationId"`
-	Address            datatypes.JSON        `json:"address" gorm:"type:json; default:'[]'"`
-	LocationDocs       datatypes.JSON        `json:"location_docs" gorm:"type:json; default:'{}'"`
-	Latitude           float32               `json:"latitude" gorm:""`
-	Longitude          float32               `json:"longitude" gorm:""`
-	ServiceableAreaIds datatypes.JSON        `json:"serviceable_area_ids" gorm:"type:json; default:'[]'"`
-	RelatedLocationID  uint                  `json:"related_location_id" gorm:""`
-	Email              string                `json:"email"`
-	MobileNumber       string                `json:"mobile_number"`
-	Notes              string                `json:"notes"`
+	Name               string                 `json:"name" gorm:""`
+	LocationTypeId     uint                   `json:"location_type_id" gorm:""`
+	LocationType       *model_core.Lookupcode `json:"location_type" gorm:"foreignkey:LocationTypeId;references:ID"`
+	LocationCode       string                 `json:"location_id" gorm:""`
+	ParentLocationId   *uint                  `json:"parent_id"`
+	Parent             *Locations             `json:"parent_location" gorm:"foreignkey:ParentLocationId"`
+	ChildLocationIds   []*Locations           `json:"child_locations" gorm:"foreignkey:ParentLocationId"`
+	Address            datatypes.JSON         `json:"address" gorm:"type:json; default:'[]'"`
+	LocationDocs       datatypes.JSON         `json:"location_docs" gorm:"type:json; default:'{}'"`
+	Latitude           float32                `json:"latitude" gorm:""`
+	Longitude          float32                `json:"longitude" gorm:""`
+	ServiceableAreaIds datatypes.JSON         `json:"serviceable_area_ids" gorm:"type:json; default:'[]'"`
+	RelatedLocationID  uint                   `json:"related_location_id" gorm:""`
+	Email              string                 `json:"email"`
+	MobileNumber       string                 `json:"mobile_number"`
+	Notes              string                 `json:"notes"`
 }
 
 //-------------------------------------Location Types - [Virtual Location, Local Warehouse, Office or Factory , Retail]----------------------------------------------------------------------------------

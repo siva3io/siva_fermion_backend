@@ -53,38 +53,41 @@ type (
 )
 
 type InternalTransfersDTO struct {
-	IstDate               string                  `json:"ist_date"`
+	model_core.Model
+	IstNumber             string                  `json:"ist_number"`
 	ReferenceNumber       string                  `json:"reference_number"`
-	ReceiptRoutingId      uint                    `json:"receipt_routing_id"`
-	SourceLocationId      uint                    `json:"source_location_id"`
-	DestinationLocationId uint                    `json:"destination_location_id"`
+	ScheduledDeliveryDate string                  `json:"scheduled_delivery_date"`
+	ReasonId              *uint                   `json:"reason_id"`
+	IstDate               string                  `json:"ist_date"`
+	ReceiptRoutingId      *uint                   `json:"receipt_routing_id"`
+	SourceLocation        map[string]interface{}  `json:"source_location_details"`
+	DestinationLocation   map[string]interface{}  `json:"destination_location_details"`
+	SourceLocationId      *uint                   `json:"source_location_id"`
+	DestinationLocationId *uint                   `json:"destination_location_id"`
+	ShippingDetails       map[string]interface{}  `json:"shipping_details"`
+	StatusId              *uint                   `json:"status_id"`
 	NoOfItems             int                     `json:"no_of_items"`
 	TotalQuantity         int                     `json:"total_quantity"`
-	ShippingModeId        uint                    `json:"shipping_mode_id"`
-	StatusId              uint                    `json:"status_id"`
+	ShippingModeId        *uint                   `json:"shipping_mode_id"`
 	StatusHistory         map[string]interface{}  `json:"status_history"`
-	GrnId                 uint                    `json:"grn_id"`
-	ShippingDetails       map[string]interface{}  `json:"shipping_details"`
 	InternalTransferLines []InternalTransferLines `json:"internal_transfer_lines"`
-	ReasonId              uint                    `json:"reason_id"`
 	PickupDateAndTime     PickupDateAndTime       `json:"pickup_date_and_time"`
 	SourceDocuments       map[string]interface{}  `json:"source_documents"`
 	SourceDocumentTypeId  *uint                   `json:"source_document_type_id"`
-	model_core.Model
 }
 
 type InternalTransferLines struct {
+	model_core.Model
 	IstId             uint   `json:"ist_id"`
 	ProductId         uint   `json:"product_id"`
-	SerialNumber      string `json:"serial_number"`
 	ProductTemplateId uint   `json:"product_template_id"`
 	InventoryId       uint   `json:"inventory_id"`
 	UomId             uint   `json:"uom_id"`
+	SerialNumber      string `json:"serial_number"`
 	SourceStock       int    `json:"source_stock"`
 	DestinationStock  int    `json:"destination_stock"`
 	IsScrap           bool   `json:"is_scrap"`
 	TransferQuantity  int    `json:"transfer_quantity"`
-	model_core.Model
 }
 type PickupDateAndTime struct {
 	PickupDate     string `json:"pickup_date"`

@@ -22,15 +22,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type CurrencyExchangeDTO struct {
 	model_core.Model
-	QuoteCurrencyID uint                  `json:"quote_currency_id" gorm:"type:integer"`
-	QuoteCurrency   model_core.Currency   `json:"quote_currency" gorm:"foreignKey:QuoteCurrencyID; references:ID"`
-	QuoteCountryID  uint                  `json:"quote_country_id" gorm:"type:integer"`
-	QuoteCountry    model_core.Country    `json:"country" gorm:"foreignKey:QuoteCountryID; references:ID"`
-	BaseCurrencyID  uint                  `json:"base_currency_id" gorm:"type:integer"`
-	BaseCurrency    model_core.Currency   `json:"base_currency" gorm:"foreignKey:BaseCurrencyID; references:ID"`
+	QuoteCurrencyID uint                  `json:"quote_currency_id"`
+	QuoteCurrency   model_core.Currency   `json:"quote_currency"`
+	QuoteCountryID  uint                  `json:"quote_country_id" `
+	QuoteCountry    model_core.Country    `json:"country"`
+	BaseCurrencyID  uint                  `json:"base_currency_id" `
+	BaseCurrency    model_core.Currency   `json:"base_currency" `
 	ExchangeId      *uint                 `json:"exchange_id"`
-	Exchange        model_core.Lookupcode `gorm:"foreignKey:ExchangeId;references:ID" json:"exchange"`
-	BreakDown       []BreakDownIntervals  `json:"breakdown_intervals" gorm:"foreignkey:BreakDownId;references:ID"`
+	Exchange        model_core.Lookupcode `gorm:"foreignKey:ExchangeId;references:ID"`
+	BreakDown       []BreakDownIntervals  `json:"breakdown_intervals"`
+	CompanyId       uint                  `json:"company_id"`
 }
 
 type BreakDownIntervals struct {

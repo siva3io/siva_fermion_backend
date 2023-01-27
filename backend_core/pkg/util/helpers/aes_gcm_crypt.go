@@ -22,7 +22,6 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
-
 var (
 	AES_SECRET_KEY = os.Getenv("AES_SECRET_KEY")
 )

@@ -5,8 +5,12 @@ import (
 
 	"fermion/backend_core/db"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/mdm"
+	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/pkg/util/helpers"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 /*
@@ -27,15 +31,23 @@ type Pos interface {
 	CreatePos(data *accounting.UserPosLink) error
 	UpdatePos(query map[string]interface{}, data *accounting.UserPosLink) error
 	FindOne(query map[string]interface{}) (accounting.UserPosLink, error)
+	FindAllPosLink(query interface{}, p *pagination.Paginatevalue) ([]accounting.UserPosLink, error)
 }
 
 type PosRepo struct {
 	Db *gorm.DB
 }
 
+var PosRepository *PosRepo //singleton object
+
+// singleton function
 func NewPosRepo() *PosRepo {
+	if PosRepository != nil {
+		return PosRepository
+	}
 	db := db.DbManager()
-	return &PosRepo{db}
+	PosRepository = &PosRepo{db}
+	return PosRepository
 }
 
 func (r *PosRepo) CreatePos(data *accounting.UserPosLink) error {
@@ -64,6 +76,15 @@ func (r *PosRepo) FindOne(query map[string]interface{}) (accounting.UserPosLink,
 	}
 	if err.Error != nil {
 		return data, err.Error
+	}
+	return data, nil
+}
+
+func (r *PosRepo) FindAllPosLink(query interface{}, p *pagination.Paginatevalue) ([]accounting.UserPosLink, error) {
+	var data []accounting.UserPosLink
+	err := r.Db.Preload(clause.Associations).Model(&accounting.UserPosLink{}).Scopes(helpers.Paginate(&mdm.Partner{}, p, r.Db)).Where(query).Find(&data).Error
+	if err != nil {
+		return data, err
 	}
 	return data, nil
 }

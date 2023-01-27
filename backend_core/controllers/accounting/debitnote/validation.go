@@ -9,19 +9,45 @@ import (
 )
 
 /*
-Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
-All rights reserved.
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License v3.0 as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Lesser General Public License v3.0 for more details.
-You should have received a copy of the GNU Lesser General Public License v3.0
-along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+ Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+ All rights reserved.
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU Lesser General Public License v3.0 as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU Lesser General Public License v3.0 for more details.
+ You should have received a copy of the GNU Lesser General Public License v3.0
+ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+
+func (a DebitNoteDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.VendorId, validation.Required),
+		validation.Field(&a.PurchaseInvoiceId, validation.Required),
+		validation.Field(&a.BillingAddressId, validation.Required),
+		validation.Field(&a.DeliveryAddressId, validation.Required),
+		//validation.Field(&a.DebitNoteID, validation.Required),
+		validation.Field(&a.ReasonId, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.DebitNoteLineItems, validation.Required),
+	)
+}
+
+func (o DebitNoteLineItems) Validate() error {
+	return validation.ValidateStruct(&o,
+
+		validation.Field(&o.ProductVariantId, validation.Required),
+		validation.Field(&o.Quantity, validation.Required),
+		validation.Field(&o.UomId, validation.Required),
+		validation.Field(&o.Price, validation.Required),
+		validation.Field(&o.Discount, validation.Required),
+		validation.Field(&o.Tax, validation.Required),
+		validation.Field(&o.Amount, validation.Required),
+	)
+}
 func DebitNoteCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 	var data = new(DebitNoteDTO)
@@ -32,7 +58,7 @@ func DebitNoteCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

@@ -1,8 +1,6 @@
 package pick_list
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -26,36 +24,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 func (c PicklistRequest) Validate() error {
 	return validation.ValidateStruct(&c,
-		validation.Field(
-			&c.PickListNumber,
+		validation.Field(&c.PickListNumber,
 			validation.When(!c.AutoCreatePicklistNumber, validation.Required),
 		),
-		validation.Field(
-			&c.StartDateTime,
-			validation.Required,
-		),
-		validation.Field(
-			&c.PartnerID,
-			validation.Required,
-		),
-		validation.Field(&c.PicklistLines),
+		validation.Field(&c.StartDateTime, validation.Required),
+		validation.Field(&c.SelectCustomerId, validation.Required),
+		validation.Field(&c.PicklistLines, validation.Required),
 	)
 }
 
 func (d PickListLines) Validate() error {
 	return validation.ValidateStruct(&d,
-		validation.Field(
-			&d.ProductVariantID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.ProductID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.QuantityOrdered,
-			validation.Required,
-		),
+		validation.Field(&d.ProductVariantID, validation.Required),
+		//validation.Field(&d.ProductID, validation.Required),
+		validation.Field(&d.QuantityOrdered, validation.Required),
+		validation.Field(&d.QuantityToPick, validation.Required),
+		//validation.Field(&d.QuantityPicked, validation.Required),
 	)
 }
 
@@ -69,11 +53,11 @@ func PickListCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("InvalidPayload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

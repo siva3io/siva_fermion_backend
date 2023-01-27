@@ -3,15 +3,17 @@ package currency_exchange
 import (
 	//"strconv"
 
-	"fmt"
-	"net/http"
 	"strconv"
 
 	//"fermion/backend_core/internal/model/accounting"
-	db "fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/controllers/eda"
+	accounting "fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/pagination"
 
 	//"fermion/backend_core/pkg/util/helpers"
 
+	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
 	"github.com/labstack/echo/v4"
@@ -36,9 +38,16 @@ type handler struct {
 	service Service
 }
 
+var CurrencyExchangeHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CurrencyExchangeHandler != nil {
+		return CurrencyExchangeHandler
+	}
 	service := NewService()
-	return &handler{service}
+	CurrencyExchangeHandler = &handler{service}
+	return CurrencyExchangeHandler
 }
 
 // CreateExchangePair godoc
@@ -55,20 +64,39 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange/create [post]
-func (h *handler) CreateExchangePair(c echo.Context) error {
-	// data := c.Get("currency_exchange").(*accounting.BasicPairInfo)
-	data := db.CurrencyExchange{}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	if er := c.Bind(&data); er != nil {
-		return res.RespErr(c, er)
+func (h *handler) CreateExchangePairEvent(c echo.Context) error {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("currency_exchange"),
 	}
-	err := h.service.CreateCurrency(&data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
+	eda.Produce(eda.CREATE_CURRENCY_EXCHANGE, request_payload)
+	return res.RespSuccess(c, "Currency Exchange creation inprogress", edaMetaData.RequestId)
 
-	return res.RespSuccess(c, "Exchange Pair created successfully", map[string]interface{}{"created_id": data.ID})
+}
+
+func (h *handler) CreateExchangePair(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	createPayload := new(accounting.CurrencyExchange)
+	helpers.JsonMarshaller(data, createPayload)
+	createPayload.CreatedByID = &edaMetaData.TokenUserId
+	err := h.service.CreateCurrency(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CURRENCY_EXCHANGE_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateCurrencyExchangeInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_CURRENCY_EXCHANGE_ACK, responseMessage)
 }
 
 // UpdateExchangePair godoc
@@ -85,24 +113,41 @@ func (h *handler) CreateExchangePair(c echo.Context) error {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange/{id}/update [post]
-func (h *handler) UpdateExchangePair(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = uint(ID)
-	var data db.CurrencyExchange
-	err = c.Bind(&data)
-	if err != nil {
-		fmt.Println("error", err)
-		return err
+func (h *handler) UpdateExchangePairEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	currencyId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         currencyId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	err = h.service.UpdateExchangePair(query, &data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("currency_exchange"),
 	}
-	return res.RespSuccess(c, "Exchange Pair updated successfully", map[string]interface{}{"updated_id": id})
+	eda.Produce(eda.UPDATE_CURRENCY_EXCHANGE, request_payload)
+	return res.RespSuccess(c, "Currency Exchange Update inprogress", edaMetaData.RequestId)
+
+}
+func (h *handler) UpdateExchangePair(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(accounting.CurrencyExchange)
+	helpers.JsonMarshaller(data, updatePayLoad)
+	err := h.service.UpdateExchangePair(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
+	if err != nil {
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CURRENCY_EXCHANGE_ACK, responsemessage)
+		return
+	}
+	// cache implementation
+	UpdateCurrencyExchangeInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_CURRENCY_EXCHANGE_ACK, responsemessage)
 
 }
 
@@ -124,15 +169,29 @@ func (h *handler) UpdateExchangePair(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange [get]
 func (h *handler) GetExchangePair(c echo.Context) (err error) {
-	var result []db.CurrencyExchange
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err = h.service.GetExchangePair(token_id, access_template_id, "LIST")
-	if err != nil {
-		return res.RespError(c, err)
-
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []CurrencyExchangeDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCurrencyExchangeFromCache(tokenUserId)
 	}
-	return c.JSON(http.StatusOK, result)
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetExchangePair(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Currency Exchange list Retrieved Successfully", response, p)
 }
 
 // GetExchangePairDropDown godoc
@@ -153,15 +212,27 @@ func (h *handler) GetExchangePair(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange/dropdown [get]
 func (h *handler) GetExchangePairDropDown(c echo.Context) (err error) {
-	var result []db.CurrencyExchange
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err = h.service.GetExchangePair(token_id, access_template_id, "DROPDOWN_LIST")
-	if err != nil {
-		return res.RespError(c, err)
-
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []CurrencyExchangeDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCurrencyExchangeFromCache(tokenUserId)
 	}
-	return c.JSON(http.StatusOK, result)
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetExchangePair(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Currency Exchange dropdown list Retrieved Successfully", response, p)
 }
 
 // GetExchangePairData godoc
@@ -180,18 +251,19 @@ func (h *handler) GetExchangePairDropDown(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange/{id} [get]
 func (h *handler) GetExchangePairData(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = map[string]interface{}{
-		"id": ID,
+	metaData := c.Get("MetaData").(core.MetaData)
+	currencyId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         currencyId,
+		"company_id": metaData.CompanyId,
 	}
-	result, err := h.service.GetExchangePairData(query, token_id, access_template_id)
+	result, err := h.service.GetExchangePairData(metaData)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Exchange Pair Details Retrieved successfully", result)
+	var response CurrencyExchangeDTO
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Currency Exchange Details Retrieved successfully", response)
 
 }
 
@@ -210,17 +282,18 @@ func (h *handler) GetExchangePairData(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/currency_and_exchange/{id}/delete  [delete]
 func (h *handler) DeleteExchangePair(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteExchangePair(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	currencyId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         currencyId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteExchangePair(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Exchange Pair Record deleted successfully", map[string]string{"deleted_id": id})
+	// cache implementation
+	UpdateCurrencyExchangeInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", currencyId)
 }

@@ -42,14 +42,19 @@ type (
 		PickupDateAndTime    SO_PickupDateAndTime  `json:"pickup_date_time" gorm:"embedded"`
 		Scraping_status      string                `json:"scraping_status" gorm:"type:text"`
 		Grn_status           *bool                 `json:"grn_status" gorm:"type:boolean"`
+		GrnStatusId          *uint                 `json:"grn_status_id"  gorm:"type:int"`
+		GrnStatus            model_core.Lookupcode `json:"Grn_status" gorm:"foreignKey:GrnStatusId; references:ID"`
 		SourceDocuments      datatypes.JSON        `json:"source_documents" gorm:"type:json; default:'[]'; not null"`
 		SourceDocumentTypeId *uint                 `json:"source_document_type_id" gorm:"type:integer"`
 		SourceDocumentType   model_core.Lookupcode `json:"source_document" gorm:"foreignKey:SourceDocumentTypeId; references:ID"`
-		Status_id            uint                  `json:"status_id" gorm:"type:int"`
+		Status_id            *uint                 `json:"status_id" gorm:"type:int"`
 		Status               model_core.Lookupcode `json:"status" gorm:"foreignKey:Status_id; references:ID"`
 		Status_history       datatypes.JSON        `json:"status_history" gorm:"type:json; default:'[]'; not null"`
-		ShippingOrderId      *uint                 `json:"shipping_order_id" gorm:"type:integer" `
+		ShippingOrderId      *uint                 `json:"shipping_order_id" gorm:"type:integer"`
 		IsShipping           *bool                 `json:"is_shipping" gorm:"default:true"`
+		ExpectedShippingDate string                `json:"expected_shipping_date"`
+		Shipping_mode_id     *uint                 `json:"shipping_mode_id" gorm:"type:int"`
+		Shipping_Mode        model_core.Lookupcode `json:"shipping_mode" gorm:"foreignKey:Shipping_mode_id; references:ID"`
 		model_core.Model
 	}
 

@@ -1,6 +1,7 @@
 package inventory_orders
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -28,38 +29,48 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type GRN interface {
-	UpdateGRN(id uint, data *inventory_orders.GRN) error
-	DeleteGRN(id uint, user_id uint) error
-	UpdateOrderLines(query interface{}, data inventory_orders.GRNOrderLines) (int64, error)
-	CreateGRN(data *inventory_orders.GRN, userID string) (uint, error)
+	CreateGRN(data *inventory_orders.GRN) error
+	UpdateGRN(query map[string]interface{}, data *inventory_orders.GRN) error
+	GetAllGRN(query map[string]interface{}, page *pagination.Paginatevalue) ([]inventory_orders.GRN, error)
+	GetGRN(query map[string]interface{}) (inventory_orders.GRN, error)
+	DeleteGRN(query map[string]interface{}) error
 	BulkCreateGRN(data *[]inventory_orders.GRN, userID string) error
+
 	CreateOrderLines(data inventory_orders.GRNOrderLines) error
-	GetAllGRN(page *pagination.Paginatevalue) ([]inventory_orders.GRN, error)
-	GetGRN(id uint) (inventory_orders.GRN, error)
-	DeleteOrderLines(query interface{}) error
-	SearchGRN(key string) (interface{}, error)
+	UpdateOrderLines(query map[string]interface{}, data inventory_orders.GRNOrderLines) (int64, error)
+	DeleteOrderLines(query map[string]interface{}) error
 }
 
 type grn struct {
 	db *gorm.DB
 }
 
+var grnRepository *grn //singleton object
+
+// singleton function
 func NewGRN() *grn {
+	if grnRepository != nil {
+		return grnRepository
+	}
 	db := db.DbManager()
-	return &grn{db}
+	grnRepository = &grn{db}
+	return grnRepository
 }
 
-func (r *grn) CreateGRN(data *inventory_orders.GRN, userID string) (uint, error) {
+func (r *grn) CreateGRN(data *inventory_orders.GRN) error {
 	var scode uint
 	err := r.db.Raw("SELECT lookupcodes.id FROM lookuptypes,lookupcodes WHERE lookuptypes.id = lookupcodes.lookup_type_id AND lookuptypes.lookup_type = 'GRN_STATUS' AND lookupcodes.lookup_code = 'DRAFT'").First(&scode).Error
 	if err != nil {
-		return 0, err
+		return err
 	}
 	data.StatusId = scode
 	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusId)
 	data.StatusHistory = result
-	res := r.db.Model(&inventory_orders.GRN{}).Create(&data)
-	return data.ID, res.Error
+	res := r.db.Model(&inventory_orders.GRN{}).Create(data).Error
+	if res != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *grn) BulkCreateGRN(data *[]inventory_orders.GRN, userID string) error {
@@ -82,19 +93,25 @@ func (r *grn) BulkCreateGRN(data *[]inventory_orders.GRN, userID string) error {
 
 func (r *grn) CreateOrderLines(data inventory_orders.GRNOrderLines) error {
 	res := r.db.Model(&inventory_orders.GRNOrderLines{}).Create(&data)
-	return res.Error
+	if res != nil {
+		return res.Error
+	}
+	return nil
 }
 
-func (r *grn) GetGRN(id uint) (inventory_orders.GRN, error) {
+func (r *grn) GetGRN(query map[string]interface{}) (inventory_orders.GRN, error) {
 	var data inventory_orders.GRN
-	result := r.db.Model(&inventory_orders.GRN{}).Preload(clause.Associations+"."+clause.Associations+"."+clause.Associations+"."+clause.Associations).Preload("GRNOrderLines.Product").Preload("GRNOrderLines.ProductTemplate").Preload("GRNOrderLines.UOM").Preload(clause.Associations).Where("id", id).First(&data)
+	result := r.db.Model(&inventory_orders.GRN{}).Preload(clause.Associations + "." + clause.Associations + "." + clause.Associations + "." + clause.Associations).Preload("GRNOrderLines.Product").Preload("GRNOrderLines.ProductTemplate").Preload("GRNOrderLines.UOM").Preload(clause.Associations).Where(query).First(&data)
+	if result.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
 	if result.Error != nil {
 		return data, result.Error
 	}
 	return data, nil
 }
 
-func (r *grn) GetAllGRN(page *pagination.Paginatevalue) ([]inventory_orders.GRN, error) {
+func (r *grn) GetAllGRN(query map[string]interface{}, page *pagination.Paginatevalue) ([]inventory_orders.GRN, error) {
 	var data []inventory_orders.GRN
 	result := r.db.Scopes(helpers.Paginate(&inventory_orders.GRN{}, page, r.db)).Preload("GRNOrderLines.Product").Preload("GRNOrderLines.ProductTemplate").Preload("GRNOrderLines.UOM").Preload(clause.Associations).Where("is_active = true").Find(&data)
 	if result.Error != nil {
@@ -103,37 +120,49 @@ func (r *grn) GetAllGRN(page *pagination.Paginatevalue) ([]inventory_orders.GRN,
 	return data, nil
 }
 
-func (r *grn) UpdateGRN(id uint, data *inventory_orders.GRN) error {
-	res := r.db.Model(&inventory_orders.GRN{}).Where("id", id).Updates(&data)
-	return res.Error
+func (r *grn) UpdateGRN(query map[string]interface{}, data *inventory_orders.GRN) error {
+	res := r.db.Model(&inventory_orders.GRN{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
 }
 
-func (r *grn) UpdateOrderLines(query interface{}, data inventory_orders.GRNOrderLines) (int64, error) {
+func (r *grn) UpdateOrderLines(query map[string]interface{}, data inventory_orders.GRNOrderLines) (int64, error) {
 	res := r.db.Model(&inventory_orders.GRNOrderLines{}).Where(query).Updates(&data)
-	return res.RowsAffected, res.Error
+	if res.RowsAffected == 0 {
+		return res.RowsAffected, errors.New("oops! record not found")
+	}
+	return res.RowsAffected, nil
+
 }
 
-func (r *grn) SearchGRN(key string) (interface{}, error) {
-	var datas []inventory_orders.GRN
-	fields := []string{"reference_number", "grn_number", "putaway_location"}
-	fields_string, values := helpers.ApplySearch(key, fields)
-	res := r.db.Model(&inventory_orders.GRN{}).Limit(50).Preload(clause.Associations).Where(fields_string, values...).Find(&datas)
-	return datas, res.Error
-}
-
-func (r *grn) DeleteGRN(id uint, user_id uint) error {
+func (r *grn) DeleteGRN(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&inventory_orders.GRN{}).Where("id", id).Updates(data)
-	return res.Error
+	delete(query, "user_id")
+	res := r.db.Model(&inventory_orders.GRN{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
 }
 
-func (r *grn) DeleteOrderLines(query interface{}) error {
+func (r *grn) DeleteOrderLines(query map[string]interface{}) error {
 	var data inventory_orders.GRNOrderLines
 	res := r.db.Model(&inventory_orders.GRNOrderLines{}).Where(query).Delete(&data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	return res.Error
 }

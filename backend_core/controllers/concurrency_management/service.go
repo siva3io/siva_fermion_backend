@@ -37,9 +37,16 @@ type service struct {
 	db *gorm.DB
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	db := db.DbManager()
-	return &service{db}
+	newServiceObj = &service{db}
+	return newServiceObj
 }
 
 func (s *service) CheckConcurrencyStatus(id uint, column_name string, model_name string) (ConcurrencyResponseDTO, uint, error) {

@@ -21,15 +21,16 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreateContact, cmiddleware.Authorization, ContactsCreateValidate)
-	g.POST("/:id/update", h.UpdateContact, cmiddleware.Authorization, ContactsUpdateValidate)
+	g.POST("/upsert", h.UpsertContactEvent, cmiddleware.Authorization)
+	g.POST("/create", h.CreateContactEvent, cmiddleware.Authorization, ContactsCreateValidate)
+	g.POST("/:id/update", h.UpdateContactEvent, cmiddleware.Authorization, ContactsUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteContacts, cmiddleware.Authorization)
 	g.GET("/:id", h.ContactView, cmiddleware.Authorization)
 	g.GET("/:id/related", h.GetRelatedContacts, cmiddleware.Authorization)
 	g.GET("", h.GetContacts, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetContactsDropdown, cmiddleware.Authorization)
-	g.GET("/search", h.SearchContacts, cmiddleware.Authorization)
 	g.POST("/:id/favourite", h.FavouriteContacts, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouriteContacts, cmiddleware.Authorization)
 	g.GET("/favourite_list", h.FavouriteContactsView, cmiddleware.Authorization)
+	g.GET("/:id/filter_module/:tab", h.GetContactTab, cmiddleware.Authorization)
 }

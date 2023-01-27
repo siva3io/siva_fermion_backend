@@ -3,12 +3,13 @@ package shipping_orders_wd
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/shipping"
 	shipping_repo "fermion/backend_core/internal/repository/shipping"
 	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 )
 
@@ -28,49 +29,52 @@ import (
 */
 
 type Service interface {
-	UpdateWD(id uint, data WDRequest, token_id string, access_template_id string) error
-	DeleteWD(id uint, user_id uint, token_id string, access_template_id string) error
-	CreateWD(data *WDRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateWD(data *[]WDRequest, token_id string, access_template_id string) error
-	GetAllWD(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.WD, error)
-	GetWD(id uint, token_id string, access_template_id string) (interface{}, error)
+	UpdateWD(metaData core.MetaData, data *shipping.WD) error
+	DeleteWD(metaData core.MetaData) error
+	CreateWD(metaData core.MetaData, data *shipping.WD) error
+	BulkCreateWD(metaData core.MetaData, data *[]WDRequest) error
+	GetAllWD(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetWD(metaData core.MetaData) (interface{}, error)
 }
 
 type service struct {
 	wdRepository shipping_repo.WD
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	wdRepository := shipping_repo.NewWD()
-	return &service{wdRepository}
+	newServiceObj = &service{wdRepository}
+	return newServiceObj
 }
 
-func (s *service) CreateWD(data *WDRequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "WD", *token_user_id)
+func (s *service) CreateWD(metaData core.MetaData, data *shipping.WD) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "WD", metaData.TokenUserId)
 	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for createwd at view level")
+		return fmt.Errorf("you dont have access for createwd at view level")
 	}
 	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for createwd at data level")
+		return fmt.Errorf("you dont have access for createwd at data level")
 	}
-	var WDData shipping.WD
-	dto, err := json.Marshal(*data)
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	err := s.wdRepository.CreateWD(data)
 	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
-	err = json.Unmarshal(dto, &WDData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	ID, err1 := s.wdRepository.CreateWD(&WDData)
-	return ID, err1
+	return err
 }
 
-func (s *service) BulkCreateWD(data *[]WDRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "WD", *token_user_id)
+func (s *service) BulkCreateWD(metaData core.MetaData, data *[]WDRequest) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "WD", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for createwd at view level")
 	}
@@ -90,81 +94,66 @@ func (s *service) BulkCreateWD(data *[]WDRequest, token_id string, access_templa
 	return err
 }
 
-func (s *service) GetWD(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "WD", *token_user_id)
+func (s *service) GetWD(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "WD", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for viewwd at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for viewwd at data level")
 	}
-	result, err := s.wdRepository.GetWD(id)
+	response, err := s.wdRepository.GetWD(metaData.Query)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
-	return result, nil
+	return response, nil
 }
 
-func (s *service) GetAllWD(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.WD, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "WD", *token_user_id)
+func (s *service) GetAllWD(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "WD", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for listwd at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for listwd at data level")
 	}
-	result, err := s.wdRepository.GetAllWD(p)
+	result, err := s.wdRepository.GetAllWD(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) UpdateWD(id uint, data WDRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "WD", *token_user_id)
+func (s *service) UpdateWD(metaData core.MetaData, data *shipping.WD) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "WD", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for updatewd at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for updatewd at data level")
 	}
-	var WDData shipping.WD
-	dto, err := json.Marshal(data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &WDData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	_, errmsg := s.wdRepository.GetWD(id)
-	if errmsg != nil {
-		return errmsg
-	}
-	err = s.wdRepository.UpdateWD(id, WDData)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.wdRepository.UpdateWD(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *service) DeleteWD(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "WD", *token_user_id)
+func (s *service) DeleteWD(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "WD", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for deletewd at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for deletewd at data level")
 	}
-	_, errmsg := s.wdRepository.GetWD(id)
-	if errmsg != nil {
-		return errmsg
-	}
-	err := s.wdRepository.DeleteWD(id, user_id)
+
+	err := s.wdRepository.DeleteWD(metaData.Query)
 	if err != nil {
 		return err
 	}

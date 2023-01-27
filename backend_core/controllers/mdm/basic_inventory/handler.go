@@ -3,10 +3,10 @@ package basic_inventory
 import (
 	// "fmt"
 
-	"encoding/json"
-	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -33,9 +33,16 @@ type handler struct {
 	service Service
 }
 
+var BasicInventoryHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if BasicInventoryHandler != nil {
+		return BasicInventoryHandler
+	}
 	service := NewService()
-	return &handler{service}
+	BasicInventoryHandler = &handler{service}
+	return BasicInventoryHandler
 }
 
 // Create Centralized Inventory godoc
@@ -52,29 +59,42 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/basic_inventory/centralized/create [post]
-func (h *handler) CreateCentrailizedInventory(c echo.Context) (err error) {
+func (h *handler) CreateCentrailizedInventoryEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	data := c.Get("basic_inventory_centralized").(*CentralizedBasicInventoryDTO)
-
-	var request_data mdm.CentralizedBasicInventory
-
-	marshaldata, err := json.Marshal(*data)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("basic_inventory_centralized"),
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
+	eda.Produce(eda.CREATE_CENTRALIZED_INVENTORY, request_payload)
+	return res.RespSuccess(c, "Basic centralized Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) CreateCentrailizedInventory(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(mdm.CentralizedBasicInventory)
+	helpers.JsonMarshaller(data, createPayload)
+	err := h.service.CreateCentrailizedInventory(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
+
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
-	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.CreateCentrailizedInventory(&request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CENTRALIZED_INVENTORY_ACK, responseMessage)
+		return
 	}
 
-	return res.RespSuccess(c, "Basic Centralized Inventory created successfully", request_data)
+	// cache implementation
+	UpdateCentralizedInventoryInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_CENTRALIZED_INVENTORY_ACK, responseMessage)
 }
 
 // CreateDecentralizedInventory godoc
@@ -91,29 +111,42 @@ func (h *handler) CreateCentrailizedInventory(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/basic_inventory/decentralized/create [post]
-func (h *handler) CreateDecentralizedInventory(c echo.Context) (err error) {
+func (h *handler) CreateDecentralizedInventoryEvent(c echo.Context) (err error) {
 
-	data := c.Get("basic_inventory_decentralized").(*DecentralizedBasicInventoryDTO)
-	var request_data mdm.DecentralizedBasicInventory
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	fmt.Println("------------------------------")
-	marshaldata, err := json.Marshal(*data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.CreateDecentralizedInventory(&request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("basic_inventory_decentralized"),
 	}
 
-	return res.RespSuccess(c, "Basic Decentralized created successfully", request_data)
+	eda.Produce(eda.CREATE_INVENTORY, request_payload)
+	return res.RespSuccess(c, "Basic Decentralized Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) CreateDecentralizedInventory(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(mdm.DecentralizedBasicInventory)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateDecentralizedInventory(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_INVENTORY_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateDecentralizedInventoryInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_INVENTORY_ACK, responseMessage)
 }
 
 // UpdateCentralizedInventory godoc
@@ -131,33 +164,50 @@ func (h *handler) CreateDecentralizedInventory(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/basic_inventory/centralized/{id}/update [post]
-func (h *handler) UpdateCentrailizedInventory(c echo.Context) (err error) {
+func (h *handler) UpdateCentrailizedInventoryEvent(c echo.Context) (err error) {
+
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
 	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
 
-	data := c.Get("basic_inventory_centralized").(*CentralizedBasicInventoryDTO)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         id,
+		"company_id": edaMetaData.CompanyId,
+	}
 
-	var request_data mdm.CentralizedBasicInventory
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("basic_inventory_centralized"),
+	}
 
-	marshaldata, err := json.Marshal(*data)
+	eda.Produce(eda.UPDATE_CENTRALIZED_INVENTORY, request_payload)
+	return res.RespSuccess(c, "Basic centralized Updation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateCentrailizedInventory(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	updatePayload := new(mdm.CentralizedBasicInventory)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateCentrailizedInventory(edaMetaData, updatePayload)
+
+	var responseMessage eda.ConsumerResponse
+
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CENTRALIZED_INVENTORY_ACK, responseMessage)
+		return
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
+	// cache implementation
+	UpdateCentralizedInventoryInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateCentrailizedInventory(query, &request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccess(c, "Centralized Inventory Details updated succesfully", request_data)
+	// eda.Produce(eda.UPDATE_CENTRALIZED_INVENTORY_ACK, responseMessage)
 }
 
 // UpdateDecentralizedInventory godoc
@@ -175,33 +225,48 @@ func (h *handler) UpdateCentrailizedInventory(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/basic_inventory/decentralized/{id}/update [post]
-func (h *handler) UpdateDecentralizedInventory(c echo.Context) (err error) {
+func (h *handler) UpdateDecentralizedInventoryEvent(c echo.Context) (err error) {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
 
-	data := c.Get("basic_inventory_decentralized").(*DecentralizedBasicInventoryDTO)
-	var request_data mdm.DecentralizedBasicInventory
-
-	marshaldata, err := json.Marshal(*data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateDecentralizedInventory(query, &request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         id,
+		"company_id": edaMetaData.CompanyId,
 	}
 
-	return res.RespSuccess(c, "Decentralized Inventory Details updated succesfully", request_data)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("basic_inventory_decentralized"),
+	}
+
+	eda.Produce(eda.UPDATE_INVENTORY, request_payload)
+	return res.RespSuccess(c, "Basic Decentralized Updation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateDecentralizedInventory(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(mdm.DecentralizedBasicInventory)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateDecentralizedInventory(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_INVENTORY_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateDecentralizedInventoryInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_INVENTORY_ACK, responseMessage)
+
 }
 
 // DeleteCentralizedInventory godoc
@@ -220,18 +285,20 @@ func (h *handler) UpdateDecentralizedInventory(c echo.Context) (err error) {
 // @Router /api/v1/basic_inventory/centralized/{id}/delete [delete]
 func (h *handler) DeleteCentrailizedInventory(c echo.Context) (err error) {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteCentrailizedInventory(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         id,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteCentrailizedInventory(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateCentralizedInventoryInCache(metaData)
 
 	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
 }
@@ -252,19 +319,21 @@ func (h *handler) DeleteCentrailizedInventory(c echo.Context) (err error) {
 // @Router /api/v1/basic_inventory/decentralized/{id}/delete [delete]
 func (h *handler) DeleteDecentralizedInventory(c echo.Context) (err error) {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         id,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
 
-	err = h.service.DeleteDecentralizedInventory(query, token_id, access_template_id)
+	err = h.service.DeleteDecentralizedInventory(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateDecentralizedInventoryInCache(metaData)
 
 	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
 }
@@ -286,18 +355,21 @@ func (h *handler) DeleteDecentralizedInventory(c echo.Context) (err error) {
 // @Router /api/v1/basic_inventory/centralized/{id} [get]
 func (h *handler) GetCentrailizedInventory(c echo.Context) error {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetCentrailizedInventory(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": id,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetCentrailizedInventory(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "Centralized Details Retrieved succesfully", result)
+	var response CentralizedBasicInventoryResponseDTO
+	helpers.JsonMarshaller(result, &response)
+
+	return res.RespSuccess(c, "Centralized Details Retrieved succesfully", response)
 }
 
 // DecentralizedInventoryView godoc
@@ -317,18 +389,21 @@ func (h *handler) GetCentrailizedInventory(c echo.Context) error {
 // @Router /api/v1/basic_inventory/decentralized/{id} [get]
 func (h *handler) GetDecentralizedInventory(c echo.Context) error {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetDecentralizedInventory(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": id,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetDecentralizedInventory(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "Decentralized Details Retrieved succesfully", result)
+	var response DecentralizedBasicInventoryResponseDTO
+	helpers.JsonMarshaller(result, &response)
+
+	return res.RespSuccess(c, "Decentralized Details Retrieved succesfully", response)
 }
 
 // CentralizedInventoryList godoc
@@ -350,18 +425,33 @@ func (h *handler) GetDecentralizedInventory(c echo.Context) error {
 // @Router /api/v1/basic_inventory/centralized [get]
 func (h *handler) GetCentrailizedInventoryList(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
 
-	result, err := h.service.GetCentrailizedInventoryList(query, p, token_id, access_template_id, "LIST")
+	var cacheResponse interface{}
+	var response []CentralizedBasicInventoryResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCentralizedInventoryFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetCentrailizedInventoryList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 
-	return res.RespSuccessInfo(c, " Centralized List Retrieved successfully", result, p)
+	return res.RespSuccessInfo(c, " Centralized List Retrieved successfully", response, p)
 }
 
 // CentralizedInventoryList godoc
@@ -383,18 +473,33 @@ func (h *handler) GetCentrailizedInventoryList(c echo.Context) (err error) {
 // @Router /api/v1/basic_inventory/centralized/dropdown [get]
 func (h *handler) GetCentrailizedInventoryListDropdown(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
 
-	result, err := h.service.GetCentrailizedInventoryList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
+	var cacheResponse interface{}
+	var response []CentralizedBasicInventoryResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCentralizedInventoryFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetCentrailizedInventoryList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 
-	return res.RespSuccessInfo(c, " Centralized List Retrieved successfully", result, p)
+	return res.RespSuccessInfo(c, " Centralized List Retrieved successfully", response, p)
 }
 
 // DecentralizedInventoryList godoc
@@ -415,18 +520,33 @@ func (h *handler) GetCentrailizedInventoryListDropdown(c echo.Context) (err erro
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/basic_inventory/decentralized [get]
 func (h *handler) GetDecentralizedInventoryList(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	var query = make(map[string]interface{}, 0)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetDecentralizedInventoryList(query, p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []DecentralizedBasicInventoryResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetDecentralizedInventoryFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetDecentralizedInventoryList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 
-	return res.RespSuccessInfo(c, " Decentralized List Retrieved successfully", result, p)
+	return res.RespSuccessInfo(c, " Decentralized List Retrieved successfully", response, p)
 }
 
 // DecentralizedInventoryListDropdown godoc
@@ -448,94 +568,82 @@ func (h *handler) GetDecentralizedInventoryList(c echo.Context) (err error) {
 // @Router /api/v1/basic_inventory/decentralized/dropdown [get]
 func (h *handler) GetDecentralizedInventoryListDropdown(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	var query = make(map[string]interface{}, 0)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetDecentralizedInventoryList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []DecentralizedBasicInventoryResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetDecentralizedInventoryFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetDecentralizedInventoryList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 
-	return res.RespSuccessInfo(c, " Decentralized List Retrieved successfully", result, p)
-}
-
-// SearchCentralizedInventory godoc
-// @Summary SearchCentralizedInventory
-// @Description SearchCentralizedInventory
-// @Tags Basic_Inventory
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @param q query string true "Search query"
-// @Success 200 {array} CentralizedSearchObjDTO
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/basic_inventory/centralized/search [get]
-func (h *handler) SearchCentrailizedInventory(c echo.Context) (err error) {
-	q := c.QueryParam("q")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.SearchCentrailizedInventory(q, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccess(c, "OK", result)
-}
-
-// SearchDecentralizedInventory godoc
-// @Summary SearchDecentralizedInventory
-// @Description SearchDecentralizedInventory
-// @Tags Basic_Inventory
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @param q query string true "Search query"
-// @Success 200 {array} DecentralizedSearchObjDTO
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/basic_inventory/decentralized/search [get]
-func (h *handler) SearchDecentralizedInventory(c echo.Context) (err error) {
-	q := c.QueryParam("q")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.SearchDecentralizedInventory(q, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccess(c, "OK", result)
+	return res.RespSuccessInfo(c, " Decentralized List Retrieved successfully", response, p)
 }
 
 // -----------Channel Upsert Api--------------------------------------
-func (h *handler) DeCentralisedInventoryUpsert(c echo.Context) (err error) {
+func (h *handler) DeCentralisedInventoryUpsertEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 	var arrayData []interface{}
 	var objectData interface{}
 	var data interface{}
 
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	jsonData, _ := json.Marshal(data)
-
-	err = json.Unmarshal(jsonData, &arrayData)
+	err = helpers.JsonMarshaller(data, &arrayData)
 	if err != nil {
-		_ = json.Unmarshal(jsonData, &objectData)
+		helpers.JsonMarshaller(data, &objectData)
 		arrayData = append(arrayData, objectData)
 	}
 
-	msg, err := h.service.UpsertInventoryTemplate(arrayData, token_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      arrayData,
 	}
+	eda.Produce(eda.UPSERT_DECENTRALIZED_INVENTORY, request_payload)
+	return res.RespSuccess(c, "Multiple Records Upsert Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+func (h *handler) DeCentralisedInventoryUpsert(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
 
-	return res.RespSuccess(c, "Multiple records excuted successfully", msg)
+	var data []interface{}
+	helpers.JsonMarshaller(request["data"], &data)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	_, err := h.service.UpsertInventoryTemplate(edaMetaData, data)
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPSERT_DECENTRALIZED_INVENTORY_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"upserted_message": "Decentralised inventory upserted successfully",
+	}
+	// eda.Produce(eda.UPSERT_DECENTRALIZED_INVENTORY_ACK, responseMessage)
 }
 
 func (h *handler) InventoryTransactionCreate(c echo.Context) (err error) {
+
+	metaData := c.Get("MetaData").(core.MetaData)
 
 	var data = new(mdm.CentralizedInventoryTransactions)
 
@@ -543,13 +651,11 @@ func (h *handler) InventoryTransactionCreate(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.InventoryTransactionCreate(data, token_id, access_template_id)
+
+	err = h.service.InventoryTransactionCreate(metaData, data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "Centralized Inventory Transaction created successfully", data)
+	return res.RespSuccess(c, "Centralized Inventory Transaction created successfully", map[string]interface{}{"created_id": data.ID})
 }

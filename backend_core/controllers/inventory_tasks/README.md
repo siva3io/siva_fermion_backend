@@ -12,7 +12,9 @@
  GNU Lesser General Public License v3.0 for more details.
  You should have received a copy of the GNU Lesser General Public License v3.0
  along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+
 -->
+## Invnetory Tasks
 
 ### Cycle Count
 A cycle count is a perpetual inventory auditing procedure, where you follow a regularly repeated sequence of checks on a subset of inventory. Cycle counts contrast with traditional physical inventory in that a traditional physical inventory ceases operations at a facility while all items are counted.

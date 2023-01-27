@@ -35,9 +35,16 @@ type shippingBase struct {
 	db *gorm.DB
 }
 
+var shippingBaseRepository *shippingBase //singleton object
+
+// singleton function
 func NewShippingBase() *shippingBase {
-	database := db.DbManager()
-	return &shippingBase{database}
+	if shippingBaseRepository != nil {
+		return shippingBaseRepository
+	}
+	db := db.DbManager()
+	shippingBaseRepository = &shippingBase{db}
+	return shippingBaseRepository
 
 }
 

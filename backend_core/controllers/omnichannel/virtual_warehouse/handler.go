@@ -32,10 +32,17 @@ type handler struct {
 	base_service virtual_warehouse_base.ServiceBase
 }
 
+var VirtualWarehouseHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if VirtualWarehouseHandler != nil {
+		return VirtualWarehouseHandler
+	}
 	service := NewService()
 	base_service := virtual_warehouse_base.NewServiceBase()
-	return &handler{service, base_service}
+	VirtualWarehouseHandler = &handler{service, base_service}
+	return VirtualWarehouseHandler
 }
 
 // REGISTER VIRTUAL WAREHOUSE
@@ -187,13 +194,19 @@ func (h *handler) DeleteVirtualWarehouse(c echo.Context) (err error) {
 func (h *handler) SaveVirtualWarehouseDetails(c echo.Context) (err error) {
 
 	data := c.Get("virtual_warehouse_details").(*omnichannel.User_Virtual_Warehouse_Link)
-	s := c.Get("TokenUserID").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(s)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	data.CreatedByID = helpers.ConvertStringToUint(token_id)
 	err = h.service.SaveVirtualWarehouseDetails(data)
 	// @Summary      Find a VirtualWarehouse by id
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateVirtualWarehouseInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "Virtual Warehouse Details created successfully", map[string]interface{}{"created_id": data.ID})
 }
 
@@ -217,12 +230,18 @@ func (h *handler) UpdateVirtualWarehouseDetails(c echo.Context) (err error) {
 	ID := c.Param("id")
 	id, _ := strconv.Atoi(ID)
 	data := c.Get("virtual_warehouse_details").(*omnichannel.User_Virtual_Warehouse_Link)
-	s := c.Get("TokenUserID").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(s)
+
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
 	err = h.service.UpdateVirtualWarehouseDetails(uint(id), *data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateVirtualWarehouseInCache(token_id, access_template_id)
 
 	return res.RespSuccess(c, "Update Virtual Warehouse Details successfully done", map[string]interface{}{"updated_id": id})
 }
@@ -269,6 +288,18 @@ func (h *handler) FindVirtualWarehouseDetails(c echo.Context) (err error) {
 func (h *handler) ListVirtualWarehouseDetails(c echo.Context) (err error) {
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
+
+	token_id := c.Get("TokenUserID").(string)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetVirtualWarehouseFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	result, err := h.service.ListVirtualWarehouseDetails(p)
 	if err != nil {
 		return res.RespErr(c, err)
@@ -293,12 +324,19 @@ func (h *handler) ListVirtualWarehouseDetails(c echo.Context) (err error) {
 func (h *handler) DeleteVirtualWarehouseDetails(c echo.Context) (err error) {
 	ID := c.Param("id")
 	id, _ := strconv.Atoi(ID)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	user_id, _ := strconv.Atoi(token_id)
 	err = h.service.DeleteVirtualWarehouseDetails(uint(id), uint(user_id))
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateVirtualWarehouseInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "Virtual Warehouse Details deleted successfully", map[string]int{"deleted_id": id})
 }
 

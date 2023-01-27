@@ -3,11 +3,14 @@ package middleware
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
+	"fermion/backend_core/internal/model/core"
 	res "fermion/backend_core/pkg/util/response"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -53,15 +56,32 @@ func Authorization(next echo.HandlerFunc) echo.HandlerFunc {
 		if err != nil || !token.Valid {
 			return res.RespError(c, &res.ErrUnauthorized)
 		}
-		user_id := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["ID"])
-		user_name := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["Username"])
-		access_template_id := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["access_template_id"])
-		company_id := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["company_id"])
 
-		c.Set("Username", user_name)
-		c.Set("TokenUserID", user_id)
-		c.Set("AccessTemplateId", access_template_id)
-		c.Set("CompanyId", company_id)
+		requestId := uuid.New().String()
+		userId := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["ID"])
+		userName := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["Username"])
+		accessTemplateId := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["access_template_id"])
+		companyId := fmt.Sprintf("%v", token.Claims.(jwt.MapClaims)["company_id"])
+
+		c.Set("Username", userName)
+		c.Set("TokenUserID", userId)
+		c.Set("AccessTemplateId", accessTemplateId)
+		c.Set("CompanyId", companyId)
+		c.Set("RequestId", requestId)
+
+		// temporarily above c.Set() will be there until ideal format complete
+		tokenUserId, _ := strconv.Atoi(userId)
+		access_template_id, _ := strconv.Atoi(accessTemplateId)
+		company_id, _ := strconv.Atoi(companyId)
+		var metaData = core.MetaData{
+			RequestId:        requestId,
+			Host:             c.Request().Host,
+			Scheme:           c.Scheme(),
+			TokenUserId:      uint(tokenUserId),
+			AccessTemplateId: uint(access_template_id),
+			CompanyId:        uint(company_id),
+		}
+		c.Set("MetaData", metaData)
 
 		// fmt.Println("User Name :" + user_name+"\nUser ID :" + user_id+"\nAccess Template ID :" + access_template_id+"\nCompany ID :" + company_id)
 

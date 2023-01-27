@@ -34,9 +34,11 @@ type SchedulerJob struct {
 	Function     string         `json:"function"`
 	FunctionType string         `json:"function_type"` //api / function
 	Params       datatypes.JSON `json:"params"`
-	State        string         `json:"state"` //active / inactive
+	State        *bool          `json:"state"` //active / inactive
 	StartTime    time.Time      `json:"start_time"`
 	Frequency    string         `json:"frequency"`
+	SourceType   string         `json:"source_type"`
+	SourceId     string         `json:"source_id"`
 	// FrequencyType string
 }
 

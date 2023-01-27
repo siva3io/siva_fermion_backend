@@ -1,14 +1,14 @@
 package creditnote
 
 import (
-	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 
 	accounting_base "fermion/backend_core/controllers/accounting/base"
+	"fermion/backend_core/controllers/eda"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -34,10 +34,17 @@ type handler struct {
 	base_service accounting_base.ServiceBase
 }
 
+var CreditNoteHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CreditNoteHandler != nil {
+		return CreditNoteHandler
+	}
 	service := NewService()
 	base_service := accounting_base.NewServiceBase()
-	return &handler{service, base_service}
+	CreditNoteHandler = &handler{service, base_service}
+	return CreditNoteHandler
 }
 
 // CreateCreditNote godoc
@@ -54,27 +61,40 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/create [post]
-func (h *handler) CreateCreditNote(c echo.Context) (err error) {
-	data := new(accounting.CreditNote)
-	dto_data := c.Get("credit_note").(*CreditNoteDTO)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	dto_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	seq_credit := helpers.GenerateSequence("Cred", token_id, "credit_notes")
-	seq_ref := helpers.GenerateSequence("Ref", token_id, "credit_notes")
-	if dto_data.GenerateCreditNoteId {
-		dto_data.CreditNoteID = seq_credit
+
+func (h *handler) CreateCreditNoteEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("credit_note"),
 	}
-	if dto_data.GenerateReferenceId {
-		dto_data.ReferenceId = seq_ref
-	}
-	byte_data, _ := json.Marshal(dto_data)
-	json.Unmarshal(byte_data, &data)
-	err = h.service.CreateCreditNote(data, token_id, access_template_id)
+	eda.Produce(eda.CREATE_CREDITNOTE, request_payload)
+	return res.RespSuccess(c, "Credit note creation inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateCreditNote(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(accounting.CreditNote)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateCreditNote(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CREDITNOTE_ACK, responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "Credit note created successfully", map[string]interface{}{"created_id": data.ID, "Details": data})
+	// cache implementation
+	UpdateCreditNoteInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_CREDITNOTE_ACK, responseMessage)
 }
 
 // UpdateCreditNote godoc
@@ -92,20 +112,42 @@ func (h *handler) CreateCreditNote(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id}/update [post]
-func (h *handler) UpdateCreditNote(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	data := c.Get("credit_note").(*CreditNoteDTO)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateCreditNote(query, data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdateCreditNoteEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	creditNoteId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         creditNoteId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Credit Note updated succesfully", data)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("credit_note"),
+	}
+	eda.Produce(eda.UPDATE_CREDITNOTE, request_payload)
+	return res.RespSuccess(c, "Credit Note Update inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateCreditNote(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(accounting.CreditNote)
+	helpers.JsonMarshaller(data, updatePayLoad)
+	updatePayLoad.UpdatedByID = &edaMetaData.TokenUserId
+	err := h.service.UpdateCreditNote(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
+	if err != nil {
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CREDITNOTE_ACK, responsemessage)
+		return
+	}
+	// cache implementation
+	UpdateCreditNoteInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_CREDITNOTE_ACK, responsemessage)
 }
 
 // CreditNoteView godoc
@@ -124,18 +166,20 @@ func (h *handler) UpdateCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id} [get]
 func (h *handler) GetCreditNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	//println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	result, err := h.service.GetCreditNote(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	creditNoteId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         creditNoteId,
+		"company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetCreditNote(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Credit Note Details Retrieved successfully", result)
+	var response CreditNoteResponseDTO
+	helpers.JsonMarshaller(result, &response)
+
+	return res.RespSuccess(c, "Credit Note Details Retrieved successfully", response)
 }
 
 // GetAllCreditNote godoc
@@ -156,17 +200,29 @@ func (h *handler) GetCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote [get]
 func (h *handler) GetAllCreditNote(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	// query["id"] = ID
-	result, err := h.service.GetCreditNoteList(query, p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var response []CreditNoteDTO
+	var cacheResponse interface{}
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCreditNoteFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetCreditNoteList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Credit Note dropdown list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Credit Note list Retrieved Successfully", response, p)
 }
 
 // GetAllCreditNoteDropDown godoc
@@ -187,20 +243,27 @@ func (h *handler) GetAllCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/dropdown [get]
 func (h *handler) GetAllCreditNoteDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	// id := c.Param("id")
-	// ID, _ := strconv.Atoi(id)
-	// //println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	// query["id"] = ID
-	result, err := h.service.GetCreditNoteList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []CreditNoteResponseDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCreditNoteFromCache(tokenUserId)
+	}
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetCreditNoteList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Credit Note dropdown list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Credit Note dropdown list Retrieved Successfully", response, p)
 }
 
 // DeleteCreditNote godoc
@@ -218,20 +281,22 @@ func (h *handler) GetAllCreditNoteDropDown(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id}/delete [delete]
 func (h *handler) DeleteCreditNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteCreditNote(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	creditNoteId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         creditNoteId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+		//"deleted_by": metaData.TokenUserId,
+	}
+
+	err = h.service.DeleteCreditNote(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
+	// cache implementation
+	UpdateCreditNoteInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", creditNoteId)
 }
 
 // FavouriteCreditNote godoc
@@ -249,28 +314,26 @@ func (h *handler) DeleteCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id}/favourite [post]
 func (h *handler) FavouriteCreditNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	fmt.Println(user_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	creditnote_id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         creditnote_id,
+		"company_id": metaData.CompanyId,
+	}
+	_, err = h.service.GetCreditNote(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      creditnote_id,
+		"user_id": metaData.TokenUserId,
 	}
-	q := map[string]interface{}{
-		"id": ID,
-	}
-	access_template_id := c.Get("AccessTemplateId").(string)
-	_, er := h.service.GetCreditNote(q, token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
-	}
+
 	err = h.base_service.FavouriteCreditNote(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Credit Note is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Credit Note is Marked as Favourite", map[string]string{"credinote_id": creditnote_id})
 }
 
 // UnFavouriteCreditNote godoc
@@ -288,19 +351,20 @@ func (h *handler) FavouriteCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id}/unfavourite [post]
 func (h *handler) UnFavouriteCreditNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	creditnote_id := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      creditnote_id,
+		"user_id": metaData.TokenUserId,
 	}
+
 	err = h.base_service.UnFavouriteCreditNote(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Credit Note is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Credit Note is Marked as UnFavourite", map[string]string{"credinote_id": creditnote_id})
+
 }
 
 // GetCreditNoteTab godoc
@@ -320,20 +384,19 @@ func (h *handler) UnFavouriteCreditNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/creditnote/{id}/filter_module/{tab} [get]
 func (h *handler) GetCreditNoteTab(c echo.Context) (err error) {
-
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
 	err = c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-
 	id := c.Param("id")
 	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetCreditNoteTab(id, tab, page, access_template_id, token_id)
+	metaData.AdditionalFields = map[string]interface{}{
+		"creditnote_id": id,
+		"tab_name":      tab,
+	}
+	data, err := h.service.GetCreditNoteTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}

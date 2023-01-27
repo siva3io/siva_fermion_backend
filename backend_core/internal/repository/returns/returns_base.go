@@ -35,9 +35,16 @@ type returnsBase struct {
 	db *gorm.DB
 }
 
+var returnsBaseRepository *returnsBase //singleton object
+
+// singleton function
 func NewReturnsBase() *returnsBase {
+	if returnsBaseRepository != nil {
+		return returnsBaseRepository
+	}
 	db := db.DbManager()
-	return &returnsBase{db}
+	returnsBaseRepository = &returnsBase{db}
+	return returnsBaseRepository
 
 }
 

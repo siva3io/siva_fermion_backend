@@ -43,19 +43,24 @@ type (
 		AutoGenerateInvoiceNumber   bool                     `json:"auto_generate_invoice_number"`
 		ReferenceNumber             string                   `json:"reference_number"`
 		AutoGenerateReferenceNumber bool                     `json:"auto_generate_reference_number"`
-		ExpectedShipmentDate        time.Time                `json:"expected_shipment_date"`
+		SalesInvoiceDate            string                   `json:"sales_invoice_date"`
+		ExpectedShipmentDate        string                   `json:"expected_shipment_date"`
 		CurrencyID                  uint                     `json:"currency_id"`
 		SalesOrderIds               []int64                  `json:"sales_order_ids"`
 		LinkSalesOrders             []map[string]interface{} `json:"link_sales_orders"`
 		CustomerID                  uint                     `json:"customer_id"`
-		ChannelID                   uint                     `json:"channel_id"`
+		Customer                    mdm.Partner              `json:"customer"`
+		ChannelID                   *uint                    `json:"channel_id"`
+		Channel                     *omnichannel.Channel     `json:"channel"`
 		PaymentTypeID               uint                     `json:"payment_type_id"`
+		PaymentType                 model_core.Lookupcode    `json:"payment_type"`
+		CompanyId                   uint                     `json:"company_id"`
 		StatusID                    uint                     `json:"status_id"`
+		Status                      model_core.Lookupcode    `json:"status"`
 		StatusHistory               []map[string]interface{} `json:"status_history"`
 		Invoiced                    bool                     `json:"is_invoiced"`
 		PaymentReceived             bool                     `json:"is_payment_received"`
 		BalanceDueAmount            float64                  `json:"balance_due_amount"`
-		PaymentTermsID              uint                     `json:"payment_terms_id"`
 		AvailableCustomerCredits    float64                  `json:"available_customer_credits"`
 		PaymentDueDate              time.Time                `json:"payment_due_date"`
 		SalesInvoiceLines           []SalesInvoiceLines      `json:"sales_invoice_lines"`
@@ -67,6 +72,9 @@ type (
 		SubTotalAmount              float64                  `json:"sub_total_amount"`
 		ShippingAmount              float64                  `json:"shipping_amount"`
 		TaxAmount                   float64                  `json:"tax_amount"`
+		IgstAmt                     float64                  `json:"igst_amt" gorm:"type:double precision"`
+		CgstAmt                     float64                  `json:"cgst_amt" gorm:"type:double precision"`
+		SgstAmt                     float64                  `json:"sgst_amt" gorm:"type:double precision"`
 		Adjustments                 float64                  `json:"adjustments"`
 		CustomerCreditsAmount       float64                  `json:"customer_credits_amount"`
 		TotalAmount                 float64                  `json:"total_amount"`
@@ -75,24 +83,31 @@ type (
 		ShippingAddress             []map[string]interface{} `json:"shipping_address"`
 		SourceDocuments             map[string]interface{}   `json:"source_documents"`
 		SourceDocumentTypeId        *uint                    `json:"source_document_type_id"`
+		PaymentTermsID              uint                     `json:"payment_terms_id"`
+		PaymentTerms                model_core.Lookupcode    `json:"payment_terms"`
+
+		OrderId   *uint  `json:"order_id"`
+		OrderDate string `json:"order_date"`
+		Quantity  int32  `json:"quantity"`
 		model_core.Model
 	}
 
 	SalesInvoiceLines struct {
-		ProductID        uint    `json:"product_id"`
-		ProductVariantID uint    `json:"product_variant_id"`
-		Description      string  `json:"description"`
-		WarehouseID      uint    `json:"warehouse_id"`
-		InventoryID      uint    `json:"inventory_id"`
-		UomID            uint    `json:"uom_id"`
-		Quantity         uint    `json:"quantity"`
-		Discount         float64 `json:"discount"`
-		DiscountTypeID   uint    `json:"discount_type_id"`
-		Tax              float64 `json:"tax"`
-		TaxTypeID        uint    `json:"tax_type_id"`
-		PaymentTermsID   uint    `json:"payment_terms_id"`
-		TotalAmount      float64 `json:"total_amount"`
-		Price            float64 `json:"price"`
+		ProductID        uint                  `json:"product_id"`
+		ProductVariantID uint                  `json:"product_variant_id"`
+		Description      string                `json:"description"`
+		WarehouseID      uint                  `json:"warehouse_id"`
+		InventoryID      uint                  `json:"inventory_id"`
+		UomID            uint                  `json:"uom_id"`
+		Quantity         uint                  `json:"quantity"`
+		Discount         float64               `json:"discount"`
+		DiscountTypeID   uint                  `json:"discount_type_id"`
+		Tax              float64               `json:"tax"`
+		TaxTypeID        uint                  `json:"tax_type_id"`
+		PaymentTermsID   uint                  `json:"payment_terms_id"`
+		PaymentTerms     model_core.Lookupcode `json:"payment_terms"`
+		TotalAmount      float64               `json:"total_amount"`
+		Price            float64               `json:"price"`
 		model_core.Model
 	}
 )
@@ -192,8 +207,8 @@ type (
 		LinkSalesOrders             map[string]interface{}   `json:"link_sales_orders"`
 		CustomerID                  uint                     `json:"customer_id"`
 		Customer                    mdm.Partner              `json:"customer"`
-		ChannelID                   uint                     `json:"channel_id"`
-		Channel                     omnichannel.Marketplace  `json:"channel"`
+		ChannelID                   *uint                    `json:"channel_id"`
+		Channel                     *omnichannel.Marketplace `json:"channel"`
 		PaymentTypeID               uint                     `json:"payment_type_id"`
 		PaymentType                 model_core.Lookupcode    `json:"payment_type"`
 		StatusID                    uint                     `json:"status_id"`
@@ -216,6 +231,7 @@ type (
 		ShippingAmount              float64                  `json:"shipping_amount"`
 		TaxAmount                   float64                  `json:"tax_amount"`
 		Adjustments                 float64                  `json:"adjustments"`
+		CompanyId                   uint                     `json:"company_id"`
 		CustomerCreditsAmount       float64                  `json:"customer_credits_amount"`
 		TotalAmount                 float64                  `json:"total_amount"`
 		BillingAddress              map[string]interface{}   `json:"billing_address"`
@@ -281,14 +297,15 @@ type (
 		LinkSalesOrders             map[string]interface{}   `json:"link_sales_orders"`
 		CustomerID                  uint                     `json:"customer_id"`
 		Customer                    mdm.Partner              `json:"customer"`
-		ChannelID                   uint                     `json:"channel_id"`
-		Channel                     omnichannel.Marketplace  `json:"channel"`
+		ChannelID                   *uint                    `json:"channel_id"`
+		Channel                     *omnichannel.Marketplace `json:"channel"`
 		PaymentTypeID               uint                     `json:"payment_type_id"`
 		PaymentType                 model_core.Lookupcode    `json:"payment_type"`
 		StatusID                    uint                     `json:"status_id"`
 		Status                      model_core.Lookupcode    `json:"status"`
 		StatusHistory               map[string]interface{}   `json:"status_history"`
 		Invoiced                    bool                     `json:"is_invoiced"`
+		CompanyId                   uint                     `json:"company_id"`
 		PaymentReceived             bool                     `json:"is_payment_received"`
 		BalanceDueAmount            float64                  `json:"balance_due_amount"`
 		PaymentTermsID              uint                     `json:"payment_terms_id"`

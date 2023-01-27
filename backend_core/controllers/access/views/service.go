@@ -36,10 +36,16 @@ type service struct {
 	viewRepository access_repo.View
 }
 
-func NewService() *service {
-	che := access_repo.NewView()
-	return &service{che}
+var newServiceObj *service //singleton object
 
+// singleton function
+func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	che := access_repo.NewView()
+	newServiceObj = &service{che}
+	return newServiceObj
 }
 
 func (s *service) RegisterViews(data *model_core.ViewsLevelAccessItems) error {

@@ -11,29 +11,28 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
-
 /*
- Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
- All rights reserved.
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Lesser General Public License v3.0 as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Lesser General Public License v3.0 for more details.
- You should have received a copy of the GNU Lesser General Public License v3.0
- along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+All rights reserved.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License v3.0 as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License v3.0 for more details.
+You should have received a copy of the GNU Lesser General Public License v3.0
+along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
-
-
 type IpaasFeatures interface {
 	GetOne(collectionName string, id string) (interface{}, error)
 	CreateOne(collectionName string, data map[string]interface{}) (interface{}, error)
 	UpdateOne(collectionName string, id string, data map[string]interface{}) (interface{}, error)
 	DeleteOne(collectionName string, id string) (interface{}, error)
+	GetMany(collectionName string, query map[string]interface{}) (interface{}, error)
 }
 
 type Repo struct {
@@ -113,6 +112,12 @@ func (r *Repo) CreateOne(collectionName string, data map[string]interface{}) (in
 		"encrypted": encryptedString,
 	}
 
+	if collectionName == "ipaas_features" {
+		encryptedData["app_code"] = data["app_code"]
+		encryptedData["is_syncable"] = data["is_syncable"]
+		encryptedData["display_name"] = data["display_name"]
+	}
+
 	result, err := collection.InsertOne(context.TODO(), encryptedData)
 	if err != nil {
 		return nil, err
@@ -138,7 +143,14 @@ func (r *Repo) UpdateOne(collectionName string, id string, data map[string]inter
 	}
 
 	encryptedData := map[string]interface{}{
+		"name":      data["name"],
 		"encrypted": encryptedString,
+	}
+
+	if collectionName == "ipaas_features" {
+		encryptedData["app_code"] = data["app_code"]
+		encryptedData["is_syncable"] = data["is_syncable"]
+		encryptedData["display_name"] = data["display_name"]
 	}
 
 	toUpdate := bson.M{"$set": encryptedData}
@@ -166,4 +178,36 @@ func (r *Repo) DeleteOne(collectionName string, id string) (interface{}, error) 
 	}
 
 	return result, nil
+}
+
+func (r *Repo) GetMany(collectionName string, query map[string]interface{}) (interface{}, error) {
+
+	var results []interface{}
+	var bsonResults []bson.M
+
+	collection := r.Db.Collection(collectionName)
+
+	findOptions := options.Find().SetProjection(bson.M{"encrypted": 0})
+
+	cur, err := collection.Find(context.TODO(), query, findOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	for cur.Next(context.TODO()) {
+		//Create a value into which the single document can be decoded
+		var elem bson.M
+		err := cur.Decode(&elem)
+		if err != nil {
+			return nil, err
+		}
+		bsonResults = append(bsonResults, elem)
+	}
+
+	err = helpers.JsonMarshaller(bsonResults, &results)
+	if err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }

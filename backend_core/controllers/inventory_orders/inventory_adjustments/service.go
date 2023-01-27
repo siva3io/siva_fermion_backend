@@ -1,16 +1,15 @@
 package inventory_adjustments
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	inventory_orders_repo "fermion/backend_core/internal/repository/inventory_orders"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
-	res "fermion/backend_core/pkg/util/response"
 )
 
 /*
@@ -29,114 +28,109 @@ import (
 */
 
 type Service interface {
-	CreateInvAdj(data *InventoryAdjustmentsRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateInvAdj(data *[]InventoryAdjustmentsRequest, token_id string, access_template_id string) error
-	UpdateInvAdj(id uint, data *InventoryAdjustmentsRequest, token_id string, access_template_id string) error
-	GetInvAdj(id uint, token_id string, access_template_id string) (interface{}, error)
-	GetAllInvAdj(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_orders.InventoryAdjustments, error)
-	DeleteInvAdj(id uint, user_id uint, token_id string, access_template_id string) error
-	DeleteInvAdjLines(query interface{}, token_id string, access_template_id string) error
+	CreateInvAdj(metaData core.MetaData, data *inventory_orders.InventoryAdjustments) error
+	BulkCreateInvAdj(metaData core.MetaData, data *[]inventory_orders.InventoryAdjustments) error
+	UpdateInvAdj(metaData core.MetaData, data *inventory_orders.InventoryAdjustments) error
+	GetInvAdj(metaData core.MetaData) (interface{}, error)
+	GetAllInvAdj(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	DeleteInvAdj(metaData core.MetaData) error
+	DeleteInvAdjLines(metaData core.MetaData) error
 
-	SendMailInvAdj(q *SendMailInvAdj) error
+	SendMailInvAdj(metaData core.MetaData, q *SendMailInvAdj) error
 }
 
 type service struct {
 	invadjRepository inventory_orders_repo.InventoryAdjustments
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	InvAdjRepository := inventory_orders_repo.NewInvAdj()
-	return &service{InvAdjRepository}
+	newServiceObj = &service{InvAdjRepository}
+	return newServiceObj
 }
 
-func (s *service) CreateInvAdj(data *InventoryAdjustmentsRequest, token_id string, access_template_id string) (uint, error) {
+func (s *service) CreateInvAdj(metaData core.MetaData, data *inventory_orders.InventoryAdjustments) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create inventory_adjustment at view level")
-	}
-	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create inventory_adjustment at data level")
-	}
-	var InvAdjData inventory_orders.InventoryAdjustments
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &InvAdjData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	id, err := s.invadjRepository.CreateInvAdj(&InvAdjData, token_id)
-	return id, err
-}
-
-func (s *service) BulkCreateInvAdj(data *[]InventoryAdjustmentsRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create inventory_adjustment at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create inventory_adjustment at data level")
 	}
-	var InvAdjData []inventory_orders.InventoryAdjustments
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &InvAdjData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	err = s.invadjRepository.BulkCreateInvAdj(&InvAdjData, token_id)
-	return err
-}
-
-func (s *service) UpdateInvAdj(id uint, data *InventoryAdjustmentsRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
-		return fmt.Errorf("you dont have access for update inventory_adjustment at view level")
-	}
-	if data_access == nil {
-		return fmt.Errorf("you dont have access for update inventory_adjustment at data level")
-	}
-	var InvAdjData inventory_orders.InventoryAdjustments
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &InvAdjData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	old_data, er := s.invadjRepository.GetInvAdj(id)
-	if er != nil {
-		return er
-	}
-	old_status := old_data.StatusID
-	new_status := InvAdjData.StatusID
-	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, InvAdjData.StatusID)
-		InvAdjData.StatusHistory = result
-	}
-	err = s.invadjRepository.UpdateInvAdj(id, &InvAdjData)
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
+	err := s.invadjRepository.CreateInvAdj(data)
 	if err != nil {
 		return err
 	}
-	for _, order_line := range InvAdjData.InventoryAdjustmentLines {
+	return nil
+}
+
+func (s *service) BulkCreateInvAdj(metaData core.MetaData, data *[]inventory_orders.InventoryAdjustments) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for create inventory_adjustment at view level")
+	}
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for create inventory_adjustment at data level")
+	}
+	err := s.invadjRepository.BulkCreateInvAdj(metaData, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) UpdateInvAdj(metaData core.MetaData, data *inventory_orders.InventoryAdjustments) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for update inventory_adjustment at view level")
+	}
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for update inventory_adjustment at data level")
+	}
+	var find_query = map[string]interface{}{
+		"id": metaData.Query["id"],
+	}
+
+	old_data, er := s.invadjRepository.GetInvAdj(find_query)
+	if er != nil {
+		return er
+	}
+	data.UpdatedByID = &metaData.TokenUserId
+	old_status := old_data.StatusID
+	new_status := data.StatusID
+	if new_status != old_status && new_status != 0 {
+		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusID)
+		data.StatusHistory = result
+	}
+	err := s.invadjRepository.UpdateInvAdj(metaData.Query, data)
+	if err != nil {
+		return err
+	}
+	for _, order_line := range data.InventoryAdjustmentLines {
 		query := map[string]interface{}{
-			"inv_adj_id": uint(id),
-			"product_id": uint(order_line.ProductID),
+			"inv_adj_id": old_data.ID,
+			"product_id": order_line.ProductID,
 		}
 		count, er := s.invadjRepository.UpdateInvAdjLines(query, order_line)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			order_line.Inv_Adj_Id = id
+			order_line.Inv_Adj_Id = metaData.TokenUserId
+			order_line.CreatedByID = &metaData.TokenUserId
+			order_line.UpdatedByID = nil
+			order_line.CompanyId = metaData.CompanyId
 			e := s.invadjRepository.CreateInvAdjLines(order_line)
 			if e != nil {
 				return e
@@ -146,92 +140,79 @@ func (s *service) UpdateInvAdj(id uint, data *InventoryAdjustmentsRequest, token
 	return nil
 }
 
-func (s *service) GetInvAdj(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetInvAdj(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view inventory_adjustment at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view inventory_adjustment at data level")
 	}
-	result, er := s.invadjRepository.GetInvAdj(id)
-	if er != nil {
-		return result, er
-	}
-	query := map[string]interface{}{
-		"inv_adj_id": id,
-	}
-	result_order_lines, err := s.invadjRepository.GetInvAdjLines(query)
-	result.InventoryAdjustmentLines = result_order_lines
+	data, err := s.invadjRepository.GetInvAdj(metaData.Query)
 	if err != nil {
-		return result, err
+		return data, err
 	}
 
-	return result, nil
+	return data, nil
 }
 
-func (s *service) GetAllInvAdj(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_orders.InventoryAdjustments, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "INVENTORY_ADJUSTMENT", *token_user_id)
+func (s *service) GetAllInvAdj(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list inventory_adjustment at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list inventory_adjustment at data level")
 	}
-	result, err := s.invadjRepository.GetAllInvAdj(p)
+	result, err := s.invadjRepository.GetAllInvAdj(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) DeleteInvAdj(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
+func (s *service) DeleteInvAdj(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete inventory_adjustment at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete inventory_adjustment at data level")
 	}
-	_, er := s.invadjRepository.GetInvAdj(id)
-	if er != nil {
-		return er
-	}
-	err := s.invadjRepository.DeleteInvAdj(id, user_id)
+	err := s.invadjRepository.DeleteInvAdj(metaData.Query)
 	if err != nil {
 		return err
+	} else {
+		query := map[string]interface{}{"inv_adj_id": metaData.Query["id"]}
+		err1 := s.invadjRepository.DeleteInvAdjLines(query)
+		if err1 != nil {
+			return err1
+		}
 	}
-	query := map[string]interface{}{"inv_adj_id": id}
-	err1 := s.invadjRepository.DeleteInvAdjLines(query)
-	return err1
+	return nil
 }
 
-func (s *service) DeleteInvAdjLines(query interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "INVENTORY_ADJUSTMENT", *token_user_id)
-	if !access_module_flag {
+func (s *service) DeleteInvAdjLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "INVENTORY_ADJUSTMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete inventory_adjustment at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete inventory_adjustment at data level")
 	}
-	data, er := s.invadjRepository.GetInvAdjLines(query)
-	if er != nil {
-		return er
-	}
-	if len(data) <= 0 {
-		return er
-	}
-	err := s.invadjRepository.DeleteInvAdjLines(query)
+	err := s.invadjRepository.DeleteInvAdjLines(metaData.Query)
 	return err
 }
 
-func (s *service) SendMailInvAdj(q *SendMailInvAdj) error {
-	id, _ := strconv.Atoi(q.ID)
-	result, er := s.invadjRepository.GetInvAdj(uint(id))
+func (s *service) SendMailInvAdj(metaData core.MetaData, q *SendMailInvAdj) error {
+	query := map[string]interface{}{
+		"id1": q.ID,
+	}
+	result, er := s.invadjRepository.GetInvAdj(query)
 	if er != nil {
 		return er
 	}

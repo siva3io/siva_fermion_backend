@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 
 	"fermion/backend_core/ipaas_core/model"
 	"fermion/backend_core/ipaas_core/utils"
+	pkg_helpers "fermion/backend_core/pkg/util/helpers"
 )
 
 /*
@@ -26,145 +26,136 @@ import (
  along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 
-type MapperTask struct {
-	Name      string `json:"name"`
-	Link      string `json:"link"`
-	InputType string `json:"input_type"`
-	InputKey  string `json:"input_key"`
-	MapperId  string `json:"mapper_id"`
-}
-
-func ExecuteMapperForTask(mapperTasks []interface{}, response map[string]interface{}, mappedResponseCompletionNorms, featureSessionVariables []model.KeyValuePair) ([]model.KeyValuePair, error) {
+func ExecuteMapperForTask(mapperTasks []model.MapperTask, response map[string]interface{}, mappedResponseCompletionNorms, featureSessionVariables []model.KeyValuePair) ([]model.KeyValuePair, error) {
 
 	var mapperTasksResponse []model.KeyValuePair
 
-	//get base path from session variable
-	// basePath, err := utils.GetValueFromSessionVariablesKey("basePath", featureSessionVariables)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	//==============================lopping the number of mappers need to execute  for this response==============================================================================
+	for _, task := range mapperTasks {
+		var mapperResponse model.KeyValuePair
+		var err error
 
-	var mapperTasksArr []MapperTask
-	mdata, err := json.Marshal(mapperTasks)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(mdata, &mapperTasksArr)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, task := range mapperTasksArr {
-
-		//prepare path for reading mapper file
-		// mapperPath := basePath.(string) + task.Link
-		mapperConfigTemplateFile, err := utils.ReadFeature("mappers", task.MapperId)
+		//=============================read the mapper file and convert to mapper struct format===================================================================================
+		fileData, err := utils.ReadFeature("mappers", task.MapperId)
+		if err != nil {
+			return nil, err
+		}
+		var mapperConfigTemplateFile model.Mapper
+		err = pkg_helpers.JsonMarshaller(fileData, &mapperConfigTemplateFile)
 		if err != nil {
 			return nil, err
 		}
 
+		//==============================get the input from the api response=======================================================================================================
 		inputPath, err := utils.FormatEndpoint(task.InputKey, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
+		jsonInput, err := utils.ParseJsonPathFromObject(response, inputPath)
+		if err != nil {
+			return nil, err
+		}
 
-		//type array
-		if task.InputType == "array" {
-			responseArr, err := utils.ParseJsonPathFromObject(response, inputPath)
+		//===========================Produce the mapper and consume the response====================================================================================================
+		// requestId := uuid.New().String()
+		// requestPayload := map[string]interface{}{}
+		// requestPayload["meta_data"] = map[string]interface{}{
+		// 	"request_id": requestId,
+		// }
+		// requestPayload["data"] = map[string]interface{}{
+		// 	"input_data":                jsonInput,
+		// 	"mapper_template":           mapperConfigTemplateFile,
+		// 	"feature_session_variables": featureSessionVariables,
+		// }
+		// eda.Produce(eda.BOSON_MAPPER_CONVERTOR, requestPayload)
+
+		//=================find the payload input_type======================================================
+		mapperInputType := "object"
+		_, ok := jsonInput.([]interface{})
+		if ok {
+			mapperInputType = "array"
+		}
+
+		var mappedResponse interface{}
+
+		//=================execute object mapper=======================================================
+		if mapperInputType == "object" {
+			mappedResponse, err = ExecuteObjMapper(jsonInput, mapperConfigTemplateFile, featureSessionVariables)
 			if err != nil {
 				return nil, err
 			}
+		}
+		//=================execute array mapper=======================================================
+		if mapperInputType == "array" {
 			var mapperInput []interface{}
-			mdata, err := json.Marshal(responseArr)
+
+			err = pkg_helpers.JsonMarshaller(mapperInputType, &mapperInput)
 			if err != nil {
 				return nil, err
 			}
-			err = json.Unmarshal(mdata, &mapperInput)
+			mappedResponse, err = ExecuteArrayMapper(mapperInput, mapperConfigTemplateFile, featureSessionVariables)
 			if err != nil {
 				return nil, err
 			}
-
-			mappedResponse, err := ExecuteArrayMapper(mapperInput, mapperConfigTemplateFile, featureSessionVariables)
-			if err != nil {
-				return nil, err
-			}
-
-			response := model.KeyValuePair{
-				Key:   task.Name,
-				Value: mappedResponse,
-			}
-
-			for _, norms := range mappedResponseCompletionNorms {
-				if norms.Key == "mapped_response" && norms.Value == task.Name {
-					for index, props := range norms.Props {
-						norms.Props[index].Params = append(props.Params, model.KeyValuePair{
-							Key:   "mappedResponse",
-							Value: mappedResponse,
-							Type:  "static",
-						})
-					}
-					response.Value, err = utils.CallFunctionFromProps(norms.Props, featureSessionVariables)
-					if err != nil {
-						fmt.Println("--------> Error while parsing mappedResponseCompletionNorms <----------------")
-						return nil, err
-					}
-					break
-				}
-			}
-			mapperTasksResponse = append(mapperTasksResponse, response)
-			continue
 		}
 
-		//type object
-		if task.InputType == "object" {
-			mapperInput, err := utils.ParseJsonPathFromObject(response, inputPath)
-			if err != nil {
-				return nil, err
-			}
-			mappedResponse, err := ExecuteObjMapper(mapperInput, mapperConfigTemplateFile, featureSessionVariables)
-			if err != nil {
-				return nil, err
-			}
-			response := model.KeyValuePair{
-				Key:   task.Name,
-				Value: mappedResponse,
-			}
-			for _, norms := range mappedResponseCompletionNorms {
-				if norms.Key == "mapped_response" && norms.Value == task.Name {
-					for index, props := range norms.Props {
-						norms.Props[index].Params = append(props.Params, model.KeyValuePair{
-							Key:   "mappedResponse",
-							Value: mappedResponse,
-							Type:  "static",
-						})
-					}
-					response.Value, err = utils.CallFunctionFromProps(norms.Props, featureSessionVariables)
-
-					if err != nil {
-						fmt.Println("--------> Error while parsing mappedResponseCompletionNorms <----------------")
-						return nil, err
-					}
-					break
-				}
-			}
-			mapperTasksResponse = append(mapperTasksResponse, response)
+		// edaResponse := map[string]interface{}{}
+		// for {
+		// 	output := cache.GetCacheVariable(requestId)
+		// 	if output != nil {
+		// 		var resp map[string]interface{}
+		// 		err := pkg_helpers.JsonMarshaller(output, &resp)
+		// 		if err != nil {
+		// 			return nil, err
+		// 		}
+		// 		metaData := resp["meta_data"].(map[string]interface{})
+		// 		if metaData["encryption"].(bool) {
+		// 			decrypted_payload, _ := pkg_helpers.AESGCMDecrypt(resp["data"].(string))
+		// 			var decryptedResponseData interface{}
+		// 			err := json.Unmarshal([]byte(decrypted_payload), &decryptedResponseData)
+		// 			if err != nil {
+		// 				return nil, err
+		// 			}
+		// 			resp["data"] = decryptedResponseData
+		// 		}
+		// 		err = pkg_helpers.JsonMarshaller(resp, &edaResponse)
+		// 		if err != nil {
+		// 			return nil, err
+		// 		}
+		// 		break
+		// 	}
+		// }
+		// edaResponseData := edaResponse["data"].(map[string]interface{})
+		// if edaResponseData["error_message"] != nil {
+		// 	jsonerror, _ := json.Marshal(edaResponseData["error_message"])
+		// 	return nil, errors.New(string(jsonerror))
+		// }
+		//==============================end of EDA================================================================================================================================
+		mapperResponse = model.KeyValuePair{
+			Key:   task.MapperName,
+			Value: mappedResponse,
 		}
+
+		//====================================mapper completion Norms===========================================================================================================
+		mapperResponse.Value, err = MappedResponseCompletionNorms(mappedResponseCompletionNorms, mapperResponse, featureSessionVariables)
+		if err != nil {
+			return nil, err
+		}
+		mapperTasksResponse = append(mapperTasksResponse, mapperResponse)
+		continue
 	}
+	// pkg_helpers.PrettyPrint("Mapped Response", mapperTasksResponse)
 	return mapperTasksResponse, nil
 }
-func MergeMultipleMapperPayload(required_mapped_output_array []interface{}, taskResponseArr []model.TaskEndpointResponse) interface{} {
+func MergeMultipleMapperPayload(required_mapped_output_array []model.RequiredMappedOutput, taskResponseArr []model.TaskEndpointResponse) interface{} {
 	var payload interface{}
 	for _, required_map := range required_mapped_output_array {
-		if required_map.(map[string]interface{}) != nil && required_map.(map[string]interface{})["type"].(string) == "payload" {
+		if required_map.Type == "payload" {
 			for _, taskResponse := range taskResponseArr {
-				if taskResponse.Name == required_map.(map[string]interface{})["name"].(string) {
+				if taskResponse.Name == required_map.TaskName {
 					for _, mapper := range taskResponse.MappedResponse {
-						fmt.Println(mapper.Key, required_map.(map[string]interface{})["mapper_name"].(string))
-						if mapper.Key == required_map.(map[string]interface{})["mapper_name"].(string) {
-							// fmt.Println("===============Required Map=============================")
-							// mdata, _ := json.MarshalIndent(taskResponse.MappedResponse, "", "\t")
-							// fmt.Println(string(mdata))
-							// fmt.Println("============================================")
+						fmt.Println(mapper.Key, required_map.MapperName)
+						if mapper.Key == required_map.MapperName {
 							return mapper.Value
 						}
 					}
@@ -175,22 +166,25 @@ func MergeMultipleMapperPayload(required_mapped_output_array []interface{}, task
 	return payload
 }
 
-func ExecuteArrayMapper(responseArrToMap []interface{}, mapperConfigTemplateFile map[string]interface{}, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
+func ExecuteArrayMapper(responseArrToMap []interface{}, mapperConfigTemplateFile model.Mapper, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
 	mappedArrData := make([]map[string]interface{}, 0)
-	mapperFieldsArrToMap := mapperConfigTemplateFile["fields"].([]interface{})
+	mapperFieldsArrToMap := mapperConfigTemplateFile.Fields
 	for responseObjIndex := 0; responseObjIndex < len(responseArrToMap); responseObjIndex++ {
 		var mappedObjData = make(map[string]interface{})
-		responseObj := responseArrToMap[responseObjIndex].(map[string]interface{})
+		responseObj, ok := responseArrToMap[responseObjIndex].(map[string]interface{})
+		if !ok {
+			return nil, errors.New("cannot convert input to map[string]interface{}")
+		}
 		for mapperFieldObjIndex := 0; mapperFieldObjIndex < len(mapperFieldsArrToMap); mapperFieldObjIndex++ {
-			mapperFieldObj := mapperFieldsArrToMap[mapperFieldObjIndex].(map[string]interface{})
-			if mapperFieldObj["execution_type"] == "nested" {
+			mapperFieldObj := mapperFieldsArrToMap[mapperFieldObjIndex]
+			if mapperFieldObj.ExecutionType == "nested" {
 				continue
 			}
 			mappedResponseObj, err := checkFieldTypeAndMap(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 			if err != nil {
 				return nil, err
 			}
-			if mapperFieldObj["output_type"] == "array" {
+			if mapperFieldObj.OutputType == "array" {
 				MergeInterfacesIntoArray(mappedObjData, mappedResponseObj)
 				continue
 			}
@@ -200,22 +194,25 @@ func ExecuteArrayMapper(responseArrToMap []interface{}, mapperConfigTemplateFile
 	}
 	return mappedArrData, nil
 }
-func ExecuteObjMapper(responseObjToMapper interface{}, mapperConfigTemplateFile map[string]interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
-	responseObj := responseObjToMapper.(map[string]interface{})
-	mapperFieldsArrToMap := mapperConfigTemplateFile["fields"].([]interface{})
+func ExecuteObjMapper(responseObjToMapper interface{}, mapperConfigTemplateFile model.Mapper, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+	responseObj, ok := responseObjToMapper.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("cannot convert input to map[string]interface{}")
+	}
+	mapperFieldsArrToMap := mapperConfigTemplateFile.Fields
 
 	var mappedObjData = make(map[string]interface{})
 
 	for mapperFieldObjIndex := 0; mapperFieldObjIndex < len(mapperFieldsArrToMap); mapperFieldObjIndex++ {
-		mapperFieldObj := mapperFieldsArrToMap[mapperFieldObjIndex].(map[string]interface{})
-		if mapperFieldObj["execution_type"] == "nested" {
+		mapperFieldObj := mapperFieldsArrToMap[mapperFieldObjIndex]
+		if mapperFieldObj.ExecutionType == "nested" {
 			continue
 		}
 		mappedResponseObj, err := checkFieldTypeAndMap(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		if mapperFieldObj["output_type"] == "array" {
+		if mapperFieldObj.OutputType == "array" {
 			MergeInterfacesIntoArray(mappedObjData, mappedResponseObj)
 			continue
 		}
@@ -223,10 +220,9 @@ func ExecuteObjMapper(responseObjToMapper interface{}, mapperConfigTemplateFile 
 	}
 	return mappedObjData, nil
 }
-
-func checkFieldTypeAndMap(mapperFieldObj map[string]interface{}, responseObj interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+func checkFieldTypeAndMap(mapperFieldObj model.MapperField, responseObj interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
 	var mappedObjData = make(map[string]interface{})
-	if mapperFieldObj["input_type"] == "keyvalue" && mapperFieldObj["output_type"] == "keyvalue" {
+	if mapperFieldObj.InputType == "keyvalue" && mapperFieldObj.OutputType == "keyvalue" {
 		mappedResForKey, err := MapKeyValueToKeyValueTypeWithMapper(mapperFieldObj, responseObj, featureSessionVariables)
 		if err != nil {
 			return nil, err
@@ -236,37 +232,37 @@ func checkFieldTypeAndMap(mapperFieldObj map[string]interface{}, responseObj int
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "object" && mapperFieldObj["output_type"] == "object" {
+	if mapperFieldObj.InputType == "object" && mapperFieldObj.OutputType == "object" {
 		mappedResForObject, err := MapObjectToObjectTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForObject)
+		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj.Output, mappedResForObject)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "array" && mapperFieldObj["output_type"] == "array" {
+	if mapperFieldObj.InputType == "array" && mapperFieldObj.OutputType == "array" {
 		mappedResForArr, err := MapArrToArrTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForArr)
+		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj.Output, mappedResForArr)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "array" && mapperFieldObj["output_type"] == "object" {
+	if mapperFieldObj.InputType == "array" && mapperFieldObj.OutputType == "object" {
 		mappedResForObject, err := MapArrToObjectTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForObject)
+		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj.Output, mappedResForObject)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "object" && mapperFieldObj["output_type"] == "keyvalue" {
+	if mapperFieldObj.InputType == "object" && mapperFieldObj.OutputType == "keyvalue" {
 		mappedResForKeyValue, err := MapObjectToObjectTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
@@ -276,7 +272,7 @@ func checkFieldTypeAndMap(mapperFieldObj map[string]interface{}, responseObj int
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "keyvalue" && mapperFieldObj["output_type"] == "object" {
+	if mapperFieldObj.InputType == "keyvalue" && mapperFieldObj.OutputType == "object" {
 		mappedResForObject, err := MapKeyValueToObjectTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
@@ -286,27 +282,27 @@ func checkFieldTypeAndMap(mapperFieldObj map[string]interface{}, responseObj int
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "keyvalue" && mapperFieldObj["output_type"] == "array" {
+	if mapperFieldObj.InputType == "keyvalue" && mapperFieldObj.OutputType == "array" {
 		mappedResForArray, err := MapKeyValueToArrayTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForArray)
+		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj.Output, mappedResForArray)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "object" && mapperFieldObj["output_type"] == "array" {
+	if mapperFieldObj.InputType == "object" && mapperFieldObj.OutputType == "array" {
 		mappedResForArray, err := MapObjectToArrayTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForArray)
+		mappedObjData, err = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj.Output, mappedResForArray)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if mapperFieldObj["input_type"] == "interface" && mapperFieldObj["output_type"] == "keyvalue" {
+	if mapperFieldObj.InputType == "interface" && mapperFieldObj.OutputType == "keyvalue" {
 		mappedResForKey, err := MapInterfaceToKeyValueTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap)
 		if err != nil {
 			return nil, err
@@ -316,63 +312,59 @@ func checkFieldTypeAndMap(mapperFieldObj map[string]interface{}, responseObj int
 			return nil, err
 		}
 	}
-	// if mapperFieldObj["input_type"] == "keyvalue" && mapperFieldObj["output_type"] == "interface" {
-	// 	mappedResForInterface := MapKeyvalueToInterfaceTypeWithMapper(mapperFieldObj, responseObj, mapperFieldsArrToMap)
-	// 	mappedObjData = MergeObjectOrArrIntoInterfaces(mappedObjData, mapperFieldObj["output"].(string), mappedResForInterface)
-	// }
 	return mappedObjData, nil
 }
 
-func MapKeyValueToKeyValueTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+func MapKeyValueToKeyValueTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
 	var mappedObjData = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
 	if !ok {
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
-	valueObj := responseObj[mapperFieldObj["input"].(string)]
+	valueObj := responseObj[mapperFieldObj.Input]
 	if valueObj != nil {
-		mappedObjData[mapperFieldObj["output"].(string)] = responseObj[mapperFieldObj["input"].(string)]
+		mappedObjData[mapperFieldObj.Output] = responseObj[mapperFieldObj.Input]
 		//----helper function ----------
-		if len(mapperFieldObj["helper_function"].([]interface{})) > 0 {
+		if len(mapperFieldObj.HelperFunction) > 0 {
 			helperFunctionOutput, err := MapperHelperFunction(mapperFieldObj, mappedObjData, featureSessionVariables)
 			if err != nil {
 				return nil, err
 			}
-			mappedObjData[mapperFieldObj["output"].(string)] = helperFunctionOutput
+			mappedObjData[mapperFieldObj.Output] = helperFunctionOutput
 		}
 		return mappedObjData, nil
 	}
-	defaultValueToMap := mapperFieldObj["default_value"]
+	defaultValueToMap := mapperFieldObj.DefaultValue
 	if defaultValueToMap != false {
-		mappedObjData[mapperFieldObj["output"].(string)] = defaultValueToMap
+		mappedObjData[mapperFieldObj.Output] = defaultValueToMap
 	}
 	//----helper function ----------
-	if len(mapperFieldObj["helper_function"].([]interface{})) > 0 {
+	if len(mapperFieldObj.HelperFunction) > 0 {
 		helperFunctionOutput, err := MapperHelperFunction(mapperFieldObj, mappedObjData, featureSessionVariables)
 		if err != nil {
 			return nil, err
 		}
-		mappedObjData[mapperFieldObj["output"].(string)] = helperFunctionOutput
+		mappedObjData[mapperFieldObj.Output] = helperFunctionOutput
 		return mappedObjData, nil
 	}
 	return mappedObjData, nil
 }
-func MapObjectToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+func MapObjectToObjectTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
 	var mappedObjData = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
 	if !ok {
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
-	valueObj := responseObj[mapperFieldObj["input"].(string)]
+	valueObj := responseObj[mapperFieldObj.Input]
 	if valueObj == nil {
 		valueObj = responseObj
 	}
 	if valueObj != nil {
 		// fmt.Println(valueObj)
 		mappedToBe := valueObj.(map[string]interface{})
-		fieldsToMapWithinObj := mapperFieldObj["fields"].([]interface{})
+		fieldsToMapWithinObj := mapperFieldObj.Fields
 		for fieldToMapIndex := 0; fieldToMapIndex < len(fieldsToMapWithinObj); fieldToMapIndex++ {
-			fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[fieldToMapIndex].(string), mapperFieldsArrToMap)
+			fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[fieldToMapIndex], mapperFieldsArrToMap)
 			if err != nil {
 				return nil, err
 			}
@@ -380,7 +372,7 @@ func MapObjectToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, resp
 			if err != nil {
 				return nil, err
 			}
-			if fieldObj["output_type"] == "array" {
+			if fieldObj.OutputType == "array" {
 				MergeInterfacesIntoArray(mappedObjData, ObjectToBeMapped)
 				continue
 			}
@@ -393,23 +385,23 @@ func MapObjectToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, resp
 	}
 	return mappedObjData, nil
 }
-func MapArrToArrTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
+func MapArrToArrTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
 	var mappedArrData = make([]map[string]interface{}, 0)
 	responseObj, ok := responseInterface.(map[string]interface{})
 	if !ok {
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
-	if responseObj[mapperFieldObj["input"].(string)] == nil {
+	if responseObj[mapperFieldObj.Input] == nil {
 		return mappedArrData, nil
 	}
-	responseArr := responseObj[mapperFieldObj["input"].(string)].([]interface{})
+	responseArr := responseObj[mapperFieldObj.Input].([]interface{})
 	for responseObjIndex := 0; responseObjIndex < len(responseArr); responseObjIndex++ {
 		responseObj := responseArr[responseObjIndex]
 		var mappedObjData = make(map[string]interface{})
 		if responseObj != nil {
-			objToMapWithinArr := mapperFieldObj["fields"].([]interface{})
+			objToMapWithinArr := mapperFieldObj.Fields
 			for fieldToMapIndex := 0; fieldToMapIndex < len(objToMapWithinArr); fieldToMapIndex++ {
-				fieldObj, err := fetchFieldObjFromFieldsArr(objToMapWithinArr[fieldToMapIndex].(string), mapperFieldsArrToMap)
+				fieldObj, err := fetchFieldObjFromFieldsArr(objToMapWithinArr[fieldToMapIndex], mapperFieldsArrToMap)
 				if err != nil {
 					return nil, err
 				}
@@ -427,8 +419,8 @@ func MapArrToArrTypeWithMapper(mapperFieldObj map[string]interface{}, responseIn
 	}
 	return mappedArrData, nil
 }
-func MapArrToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
-	keyForInputWithIndex := mapperFieldObj["input"].(string)
+func MapArrToObjectTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+	keyForInputWithIndex := mapperFieldObj.Input
 	keyNameArr := strings.Split(keyForInputWithIndex, "[")
 	var mappedObjData = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
@@ -448,9 +440,9 @@ func MapArrToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, respons
 	}
 
 	if responseObj != nil {
-		objToMapWithinArr := mapperFieldObj["fields"].([]interface{})
+		objToMapWithinArr := mapperFieldObj.Fields
 		for fieldToMapIndex := 0; fieldToMapIndex < len(objToMapWithinArr); fieldToMapIndex++ {
-			fieldObj, err := fetchFieldObjFromFieldsArr(objToMapWithinArr[fieldToMapIndex].(string), mapperFieldsArrToMap)
+			fieldObj, err := fetchFieldObjFromFieldsArr(objToMapWithinArr[fieldToMapIndex], mapperFieldsArrToMap)
 			if err != nil {
 				return nil, err
 			}
@@ -466,7 +458,7 @@ func MapArrToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, respons
 	}
 	return mappedObjData, nil
 }
-func MapKeyValueToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
+func MapKeyValueToObjectTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
 	var mappedObjData = make(map[string]interface{})
 	var valueObj = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
@@ -474,23 +466,23 @@ func MapKeyValueToObjectTypeWithMapper(mapperFieldObj map[string]interface{}, re
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
 
-	valueObj[mapperFieldObj["input"].(string)] = responseObj[mapperFieldObj["input"].(string)]
+	valueObj[mapperFieldObj.Input] = responseObj[mapperFieldObj.Input]
 	if len(valueObj) == 0 {
 		valueObj = responseObj
 	}
-	fieldsToMapWithinObj := mapperFieldObj["fields"].([]interface{})
-	fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[0].(string), mapperFieldsArrToMap)
+	fieldsToMapWithinObj := mapperFieldObj.Fields
+	fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[0], mapperFieldsArrToMap)
 	if err != nil {
 		return nil, err
 	}
 
-	mappedObjData[mapperFieldObj["output"].(string)], err = checkFieldTypeAndMap(fieldObj, valueObj, mapperFieldsArrToMap, featureSessionVariables)
+	mappedObjData[mapperFieldObj.Output], err = checkFieldTypeAndMap(fieldObj, valueObj, mapperFieldsArrToMap, featureSessionVariables)
 	if err != nil {
 		return nil, err
 	}
 	return mappedObjData, nil
 }
-func MapKeyValueToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
+func MapKeyValueToArrayTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
 	var mappedObjData = make([]map[string]interface{}, 0)
 	var valueObj = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
@@ -498,12 +490,12 @@ func MapKeyValueToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, res
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
 
-	valueObj[mapperFieldObj["input"].(string)] = responseObj[mapperFieldObj["input"].(string)]
+	valueObj[mapperFieldObj.Input] = responseObj[mapperFieldObj.Input]
 	if len(valueObj) == 0 {
 		valueObj = responseObj
 	}
-	fieldsToMapWithinObj := mapperFieldObj["fields"].([]interface{})
-	fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[0].(string), mapperFieldsArrToMap)
+	fieldsToMapWithinObj := mapperFieldObj.Fields
+	fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[0], mapperFieldsArrToMap)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +506,7 @@ func MapKeyValueToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, res
 	mappedObjData = append(mappedObjData, ObjectToBeMapped)
 	return mappedObjData, nil
 }
-func MapObjectToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
+func MapObjectToArrayTypeWithMapper(mapperFieldObj model.MapperField, responseInterface interface{}, mapperFieldsArrToMap []model.MapperField, featureSessionVariables []model.KeyValuePair) ([]map[string]interface{}, error) {
 	var mappedArrData = make([]map[string]interface{}, 0)
 	var mappedObjData = make(map[string]interface{})
 	responseObj, ok := responseInterface.(map[string]interface{})
@@ -522,20 +514,24 @@ func MapObjectToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, respo
 		return nil, errors.New("response interface is not a map[string]interface{}")
 	}
 
-	valueObj := responseObj[mapperFieldObj["input"].(string)]
+	valueObj := responseObj[mapperFieldObj.Input]
 	if valueObj == nil {
 		valueObj = responseObj
 	}
 	if valueObj != nil {
-		fieldsToMapWithinObj := mapperFieldObj["fields"].([]interface{})
+		fieldsToMapWithinObj := mapperFieldObj.Fields
 		for fieldToMapIndex := 0; fieldToMapIndex < len(fieldsToMapWithinObj); fieldToMapIndex++ {
-			fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[fieldToMapIndex].(string), mapperFieldsArrToMap)
+			fieldObj, err := fetchFieldObjFromFieldsArr(fieldsToMapWithinObj[fieldToMapIndex], mapperFieldsArrToMap)
 			if err != nil {
 				return nil, err
 			}
 			ObjectToBeMapped, err := checkFieldTypeAndMap(fieldObj, valueObj.(map[string]interface{}), mapperFieldsArrToMap, featureSessionVariables)
 			if err != nil {
 				return nil, err
+			}
+			if fieldObj.OutputType == "array" {
+				MergeInterfacesIntoArray(mappedObjData, ObjectToBeMapped)
+				continue
 			}
 			mappedObjData, err = MergeInterfaces(mappedObjData, ObjectToBeMapped)
 			if err != nil {
@@ -547,36 +543,19 @@ func MapObjectToArrayTypeWithMapper(mapperFieldObj map[string]interface{}, respo
 	}
 	return mappedArrData, nil
 }
-func MapInterfaceToKeyValueTypeWithMapper(mapperFieldObj map[string]interface{}, responseObj interface{}, mapperFieldsArrToMap []interface{}) (map[string]interface{}, error) {
+func MapInterfaceToKeyValueTypeWithMapper(mapperFieldObj model.MapperField, responseObj interface{}, mapperFieldsArrToMap []model.MapperField) (map[string]interface{}, error) {
 
 	var mappedObjData = make(map[string]interface{})
 	if responseObj != nil {
-		mappedObjData[mapperFieldObj["output"].(string)] = responseObj
+		mappedObjData[mapperFieldObj.Output] = responseObj
 		return mappedObjData, nil
 	}
-	defaultValueToMap := mapperFieldObj["default_value"]
+	defaultValueToMap := mapperFieldObj.DefaultValue
 	if defaultValueToMap != false {
-		mappedObjData[mapperFieldObj["output"].(string)] = defaultValueToMap
+		mappedObjData[mapperFieldObj.Output] = defaultValueToMap
 	}
 	return mappedObjData, nil
 }
-
-// func MapKeyvalueToInterfaceTypeWithMapper(mapperFieldObj map[string]interface{}, responseInterface interface{}, mapperFieldsArrToMap []interface{}) interface{} {
-// 	responseObj, error := responseInterface.(map[string]interface{})
-// 	if error {
-// 		valueObj := responseObj[mapperFieldObj["input"].(string)]
-// 		if valueObj != nil {
-// 			return valueObj
-// 		}
-// 		defaultValueToMap := mapperFieldObj["default_value"]
-// 		if defaultValueToMap != false {
-// 			return defaultValueToMap
-// 		}
-// 		return nil
-// 	} else {
-// 		return nil
-// 	}
-// }
 
 func MergeInterfaces(interfaceToMerge map[string]interface{}, newInterface map[string]interface{}) (map[string]interface{}, error) {
 	for k := range newInterface {
@@ -612,28 +591,48 @@ func MergeObjectOrArrIntoInterfaces(interfaceToMerge map[string]interface{}, key
 	}
 	return interfaceToMerge, nil
 }
-func fetchFieldObjFromFieldsArr(fieldName string, fieldsArr []interface{}) (map[string]interface{}, error) {
+func fetchFieldObjFromFieldsArr(fieldName string, fieldsArr []model.MapperField) (model.MapperField, error) {
+	var fieldObj model.MapperField
 	for i := 0; i < len(fieldsArr); i++ {
-		fieldObj, ok := fieldsArr[i].(map[string]interface{})
-		if !ok {
-			return nil, errors.New(" error in fetchFieldObjFromFieldsArr")
-		}
-		if fieldObj["id"] == fieldName {
+		fieldObj = fieldsArr[i]
+		if fieldObj.Id == fieldName {
 			return fieldObj, nil
 		}
 	}
-	return nil, nil
+	return fieldObj, nil
 }
 
-// ------------------------------call mapper helper functiion-----------------------------------------------
-func MapperHelperFunction(mapperFieldObj map[string]interface{}, mappedObjData map[string]interface{}, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
-	helpers := utils.ParsePropsFromConfig(mapperFieldObj["helper_function"].([]interface{}))
+// ======================================call mapper helper functiion=====================================================================================================================================
+func MapperHelperFunction(mapperFieldObj model.MapperField, mappedObjData map[string]interface{}, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
+	helpers := mapperFieldObj.HelperFunction
 	sessionVariables := utils.ConvertObjectToKeyValuePair(mappedObjData)
 	featureSessionVariables = utils.AppendOrUpdateKeyValuePair(featureSessionVariables, sessionVariables)
 	helperFuncOutput, err := utils.CallFunctionFromProps(helpers, featureSessionVariables)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("--------> Function return Value from Props<----------------", helperFuncOutput)
+	fmt.Println("=============> Function return Value from Props <============= ", helperFuncOutput)
 	return helperFuncOutput, nil
+}
+func MappedResponseCompletionNorms(completionNorms []model.KeyValuePair, MappedResponse model.KeyValuePair, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
+	for _, norms := range completionNorms {
+		if norms.Key == "mapped_response" && norms.Value == MappedResponse.Key {
+			newProps := make([]model.Props, 0)
+			newProps = append(newProps, norms.Props...)
+			for index, props := range norms.Props {
+				newProps[index].Params = append(props.Params, model.KeyValuePair{
+					Key:   "mappedResponse",
+					Value: MappedResponse.Value,
+					Type:  "static",
+				})
+			}
+			MappedResponse, err := utils.CallFunctionFromProps(newProps, featureSessionVariables)
+			if err != nil {
+				fmt.Println("--------> Error while parsing mappedResponseCompletionNorms <----------------")
+				return nil, err
+			}
+			return MappedResponse, nil
+		}
+	}
+	return MappedResponse.Value, nil
 }

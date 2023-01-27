@@ -43,9 +43,16 @@ type service struct {
 	WalletsRepository payments_repo.Wallet
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	WalletsRepository := payments_repo.NewWallet()
-	return &service{WalletsRepository}
+	newServiceObj = &service{WalletsRepository}
+	return newServiceObj
 }
 
 func (s *service) CreateWallet(data *payments.Wallets) error {

@@ -31,8 +31,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type SalesReturn interface {
 	Save(data *returns.SalesReturns) error
-	FindAll(page *pagination.Paginatevalue) (interface{}, error)
-	FindOne(query map[string]interface{}) (interface{}, error)
+	FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]returns.SalesReturns, error)
+	FindOne(query map[string]interface{}) (returns.SalesReturns, error)
 	Update(query map[string]interface{}, data *returns.SalesReturns) error
 	Delete(query map[string]interface{}) error
 
@@ -42,16 +42,23 @@ type SalesReturn interface {
 	FindReturnLines(map[string]interface{}) (returns.SalesReturnLines, error)
 
 	Search(query string) (interface{}, error)
-	GetSalesReturnsHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error)
+	GetSalesReturnsHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]returns.SalesReturns, error)
 }
 
 type SalesReturns struct {
 	db *gorm.DB
 }
 
+var SalesReturnsRepository *SalesReturns //singleton object
+
+// singleton function
 func NewSalesReturn() *SalesReturns {
+	if SalesReturnsRepository != nil {
+		return SalesReturnsRepository
+	}
 	db := db.DbManager()
-	return &SalesReturns{db}
+	SalesReturnsRepository = &SalesReturns{db}
+	return SalesReturnsRepository
 
 }
 
@@ -67,29 +74,26 @@ func (r *SalesReturns) Save(data *returns.SalesReturns) error {
 	return nil
 }
 
-func (r *SalesReturns) FindAll(page *pagination.Paginatevalue) (interface{}, error) {
+func (r *SalesReturns) FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]returns.SalesReturns, error) {
 	var data []returns.SalesReturns
-
-	err := r.db.Model(&returns.SalesReturns{}).Scopes(helpers.Paginate(&returns.SalesReturns{}, page, r.db)).Preload(clause.Associations).Find(&data)
-
+	err := r.db.Model(&returns.SalesReturns{}).Preload(clause.Associations).Scopes(helpers.Paginate(&returns.SalesReturns{}, page, r.db)).Find(&data)
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }
 
-func (r *SalesReturns) FindOne(query map[string]interface{}) (interface{}, error) {
+func (r *SalesReturns) FindOne(query map[string]interface{}) (returns.SalesReturns, error) {
 	var data returns.SalesReturns
 
 	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
 
 	if err.RowsAffected == 0 {
-		return nil, errors.New("record not found")
+		return data, errors.New("record not found")
 	}
 
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
 
 	return data, nil
@@ -111,7 +115,7 @@ func (r *SalesReturns) Delete(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"].(uint),
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
@@ -189,21 +193,21 @@ func (r *SalesReturns) Search(query string) (interface{}, error) {
 	return data, nil
 }
 
-func (r *SalesReturns) GetSalesReturnsHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error) {
+func (r *SalesReturns) GetSalesReturnsHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]returns.SalesReturns, error) {
 	var data []returns.SalesReturns
 	var ids = make([]uint, 0)
 
+	productId := query["product_id"]
+
 	page.Filters = fmt.Sprintf("[[\"product_id\", \"=\", %v]]", productId)
-	err := r.db.Model(&returns.SalesReturnLines{}).Select("sr_id").Scopes(helpers.Paginate(&returns.SalesReturnLines{}, page, r.db)).Scan(&ids)
+	err := r.db.Model(&returns.SalesReturns{}).Select("sr_id").Scopes(helpers.Paginate(&returns.SalesReturns{}, page, r.db)).Scan(&ids)
 
 	if err.Error != nil {
 		return nil, err.Error
 	}
 	err = r.db.Model(&returns.SalesReturns{}).Where("id IN ?", ids).Find(&data)
-
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }

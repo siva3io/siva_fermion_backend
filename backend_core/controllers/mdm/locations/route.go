@@ -21,13 +21,12 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreateLocation, cmiddleware.Authorization, LocationsCreateValidate)
-	g.POST("/:id/update", h.UpdateLocation, cmiddleware.Authorization, LocationsUpdateValidate)
+	g.POST("/create", h.CreateLocationEvent, cmiddleware.Authorization, LocationsCreateValidate)
+	g.POST("/:id/update", h.UpdateLocationEvent, cmiddleware.Authorization, LocationsUpdateValidate)
 	g.GET("", h.GetLocationList, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetLocationListDropdown, cmiddleware.Authorization)
 	g.GET("/:id", h.GetLocation, cmiddleware.Authorization)
 	g.DELETE("/:id/delete", h.DeleteLocation, cmiddleware.Authorization)
-	g.GET("/search", h.SearchLocation, cmiddleware.Authorization)
 	g.POST("/:id/favourite", h.FavouriteLocations, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouriteLocations, cmiddleware.Authorization)
 	g.GET("/favourite_list", h.FavouriteLocationsView, cmiddleware.Authorization)

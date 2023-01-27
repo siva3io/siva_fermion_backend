@@ -24,15 +24,15 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.ListPurchaseOrders, cmiddleware.Authorization)
 	g.GET("/dropdown", h.ListPurchaseOrdersDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewPurchaseOrders, cmiddleware.Authorization)
-	g.POST("/create", h.CreatePurchaseOrders, cmiddleware.Authorization, PurchaseOrdersCreateValidate)
-	g.POST("/:id/update", h.UpdatePurchaseOrders, cmiddleware.Authorization, PurchaseOrdersUpdateValidate)
+	g.POST("/create", h.CreatePurchaseOrdersEvent, cmiddleware.Authorization, PurchaseOrdersCreateValidate)
+	g.POST("/:id/update", h.UpdatePurchaseOrdersEvent, cmiddleware.Authorization, PurchaseOrdersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeletePurchaseOrders, cmiddleware.Authorization)
 	g.DELETE("/order_lines/:id/delete", h.DeletePurchaseOrderLines, cmiddleware.Authorization)
 	g.GET("/search", h.SearchPurchaseOrders, cmiddleware.Authorization)
 
 	g.POST("/:id/downloadPdf", h.DownloadPurchaseOrders, cmiddleware.Authorization)
 	g.POST("/:id/sendEmail", h.EmailPurchaseOrders, cmiddleware.Authorization)
-	g.POST("/:id/generatePdf", h.GeneratePurchaseOrdersPDF, cmiddleware.Authorization)
+	g.GET("/:id/generatePdf", h.GeneratePurchaseOrdersPDF, cmiddleware.Authorization)
 
 	g.POST("/:id/favourite", h.FavouritePurchaseOrders, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouritePurchaseOrders, cmiddleware.Authorization)

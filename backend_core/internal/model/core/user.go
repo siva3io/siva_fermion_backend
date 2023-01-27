@@ -70,6 +70,8 @@ type CoreUsers struct {
 	UpdatedByID *uint     `json:"updated_by" gorm:"column:updated_by"`
 	CreatedBy   *CoreUsers
 	UpdatedBy   *CoreUsers
+	UserTypes   datatypes.JSON `gorm:"type:json;default:'{}';not null" json:"user_types"`
+	RoleId      *uint          `json:"role_id" gorm:"type:int"`
 }
 
 type Auth struct {
@@ -88,6 +90,7 @@ func (u *CoreUsers) GenerateToken(access_template_id uint, duration Hours) (stri
 	if access_template_id == 0 {
 		access_template_id = 2
 	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"ID":                 u.ID,
 		"Username":           u.Username,
@@ -95,6 +98,8 @@ func (u *CoreUsers) GenerateToken(access_template_id uint, duration Hours) (stri
 		"last_name":          u.LastName,
 		"company_id":         u.CompanyId,
 		"access_template_id": access_template_id,
+		"user_types":         u.UserTypes,
+		"role_id":            u.RoleId,
 		"exp":                time.Now().Add(time.Hour * time.Duration(duration)).Unix(),
 	})
 

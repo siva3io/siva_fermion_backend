@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	mdm_repo "fermion/backend_core/internal/repository/mdm"
@@ -29,12 +31,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Service interface {
 	//vendors
-	CreateVendors(data *mdm.Vendors, token_id string, access_template_id string) error
-	UpdateVendors(query map[string]interface{}, data *mdm.Vendors, token_id string, access_template_id string) error
-	DeleteVendors(query map[string]interface{}, token_id string, access_template_id string) error
-	GetVendors(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	GetVendorsList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]mdm.Vendors, error)
-	SearchVendors(query string, token_id string, access_template_id string) ([]VendorsObjDTO, error)
+	Upsert(metaData core.MetaData, data []interface{}) (interface{}, error)
+	CreateVendors(metaData core.MetaData, data *mdm.Vendors) error
+	UpdateVendors(metaData core.MetaData, data *mdm.Vendors) error
+	DeleteVendors(metaData core.MetaData) error
+	GetVendors(metaData core.MetaData) (interface{}, error)
+	GetVendorsList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
 
 	//vendor price list
 	CreateVendorPriceList(data *mdm.VendorPriceLists, token_id string, access_template_id string) error
@@ -49,123 +51,149 @@ type service struct {
 	pricingRepository mdm_repo.Pricing
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	vendorsRepository := mdm_repo.NewVendors()
 	pricingRepository := mdm_repo.NewPricing()
-	return &service{vendorsRepository, pricingRepository}
+	newServiceObj = &service{vendorsRepository, pricingRepository}
+	return newServiceObj
 }
 
-func (s *service) CreateVendors(data *mdm.Vendors, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PRODUCTS", *token_user_id)
+func (s *service) CreateVendors(metaData core.MetaData, data *mdm.Vendors) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "PRODUCTS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create vendor at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create vendor at data level")
 	}
-	err := s.vendorsRepository.SaveVendors(data)
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	err := s.vendorsRepository.Create(data)
 	if err != nil {
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 	return nil
 }
-func (s *service) UpdateVendors(query map[string]interface{}, data *mdm.Vendors, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PRODUCTS", *token_user_id)
+func (s *service) UpdateVendors(metaData core.MetaData, data *mdm.Vendors) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "PRODUCTS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update vendor at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update vendor at data level")
 	}
-	_, err := s.vendorsRepository.FindOneVendors(query)
-	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
-	}
-	err = s.vendorsRepository.UpdateVendors(query, data)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.vendorsRepository.Update(metaData.Query, data)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
 	return nil
 }
-func (s *service) DeleteVendors(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PRODUCTS", *token_user_id)
+func (s *service) DeleteVendors(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "PRODUCTS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete vendor at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete vendor at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.vendorsRepository.FindOneVendors(q)
-	if er != nil {
-		return er
-	}
-	err := s.vendorsRepository.DeleteVendors(query)
+
+	err := s.vendorsRepository.Delete(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) GetVendors(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PRODUCTS", *token_user_id)
+func (s *service) GetVendors(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "PRODUCTS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view vendor at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view vendor at data level")
 	}
-	result, err := s.vendorsRepository.FindOneVendors(query)
+	result, err := s.vendorsRepository.FindOne(metaData.Query)
 	if err != nil {
 		return result, res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 	return result, nil
 }
-func (s *service) GetVendorsList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]mdm.Vendors, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "PRODUCTS", *token_user_id)
+func (s *service) GetVendorsList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "PRODUCTS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list vendor at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list vendor at data level")
 	}
-	result, err := s.vendorsRepository.FindAll(query, p)
+	result, err := s.vendorsRepository.FindAll(metaData.Query, p)
 	if err != nil {
 		return result, res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 	return result, nil
 }
-func (s *service) SearchVendors(q string, token_id string, access_template_id string) ([]VendorsObjDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "PRODUCTS", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list vendor at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list vendor at data level")
-	}
-	result, err := s.vendorsRepository.Search(q)
-	var vendorsDto []VendorsObjDTO
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
+func (s *service) Upsert(metaData core.MetaData, data []interface{}) (interface{}, error) {
+	tokenUserId := metaData.TokenUserId
+	companyId := metaData.CompanyId
 
-	for _, v := range result {
-		var data VendorsObjDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
-		if err != nil {
-			return nil, err
+	var success []interface{}
+	var failures []interface{}
+
+	for index, payload := range data {
+		vendor := new(mdm.Vendors)
+		helpers.JsonMarshaller(payload, vendor)
+		if *vendor.ContactId == 0 {
+			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "contact_id should not be empty"})
+			continue
 		}
-		vendorsDto = append(vendorsDto, data)
+		findQuery := map[string]interface{}{
+			"contact_id": vendor.ContactId,
+		}
+		response, _ := s.vendorsRepository.FindOne(findQuery)
+		if response.ContactId != nil && *response.ContactId != 0 {
+			vendor.UpdatedByID = &tokenUserId
+			vendor.CompanyId = companyId
+			err := s.vendorsRepository.Update(findQuery, vendor)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+				continue
+			}
+			success = append(success, map[string]interface{}{
+				"status":        true,
+				"serial_number": index + 1,
+				"msg":           "updated",
+			})
+			continue
+		}
+		vendor.CreatedByID = &tokenUserId
+		vendor.CompanyId = companyId
+		err := s.vendorsRepository.Create(vendor)
+		if err != nil {
+			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+			continue
+		}
+		success = append(success, map[string]interface{}{
+			"status":        true,
+			"serial_number": index + 1,
+			"msg":           "created",
+		})
 	}
-	return vendorsDto, nil
+	response := map[string]interface{}{
+		"success":  success,
+		"failures": failures,
+	}
+	return response, nil
 }
 
 //---------------------------vendor price list-----------------------------------------
@@ -179,7 +207,7 @@ func (s *service) GetVendorPriceLists(query interface{}, p *pagination.Paginatev
 	if data_access == nil {
 		return nil, res.BuildError(res.ErrDataNotFound, errors.New("you dont have access for list vendor at data level"))
 	}
-	result, err := s.vendorsRepository.GetVendorPriceList(query, p)
+	result, err := s.vendorsRepository.FindAllPriceList(query.(map[string]interface{}), p)
 	if err != nil {
 		return result, res.BuildError(res.ErrUnprocessableEntity, err)
 	}
@@ -200,7 +228,6 @@ func (s *service) GetVendorPriceLists(query interface{}, p *pagination.Paginatev
 
 	return result, nil
 }
-
 func (s *service) CreateVendorPriceList(data *mdm.VendorPriceLists, token_id string, access_template_id string) error {
 	token_user_id := helpers.ConvertStringToUint(token_id)
 	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PRODUCTS", *token_user_id)
@@ -210,13 +237,12 @@ func (s *service) CreateVendorPriceList(data *mdm.VendorPriceLists, token_id str
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create vendor at data level")
 	}
-	err := s.vendorsRepository.SaveVendorPriceLists(data)
+	err := s.vendorsRepository.CreatePriceList(data)
 	if err != nil {
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 	return nil
 }
-
 func (s *service) UpdateVendorPriceLists(query map[string]interface{}, data *mdm.VendorPriceLists, token_id string, access_template_id string) error {
 	token_user_id := helpers.ConvertStringToUint(token_id)
 	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PRODUCTS", *token_user_id)
@@ -226,17 +252,16 @@ func (s *service) UpdateVendorPriceLists(query map[string]interface{}, data *mdm
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update vendor at data level")
 	}
-	_, err := s.vendorsRepository.FindOneVendorPriceList(query)
+	_, err := s.vendorsRepository.FindOnePriceList(query)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
-	_, err = s.vendorsRepository.UpdateVendorPriceLists(query, data)
+	err = s.vendorsRepository.UpdatePriceList(query, data)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
 	return nil
 }
-
 func (s *service) GetVendorPriceList(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
 	token_user_id := helpers.ConvertStringToUint(token_id)
 	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PRODUCTS", *token_user_id)
@@ -246,7 +271,7 @@ func (s *service) GetVendorPriceList(query map[string]interface{}, token_id stri
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view vendor at data level")
 	}
-	result, err := s.vendorsRepository.FindOneVendorPriceList(query)
+	result, err := s.vendorsRepository.FindOnePriceList(query)
 	if err != nil {
 		return result, res.BuildError(res.ErrUnprocessableEntity, err)
 	}
@@ -263,7 +288,6 @@ func (s *service) GetVendorPriceList(query map[string]interface{}, token_id stri
 	}
 	return result, nil
 }
-
 func (s *service) DeleteVendorPricelist(query map[string]interface{}, token_id string, access_template_id string) error {
 	token_user_id := helpers.ConvertStringToUint(token_id)
 	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PRODUCTS", *token_user_id)
@@ -276,11 +300,11 @@ func (s *service) DeleteVendorPricelist(query map[string]interface{}, token_id s
 	q := map[string]interface{}{
 		"id": query["id"].(int),
 	}
-	_, er := s.vendorsRepository.FindOneVendorPriceList(q)
+	_, er := s.vendorsRepository.FindOnePriceList(q)
 	if er != nil {
 		return er
 	}
-	err := s.vendorsRepository.DeleteVendorPriceList(query)
+	err := s.vendorsRepository.DeletePriceList(query)
 	if err != nil {
 		return err
 	}

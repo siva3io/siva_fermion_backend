@@ -40,11 +40,18 @@ type service struct {
 	// marketplace marketplace.Marketplace
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	ChannelRepository := repo.NewChannel()
 	marketplaceRepository := repo.NewmarketPlaceBase()
 	webstoreRepository := repo.NewWebstore()
-	return &service{ChannelRepository, marketplaceRepository, webstoreRepository}
+	newServiceObj = &service{ChannelRepository, marketplaceRepository, webstoreRepository}
+	return newServiceObj
 }
 
 func (s *service) CreateChannel(data ChannelDTO) (interface{}, error) {

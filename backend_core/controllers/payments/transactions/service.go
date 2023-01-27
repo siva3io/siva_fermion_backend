@@ -42,9 +42,16 @@ type service struct {
 	TransactionRepository payments_repo.Transaction
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	TransactionRepository := payments_repo.NewTransaction()
-	return &service{TransactionRepository}
+	newServiceObj = &service{TransactionRepository}
+	return newServiceObj
 }
 
 func (s *service) CreateTransaction(data *payments.Transactions) error {

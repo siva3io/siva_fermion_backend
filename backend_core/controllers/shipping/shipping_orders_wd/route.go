@@ -21,11 +21,11 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreateWD, cmiddleware.Authorization)
+	g.POST("/create", h.CreateWDEvent, cmiddleware.Authorization, ShippingOrdersWDCreateValidate)
 	g.POST("/bulk_create", h.BulkCreateWD, cmiddleware.Authorization)
 	g.GET("/:id", h.GetWD, cmiddleware.Authorization)
 	g.GET("", h.GetAllWD, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetAllWDDropDown, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdateWD, cmiddleware.Authorization)
+	g.POST("/:id/update", h.UpdateWDEvent, cmiddleware.Authorization, ShippingOrdersWDUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteWD, cmiddleware.Authorization)
 }

@@ -1,8 +1,11 @@
 package cores
 
 import (
+	"time"
+
 	access_template "fermion/backend_core/controllers/access/module"
 	model_core "fermion/backend_core/internal/model/core"
+	"fermion/backend_core/pkg/util/response"
 
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
@@ -26,6 +29,7 @@ type LookupCodesDTO struct {
 	Id         uint   `json:"id"`
 	LookupCode string `json:"lookup_code"`
 	Name       string `json:"display_name"`
+	SourceCode string `json:"source_code,omitempty"`
 }
 type LookupCodeDTO struct {
 	Id         uint   `json:"id"`
@@ -187,36 +191,116 @@ type StateDTO struct {
 }
 
 type Company struct {
-	ID                       int64          `json:"id" `
-	Name                     string         `json:"name"`
-	Addresses                datatypes.JSON `json:"addresses"`
-	Phone                    string         `json:"phone"`
-	Email                    string         `json:"email"`
-	CompanyDetails           datatypes.JSON `json:"company_details"`
-	IsEnterpise              bool           `json:"is_enterpise"`
-	ParentId                 uint           `json:"parent_id"`
-	ChildIds                 pq.Int64Array  `json:"child_ids"`
-	Type                     int            `json:"type"`
-	CompanyDefaults          datatypes.JSON `json:"company_defaults"`
-	NotificationSettingsId   *uint          `json:"notification_settings_id"`
-	NotificationTemplatesIds pq.Int32Array  `json:"notification_template_id"`
-	IsEnabled                bool           `json:"is_enabled"`
-	IsActive                 bool           `json:"is_active"`
-	CreatedByID              *uint          `json:"created_by"`
-	UpdatedByID              *uint          `json:"updated_by"`
-	OrganizationDetails      datatypes.JSON `json:"organization_details"`
-	KYCDocuments             []KYCDocuments `json:"KYC_documents"`
-	CloudUpload              bool           `json:"cloud_upload"`
-	FilePreferenceID         *uint          `json:"file_preference_id"`
-	FilePreference           LookupCodesDTO `json:"file_preference"`
-	InvoiceGenerationID      *uint          `json:"invoice_generation_id"`
-	InvoiceGeneration        LookupCodesDTO `json:"invoice_generation"`
-	BusinessTypeID           *uint          `json:"business_type_id"`
-	BusinessType             LookupCodesDTO `json:"business_type"`
+	ID                       *uint           `json:"id" `
+	Name                     string          `json:"name"`
+	Phone                    string          `json:"phone"`
+	Email                    string          `json:"email"`
+	Website                  string          `json:"website"`
+	LanguagePreferred        string          `json:"language_preferred"`
+	TimeSlotsPreferred       string          `json:"time_slots_preferred"`
+	WorkingHoursStartTime    time.Time       `json:"working_hours_start_time"`
+	WorkingHoursEndTime      time.Time       `json:"working_hours_end_time"`
+	CompanyDetails           *CompanyDetails `json:"company_details,omitempty"`
+	OndcDetailsId            *uint           `json:"ondc_details_id"`
+	OndcDetails              OndcDetails     `json:"ondc_details"`
+	IsEnterpise              bool            `json:"is_enterpise"`
+	ParentId                 uint            `json:"parent_id"`
+	ChildIds                 pq.Int64Array   `json:"child_ids"`
+	Type                     *uint           `json:"type,omitempty"`
+	CompanyType              LookupCodesDTO  `json:"company_type"`
+	CompanyDefaults          datatypes.JSON  `json:"company_defaults,omitempty"`
+	NotificationSettingsId   *uint           `json:"notification_settings_id"`
+	NotificationTemplatesIds pq.Int32Array   `json:"notification_template_id"`
+	IsEnabled                bool            `json:"is_enabled"`
+	IsActive                 bool            `json:"is_active"`
+	CreatedByID              *uint           `json:"created_by"`
+	UpdatedByID              *uint           `json:"updated_by"`
+	KYCDocuments             KycDocuments    `json:"KYC_documents"`
+	CloudUpload              bool            `json:"cloud_upload"`
+	BankDetails              BankDetails     `json:"bank_details,omitempty"`
+	FilePreferenceID         *uint           `json:"file_preference_id"`
+	FilePreference           LookupCodesDTO  `json:"file_preference"`
+	InvoiceGenerationID      *uint           `json:"invoice_generation_id"`
+	InvoiceGeneration        LookupCodesDTO  `json:"invoice_generation"`
+	BusinessTypeID           *uint           `json:"business_type_id"`
+	BusinessType             LookupCodesDTO  `json:"business_type"`
+	ShippingPreferenceID     *uint           `json:"shipping_preference_id"`
+	ShippingPreference       LookupCodesDTO  `json:"shipping_preference"`
+	DeliveryTypeID           *uint           `json:"delivery_type_id"`
+	DeliveryType             LookupCodesDTO  `json:"delivery_type"`
+	DeliveryPreferencesID    *uint           `json:"delivery_preferences_id"`
+	DeliveryPreferences      LookupCodesDTO  `json:"delivery_preferences"`
+	OTPPreferenceID          *uint           `json:"otp_preference_id"`
+	OTPPreferences           LookupCodesDTO  `json:"otp_preferences"`
+	NotificationPreferenceID *uint           `json:"notification_preference_id"`
+	NotificationPreferences  LookupCodesDTO  `json:"notification_preferences"`
+	AadhaarNumber            string          `json:"aadhaar_number,omitempty"`
+	GSTIN                    string          `json:"gstin,omitempty"`
+	PANNumber                string          `json:"pan_number,omitempty"`
+	RatingAverage            float64         `json:"rating_average"`
+	RatingCount              uint            `json:"rating_count"`
 }
-type KYCDocuments struct {
-	CountryId uint                   `json:"country_id"`
-	Documents map[string]interface{} `json:"documents"`
+
+type KycDocuments struct {
+	AdharCard datatypes.JSON `json:"aadhar_card,omitempty"`
+	Gst       datatypes.JSON `json:"gst,omitempty"`
+	Iec       datatypes.JSON `json:"iec,omitempty"`
+	PanCard   datatypes.JSON `json:"pan_card,omitempty"`
+	PassPort  datatypes.JSON `json:"passport,omitempty"`
+	VoterId   datatypes.JSON `json:"voter_id,omitempty"`
+}
+
+type BankDetails struct {
+	Bank_name                string         `json:"bank_name"`
+	Holder_name              string         `json:"holder_name"`
+	Account_number           string         `json:"account_number"`
+	Ifsc_code                string         `json:"ifsc_code"`
+	Bank_statement           datatypes.JSON `json:"bank_statement,omitempty"`
+	State                    string         `json:"state"`
+	City                     string         `json:"city"`
+	PennyTransferVerfication bool           `json:"penny_transfer_verification"`
+	UPIAddress               string         `json:"upi_address"`
+	BranchName               string         `json:"branch_name"`
+	Cancelled_cheque         datatypes.JSON `json:"cancelled_cheque,omitempty"`
+}
+type CompanyDetails struct {
+	BusinessName               string         `json:"business_name"`
+	BusinessAddress            string         `json:"business_address"`
+	FinancialYearStartId       *uint          `json:"financial_year_start_id"`
+	FinancialYearStart         LookupCodesDTO `json:"financial_year_start" gorm:"foreignkey:FinancialYearStartId; references:ID"`
+	FinancialYearEndId         *uint          `json:"financial_year_end_id"`
+	FinancialYearEnd           LookupCodesDTO `json:"financial_year_end" gorm:"foreignkey:FinancialYearEndId; references:ID"`
+	AuthorisedSignatory        string         `json:"authorised_signatory"`
+	AuthorisedSignatoryAddress string         `json:"authorised_signatory_address"`
+	StdCodeID                  *uint          `json:"std_code_id"`
+	StdCode                    LookupCodesDTO `json:"std_code"`
+	StoreName                  string         `json:"store_name"`
+	StoreDescription           string         `json:"store_description"`
+	ServiceableAreas           datatypes.JSON `json:"serviceable_areas"`
+	DomainId                   *uint          `json:"domain_id"`
+	Domain                     LookupCodesDTO `json:"domain"`
+	EstablishedOn              time.Time      `json:"established_on"`
+	StoreTimings               datatypes.JSON `json:"store_timings,omitempty"`
+	SellerApps                 []string       `json:"seller_apps,omitempty"`
+	EnableEmailNotifications   bool           `json:"enable_email_notifications"`
+	EnablePhoneNotifications   bool           `json:"enable_phone_notifications"`
+}
+
+type OndcDetails struct {
+	ID                      *uint     `json:"id"`
+	SubscriberId            string    `json:"subscriber_id,omitempty"`
+	SubscriberURL           string    `json:"subscriber_url,omitempty"`
+	SigningPublicKey        string    `json:"signing_public_key,omitempty"`
+	SigningPrivateKey       string    `json:"signing_private_key,omitempty"`
+	EncryptionPrivateKey    string    `json:"encryption_private_key,omitempty"`
+	EncryptionPublicKey     string    `json:"encryption_public_key,omitempty"`
+	UniqueId                string    `json:"unique_id,omitempty"`
+	Type                    *uint     `json:"type"`
+	BuyerAppFinderFeeType   string    `json:"buyer_app_finder_fee_type"`
+	BuyerAppFinderFeeAmount string    `json:"buyer_app_finder_fee_amount"`
+	IsCollector             bool      `gorm:"type:boolean" json:"is_collector"`
+	CreatedDate             time.Time `json:"created_date"`
+	UpdatedDate             time.Time `json:"updated_date"`
 }
 
 type UserResponseDTO struct {
@@ -237,7 +321,7 @@ type UserResponseDTO struct {
 	CompanyId        *uint          `json:"company_id"`
 	TeamHead         string         `json:"team_head"`
 	ExternalDetails  datatypes.JSON `json:"external_details"`
-	Company          Company
+	Company          *Company
 	Profile          datatypes.JSON                           `json:"profile"`
 	AddressDetails   datatypes.JSON                           `json:"address_details"`
 	AccessTemplateId []access_template.AccessTemplateResponse `json:"access_template_id"`
@@ -247,3 +331,76 @@ type UserResponseDTO struct {
 	IsEnabled bool `json:"is_enabled" gorm:"default:true"`
 	IsActive  bool `json:"is_active" gorm:"default:true"`
 }
+type AppCategoryResponseDTO struct {
+	ID           uint   `json:"id"`
+	DisplayName  string `json:"display_name"`
+	CategoryCode string `json:"category_code"`
+}
+type (
+	ChannelStatusDTO struct {
+		ChannelCode  string `json:"channel_code" gorm:"type:varchar(20)"`
+		InternalId   uint   `json:"internal_id" gorm:"type:integer"`
+		LookupCode   string `json:"lookup_code" gorm:"type:varchar(20)"`
+		ExternalCode string `json:"external_code" gorm:"type:varchar(20)"`
+		ExternalId   int    `json:"external_id" gorm:"type:integer"`
+		model_core.Model
+	}
+	GetAllChannelStatusResponse struct {
+		Body struct {
+			Meta response.MetaResponse
+			Data []ChannelStatusDTO
+		}
+	} //@ name GetAllChannelStatusResponse
+)
+
+// Create channel status response
+type (
+	ChannelStatusCreate struct {
+		Created_id int
+	}
+	ChannelStatusCreateResponse struct {
+		Body struct {
+			Meta response.MetaResponse
+			Data ChannelStatusCreate
+		}
+	} //@ name ChannelStatusCreateResponse
+)
+
+// Update channel status response
+type (
+	ChannelStatusUpdate struct {
+		Updated_id int
+	}
+	ChannelStatusUpdateResponse struct {
+		Body struct {
+			Meta response.MetaResponse
+			Data ChannelStatusUpdate
+		}
+	} //@ name ChannelStatusUpdateResponse
+)
+
+// Get channel status response
+type (
+	ChannelStatusGet struct {
+		model_core.ChannelLookupCodes
+	}
+	ChannelStatusGetResponse struct {
+		Body struct {
+			Meta response.MetaResponse
+			Data ChannelStatusGet
+		}
+	} //@ name ChannelStatusGetResponse
+)
+
+// Delete channel status response
+type (
+	ChannelStatusDelete struct {
+		Deleted_id int
+	}
+	ChannelStatusDeleteResponse struct {
+		Body struct {
+			Meta response.MetaResponse
+			Data ChannelStatusDelete
+		}
+	} //@ name ChannelStatusDeleteResponse
+)

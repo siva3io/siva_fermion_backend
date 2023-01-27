@@ -2,11 +2,11 @@ package utils
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 
 	ipaas_models "fermion/backend_core/ipaas_core/model"
+	// ipaas_utils "fermion/backend_core/ipaas_core/utils"
 )
 
 // Upload file to Colud provider assigned to user
@@ -92,6 +92,10 @@ func UploadFile(imageOptionsArray interface{}, fileName string, uniqueId string,
 		json.Unmarshal(dto, &arr)
 
 		for i, j := range arr {
+			if j["data"] == nil || j["data"] == "" {
+				imageLinkArray = append(imageLinkArray, j)
+				continue
+			}
 			temp_fileName := strings.ReplaceAll(fileName, " ", "_")
 			temp_fileName = temp_fileName + "_" + strconv.Itoa(i) + extenstion
 			req["Bucket_name"] = "dev-api-files"
@@ -105,14 +109,45 @@ func UploadFile(imageOptionsArray interface{}, fileName string, uniqueId string,
 				"user_id":         userId,
 			}
 			url := scheme + "://" + host + "/integrations/aws" + "/file_upload"
-			response, err := MakeAPIRequest("POST", url, headers, req, nil)
-			fmt.Println("Cloud Link After update:")
-			fmt.Println(response, err)
+			// response, err := MakeAPIRequest("POST", url, headers, req, nil)
+			response, _ := MakeAPIRequest("POST", url, headers, req, nil)
+
+			// fmt.Println("Cloud Link After update:")
+			// fmt.Println(response, err)
 			imageLinkArray = append(imageLinkArray, map[string]interface{}{"link": response.Body["data"].(map[string]interface{})["url"], "file_name": temp_fileName})
 		}
 		return imageLinkArray, nil
 	default:
 		return imageLinkArray, nil
+
+	}
+
+}
+
+func SendEmail(sender string, receiver string, subject string, body string, file string, scheme string, host string, cloudProvider ServiceProvider, user_token string) {
+
+	var headers []ipaas_models.KeyValuePair
+	var req = make(map[string]interface{}, 0)
+	switch cloudProvider {
+	case AWS:
+		headers = append(headers, MakeKeyValuePair("Content-Type", "application/json", "static", nil))
+		headers = append(headers, MakeKeyValuePair("Authorization", user_token, "static", nil))
+		headers = append(headers, MakeKeyValuePair("Content-Length", "1000", "static", nil))
+		headers = append(headers, MakeKeyValuePair("Accept", "*/*", "static", nil))
+		req["sender"] = sender
+		req["receiver"] = receiver
+		req["subject"] = subject
+		req["body"] = body
+		if file == "" {
+			req["file"] = nil
+		} else {
+			req["file"] = file
+		}
+
+		url := scheme + "://" + host + "/integrations/aws" + "/send_email"
+		MakeAPIRequest("POST", url, headers, req, nil)
+
+	default:
 
 	}
 

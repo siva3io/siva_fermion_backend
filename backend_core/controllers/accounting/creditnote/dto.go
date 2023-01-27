@@ -74,6 +74,7 @@ type CreditNoteLineItems struct {
 	Discount          float64 `json:"discount"`
 	Tax               float64 `json:"tax"`
 	Amount            float64 `json:"amount"`
+	CompanyId         uint    `json:"company_id"`
 }
 type CreditNoteResponseDTO struct {
 	AppId             *uint                                   `json:"app_id" `
@@ -120,5 +121,6 @@ type CreditNoteLineItemsResponseDTO struct {
 	Discount          float64                     `json:"discount"`
 	Tax               float64                     `json:"tax"`
 	Amount            float64                     `json:"amount"`
+	CompanyId         uint                        `json:"company_id"`
 	Price             float64                     `json:"price"`
 }

@@ -52,6 +52,7 @@ type (
 		Shipping_order_id      *uint                                 `json:"shipping_order_id" gorm:"type:integer"`
 		Shipping_order         model_core.Lookupcode                 `json:"shipping_order" gorm:"foreignKey:Shipping_order_id; references:ID"`
 		IsShipping             *bool                                 `json:"is_shipping" gorm:"default:true"`
+		TotalQuantity          int64                                 `json:"total_quantity"`
 		model_core.Model
 	}
 
@@ -61,7 +62,7 @@ type (
 		PriceListID           *uint                               `json:"price_list_id" gorm:"type:INT"`
 		PriceList             shared_pricing_and_location.Pricing `json:"pricing_details" gorm:"foreignkey:PriceListID; references:ID"`
 		Do_currency           *uint                               `json:"do_currency"`
-		Currency_details      model_core.Currency                 `json:"currency_details" gorm:"foreignKey:Do_currency; references:ID"`
+		Currency_details      *model_core.Currency                `json:"currency_details" gorm:"foreignKey:Do_currency; references:ID"`
 		Payment_due_date      string                              `json:"payment_due_date" gorm:"type:date"`
 		Payment_term_id       *uint                               `json:"payment_term_id" gorm:"type:integer"`
 		Payment_Term          model_core.Lookupcode               `json:"payment_term" gorm:"foreignKey:Payment_term_id; references:ID"`
@@ -92,7 +93,7 @@ type (
 		Location            string                `json:"location" gorm:"type:varchar(100)"`
 		InventoryId         uint                  `json:"inventory_id" gorm:"type:int"`
 		Price               uint                  `json:"price"`
-		PaymentTermsId      uint                  `json:"payment_terms_id" gorm:"type:int"`
+		PaymentTermsId      *uint                 `json:"payment_terms_id" gorm:"type:int"`
 		PaymentTerms        model_core.Lookupcode `json:"payment_terms" gorm:"foreignkey:PaymentTermsId; references:ID"`
 		model_core.Model
 	}
@@ -104,14 +105,14 @@ type (
 	}
 
 	Payment_details struct {
-		Currency_id       *uint               `json:"currency_id"`
-		Currency          model_core.Currency `json:"currency_info" gorm:"foreignKey:Currency_id; references:ID"`
-		Sub_total         float64             `gorm:"type:double precision" json:"sub_total"`
-		Payment_tax       float64             `gorm:"type:double precision" json:"tax"`
-		Shipping_charge   float64             `gorm:"type:double precision" json:"shipping_charge"`
-		Vender_credits    float64             `gorm:"type:double precision" json:"vender_credits"`
-		Adjustment_amount float64             `gorm:"type:double precision" json:"adjustment_amount"`
-		Total_amount      float64             `gorm:"type:double precision" json:"total_amount"`
+		Currency_id       *uint                `json:"currency_id"`
+		Currency          *model_core.Currency `json:"currency_info" gorm:"foreignKey:Currency_id; references:ID"`
+		Sub_total         float64              `gorm:"type:double precision" json:"sub_total"`
+		Payment_tax       float64              `gorm:"type:double precision" json:"tax"`
+		Shipping_charge   float64              `gorm:"type:double precision" json:"shipping_charge"`
+		Vender_credits    float64              `gorm:"type:double precision" json:"vender_credits"`
+		Adjustment_amount float64              `gorm:"type:double precision" json:"adjustment_amount"`
+		Total_amount      float64              `gorm:"type:double precision" json:"total_amount"`
 	}
 
 	DO_PickupDateAndTime struct {

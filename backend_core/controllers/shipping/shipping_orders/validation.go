@@ -24,18 +24,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 func (so ShippingOrderRequest) Validate() error {
 	return validation.ValidateStruct(&so,
+		validation.Field(&so.PackageDirectionsId, validation.Required),
+		validation.Field(&so.SenderAddress, validation.Required),
+		validation.Field(&so.ReceiverAddress, validation.Required),
+		validation.Field(&so.PackageDetails, validation.Required),
+		validation.Field(&so.OriginZipcode, validation.Required),
+		validation.Field(&so.DestinationZipcode, validation.Required),
+		validation.Field(&so.ShippingTypeId, validation.Required),
 		validation.Field(&so.SetPickupDate, validation.Required),
-		validation.Field(&so.ShippingOrderLines),
-		validation.Field(&so.SenderAddress),
-		validation.Field(&so.ReceiverAddress),
-		validation.Field(&so.PackageDetails),
+		validation.Field(&so.ShippingOrderLines, validation.Required),
 	)
 }
 
 func (so_lines ShippingOrderLines) Validate() error {
 	return validation.ValidateStruct(&so_lines,
 		validation.Field(&so_lines.ProductId, validation.Required),
-		validation.Field(&so_lines.ProductTemplateId, validation.Required),
 		validation.Field(&so_lines.ItemQuantity, validation.Required),
 		validation.Field(&so_lines.UnitPrice, validation.Required),
 	)
@@ -48,36 +51,36 @@ func (pd PackageDetails) Validate() error {
 		validation.Field(&pd.PackageWeight, validation.Required),
 		validation.Field(&pd.PackageWidth, validation.Required),
 		validation.Field(&pd.VolumetricWeight, validation.Required),
+		validation.Field(&pd.NoOfItems, validation.Required),
 	)
 }
 
-func (sd SenderAddress) Validate() error {
-	return validation.ValidateStruct(&sd,
-		validation.Field(&sd.SenderName, validation.Required),
-		validation.Field(&sd.Email, validation.Required),
-		validation.Field(&sd.MobileNumber, validation.Required),
-		validation.Field(&sd.PickupNickname, validation.Required),
-		validation.Field(&sd.AddressLine1, validation.Required),
-		validation.Field(&sd.AddressLine2, validation.Required),
-		validation.Field(&sd.Zipcode, validation.Required),
-		validation.Field(&sd.City, validation.Required),
-		validation.Field(&sd.State, validation.Required),
-		validation.Field(&sd.Country, validation.Required),
-	)
-}
+// func (sd SenderAddress) Validate() error {
+// 	return validation.ValidateStruct(&sd,
+// 		validation.Field(&sd.SenderName, validation.Required),
+// 		validation.Field(&sd.Email, validation.Required),
+// 		validation.Field(&sd.MobileNumber, validation.Required),
+// 		validation.Field(&sd.PickupNickname, validation.Required),
+// 		validation.Field(&sd.AddressLine1, validation.Required),
+// 		validation.Field(&sd.Zipcode, validation.Required),
+// 		validation.Field(&sd.City, validation.Required),
+// 		validation.Field(&sd.State, validation.Required),
+// 		validation.Field(&sd.Country, validation.Required),
+// 	)
+// }
 
-func (rd ReceiverOrBillingAddresss) Validate() error {
-	return validation.ValidateStruct(&rd,
-		validation.Field(&rd.ReceiverName, validation.Required),
-		validation.Field(&rd.Email, validation.Required),
-		validation.Field(&rd.MobileNumber, validation.Required),
-		validation.Field(&rd.AddressLine1, validation.Required),
-		validation.Field(&rd.Zipcode, validation.Required),
-		validation.Field(&rd.City, validation.Required),
-		validation.Field(&rd.State, validation.Required),
-		validation.Field(&rd.Country, validation.Required),
-	)
-}
+// func (rd ReceiverOrBillingAddresss) Validate() error {
+// 	return validation.ValidateStruct(&rd,
+// 		validation.Field(&rd.ReceiverName, validation.Required),
+// 		validation.Field(&rd.Email, validation.Required),
+// 		validation.Field(&rd.MobileNumber, validation.Required),
+// 		validation.Field(&rd.AddressLine1, validation.Required),
+// 		validation.Field(&rd.Zipcode, validation.Required),
+// 		validation.Field(&rd.City, validation.Required),
+// 		validation.Field(&rd.State, validation.Required),
+// 		validation.Field(&rd.Country, validation.Required),
+// 	)
+// }
 
 func ShippingOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
@@ -89,8 +92,13 @@ func ShippingOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		// if err := data.Validate(); err != nil {
-		// 	return res.RespError(c, res.BuildError(res.ErrValidation, err))
+		// err := validation.Validate(data)
+
+		// if err != nil {
+		// 	validation_err := helpers.ValidationErrorStructure(err)
+		// 	if validation_err != nil {
+		// 		return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
+		// 	}
 		// }
 
 		c.Set("shipping_orders", data)
@@ -108,14 +116,14 @@ func ShippingOrdersUpdateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		// err := validation.ValidateStruct(data)
+		err := validation.ValidateStruct(data)
 
-		// if err != nil {
-		// 	validation_err := helpers.ValidationErrorStructure(err)
-		// 	if validation_err != nil {
-		// 		return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
-		// 	}
-		// }
+		if err != nil {
+			validation_err := helpers.ValidationErrorStructure(err)
+			if validation_err != nil {
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
+			}
+		}
 
 		c.Set("shipping_orders", data)
 		return next(c)

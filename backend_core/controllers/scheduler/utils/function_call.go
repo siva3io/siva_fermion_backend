@@ -28,21 +28,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type CronFunctions struct {
 }
 
-func (c *CronFunctions) FuncOne(param datatypes.JSON) model.SchedulerLog {
+func (c CronFunctions) FuncOne(param datatypes.JSON) model.SchedulerLog {
 	var log model.SchedulerLog
 	log.State = "success"
 	fmt.Println("FuncOne", param)
 	return log
 }
 
-func (c *CronFunctions) FuncTwo(param datatypes.JSON) model.SchedulerLog {
+func (c CronFunctions) FuncTwo(param datatypes.JSON) model.SchedulerLog {
 	var log model.SchedulerLog
 	log.State = "success"
 	fmt.Println("FuncTwo", param)
 	return log
 }
 
-func (c *CronFunctions) ApiCall(param datatypes.JSON) model.SchedulerLog {
+func (c CronFunctions) ApiCall(param datatypes.JSON) model.SchedulerLog {
 
 	var requestOption helpers.Request
 	var log model.SchedulerLog

@@ -1,7 +1,6 @@
 package purchase_invoice
 
 import (
-	"fermion/backend_core/internal/model/accounting"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -24,9 +23,33 @@ import (
  along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 
+func (a PurchaseInvoiceDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+
+		validation.Field(&a.VendorDetails, validation.Required),
+		validation.Field(&a.DeliveryAddress, validation.Required),
+		//validation.Field(&a.PurchaseInvoiceNumber, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.PurchaseInvoiceDate, validation.Required),
+		validation.Field(&a.PurchaseInvoiceLines, validation.Required),
+	)
+}
+
+func (o PurchaseInvoiceLines) Validate() error {
+	return validation.ValidateStruct(&o,
+
+		validation.Field(&o.ProductId, validation.Required),
+		validation.Field(&o.Tax, validation.Required),
+		validation.Field(&o.Quantity, validation.Required),
+		validation.Field(&o.Discount, validation.Required),
+		validation.Field(&o.Amount, validation.Required),
+		validation.Field(&o.Price, validation.Required),
+	)
+}
+
 func PurchaseInvoiceCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(accounting.PurchaseInvoice)
+	var data = new(PurchaseInvoiceDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {
@@ -34,7 +57,7 @@ func PurchaseInvoiceCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
@@ -50,7 +73,7 @@ func PurchaseInvoiceCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 func PurchaseInvoiceUpdateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(accounting.PurchaseInvoice)
+	var data = new(PurchaseInvoiceDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {

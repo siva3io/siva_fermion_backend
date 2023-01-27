@@ -32,10 +32,16 @@ type handler struct {
 	service Services
 }
 
+var AccessTemplateHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if AccessTemplateHandler != nil {
+		return AccessTemplateHandler
+	}
 	service := NewService()
-	// base_service := template_base.NewServiceBase()
-	return &handler{service}
+	AccessTemplateHandler = &handler{service}
+	return AccessTemplateHandler
 }
 
 // CreateTemplate godoc

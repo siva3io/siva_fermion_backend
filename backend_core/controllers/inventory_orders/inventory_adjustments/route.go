@@ -23,9 +23,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.GetAllInvAdj, cmiddleware.Authorization)
 	g.GET("/:id", h.GetInvAdj, cmiddleware.Authorization)
-	g.POST("/create", h.CreateInvAdj, cmiddleware.Authorization, InventoryAdjustmentsCreateValidate)
+	g.POST("/create", h.CreateInvAdjEvent, cmiddleware.Authorization, InventoryAdjustmentsCreateValidate)
 	g.POST("/bulk_create", h.BulkCreateInvAdj, cmiddleware.Authorization)
-	g.PUT("/:id/edit", h.UpdateInvAdj, cmiddleware.Authorization, InventoryAdjustmentsUpdateValidate)
+	g.PUT("/:id/edit", h.UpdateInvAdjEvent, cmiddleware.Authorization, InventoryAdjustmentsUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteInvAdj, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_products", h.DeleteInvAdjLines, cmiddleware.Authorization)
 

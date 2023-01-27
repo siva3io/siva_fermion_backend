@@ -2,7 +2,6 @@ package accounting
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -31,78 +30,71 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Purchase interface {
 	Save(data *accounting.PurchaseInvoice) error
-	FindAll(page *pagination.Paginatevalue) (interface{}, error)
-	FindOne(query map[string]interface{}) (interface{}, error)
 	Update(query map[string]interface{}, data *accounting.PurchaseInvoice) error
 	Delete(query map[string]interface{}) error
+	FindOne(query map[string]interface{}) (accounting.PurchaseInvoice, error)
+	FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]accounting.PurchaseInvoice, error)
 
-	SaveInvoiceLines(accounting.PurchaseInvoiceLines) error
-	UpdateInvoiceLines(map[string]interface{}, accounting.PurchaseInvoiceLines) (int64, error)
-	DeleteInvoiceLine(map[string]interface{}) error
-	FindInvoiceLines(map[string]interface{}) (accounting.PurchaseInvoiceLines, error)
-
-	Search(query string) (interface{}, error)
+	SaveInvoiceLines(data accounting.PurchaseInvoiceLines) error
+	UpdateInvoiceLines(query map[string]interface{}, data accounting.PurchaseInvoiceLines) (int64, error)
+	DeleteInvoiceLine(query map[string]interface{}) error
+	FindInvoiceLines(query map[string]interface{}) (accounting.PurchaseInvoiceLines, error)
 }
 
 type PurchaseInvoice struct {
 	db *gorm.DB
 }
 
+var PurchaseInvoiceRepository *PurchaseInvoice //singleton object
+
+// singleton function
 func NewPurchaseInvoice() *PurchaseInvoice {
+	if PurchaseInvoiceRepository != nil {
+		return PurchaseInvoiceRepository
+	}
 	db := db.DbManager()
-	return &PurchaseInvoice{db}
+	PurchaseInvoiceRepository = &PurchaseInvoice{db}
+	return PurchaseInvoiceRepository
 
 }
 
 func (r *PurchaseInvoice) Save(data *accounting.PurchaseInvoice) error {
 	err := r.db.Model(&accounting.PurchaseInvoice{}).Create(data).Error
-
 	if err != nil {
-
 		return err
-
 	}
-
 	return nil
 }
 
-func (r *PurchaseInvoice) FindAll(page *pagination.Paginatevalue) (interface{}, error) {
+func (r *PurchaseInvoice) FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]accounting.PurchaseInvoice, error) {
 	var data []accounting.PurchaseInvoice
-
 	err := r.db.Model(&accounting.PurchaseInvoice{}).Scopes(helpers.Paginate(&accounting.PurchaseInvoice{}, page, r.db)).Preload(clause.Associations).Find(&data)
-
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }
 
-func (r *PurchaseInvoice) FindOne(query map[string]interface{}) (interface{}, error) {
+func (r *PurchaseInvoice) FindOne(query map[string]interface{}) (accounting.PurchaseInvoice, error) {
 	var data accounting.PurchaseInvoice
-
 	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
-
 	if err.RowsAffected == 0 {
-		return nil, errors.New("record not found")
+		return data, errors.New("oops!record not found")
 	}
-
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
-
 	return data, nil
 }
 
 func (r *PurchaseInvoice) Update(query map[string]interface{}, data *accounting.PurchaseInvoice) error {
 	res := r.db.Model(&accounting.PurchaseInvoice{}).Where(query).Updates(data)
-
-	if res.Error != nil {
-
-		return res.Error
-
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
 	}
-
+	if res.Error != nil {
+		return res.Error
+	}
 	return nil
 }
 
@@ -110,38 +102,33 @@ func (r *PurchaseInvoice) Delete(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
-	res := r.db.Model(&accounting.PurchaseInvoice{}).Where(query).Delete(data)
-	if res.Error != nil {
-
-		return res.Error
-
+	res := r.db.Model(&accounting.PurchaseInvoice{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
 	}
-
+	if res.Error != nil {
+		return res.Error
+	}
 	return nil
 }
-
 func (r *PurchaseInvoice) SaveInvoiceLines(data accounting.PurchaseInvoiceLines) error {
-
 	res := r.db.Model(&accounting.PurchaseInvoiceLines{}).Create(&data)
-
 	if res.Error != nil {
-
 		return res.Error
-
 	}
-
 	return nil
 }
 
 func (r *PurchaseInvoice) FindInvoiceLines(query map[string]interface{}) (accounting.PurchaseInvoiceLines, error) {
 	var result accounting.PurchaseInvoiceLines
-	fmt.Println(query)
 	res := r.db.Model(&accounting.PurchaseInvoiceLines{}).Where(query).First(&result)
-
+	if res.RowsAffected == 0 {
+		return result, errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return result, res.Error
 	}
@@ -151,38 +138,23 @@ func (r *PurchaseInvoice) FindInvoiceLines(query map[string]interface{}) (accoun
 
 func (r *PurchaseInvoice) UpdateInvoiceLines(query map[string]interface{}, data accounting.PurchaseInvoiceLines) (int64, error) {
 	res := r.db.Model(&accounting.PurchaseInvoiceLines{}).Where(query).Updates(&data)
-
-	if res.Error != nil {
-
-		return res.RowsAffected, res.Error
-
+	if res.RowsAffected == 0 {
+		return 1, errors.New("oops! record not found")
 	}
-
+	if res.Error != nil {
+		return res.RowsAffected, res.Error
+	}
 	return res.RowsAffected, nil
 }
 
 func (r *PurchaseInvoice) DeleteInvoiceLine(query map[string]interface{}) error {
 	res := r.db.Model(&accounting.PurchaseInvoiceLines{}).Where(query).Delete(&accounting.PurchaseInvoiceLines{})
-
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}
 
 	return nil
-}
-
-func (r *PurchaseInvoice) Search(query string) (interface{}, error) {
-	var data []accounting.PurchaseInvoice
-
-	fields := []string{"reference_number", "number"}
-
-	fields_string, values := helpers.ApplySearch(query, fields)
-
-	err := r.db.Model(&accounting.PurchaseInvoice{}).Limit(20).Preload(clause.Associations).Where(fields_string, values...).Find(&data)
-
-	if err.Error != nil {
-		return nil, err.Error
-	}
-
-	return data, nil
 }

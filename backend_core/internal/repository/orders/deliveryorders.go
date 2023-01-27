@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -30,10 +31,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type DeliveryOrders interface {
 	CreateDeliveryOrder(data *orders.DeliveryOrders) (uint, error)
 	BulkCreateDeliveryOrder(data *[]orders.DeliveryOrders) error
-	UpdateDeliveryOrder(id uint, data *orders.DeliveryOrders) error
-	FindDeliveryOrder(id uint) (orders.DeliveryOrders, error)
-	AllDeliveryOrders(p *pagination.Paginatevalue) ([]orders.DeliveryOrders, error)
-	DeleteDeliveryOrder(id uint, user_id uint) error
+	UpdateDeliveryOrder(query map[string]interface{}, data *orders.DeliveryOrders) error
+	FindDeliveryOrder(query map[string]interface{}) (orders.DeliveryOrders, error)
+	AllDeliveryOrders(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.DeliveryOrders, error)
+	DeleteDeliveryOrder(query map[string]interface{}) error
 	CreateDeliveryOrderLines(data orders.DeliveryOrderLines) error
 	UpdateDeliveryOrderLines(query interface{}, data orders.DeliveryOrderLines) (int64, error)
 	FindDeliveryOrdersLines(query interface{}) (orders.DeliveryOrderLines, error)
@@ -44,9 +45,16 @@ type deliveryOrders struct {
 	db *gorm.DB
 }
 
+var deliveryOrdersRepository *deliveryOrders //singleton object
+
+// singleton function
 func NewDo() *deliveryOrders {
+	if deliveryOrdersRepository != nil {
+		return deliveryOrdersRepository
+	}
 	db := db.DbManager()
-	return &deliveryOrders{db}
+	deliveryOrdersRepository = &deliveryOrders{db}
+	return deliveryOrdersRepository
 }
 
 func (r *deliveryOrders) CreateDeliveryOrder(data *orders.DeliveryOrders) (uint, error) {
@@ -59,31 +67,55 @@ func (r *deliveryOrders) BulkCreateDeliveryOrder(data *[]orders.DeliveryOrders) 
 	return res.Error
 }
 
-func (r *deliveryOrders) UpdateDeliveryOrder(id uint, data *orders.DeliveryOrders) error {
-	res := r.db.Model(&orders.DeliveryOrders{}).Where("id", id).Updates(data)
-	return res.Error
+func (r *deliveryOrders) UpdateDeliveryOrder(query map[string]interface{}, data *orders.DeliveryOrders) error {
+	res := r.db.Model(&orders.DeliveryOrders{}).Where(query).Updates(data)
+
+	if res.Error != nil {
+
+		return res.Error
+
+	}
+
+	return nil
 }
 
-func (r *deliveryOrders) FindDeliveryOrder(id uint) (orders.DeliveryOrders, error) {
-	var result orders.DeliveryOrders
-	res := r.db.Preload(clause.Associations+"."+clause.Associations).Model(&orders.DeliveryOrders{}).Preload("DeliveryOrderLines.Product").Preload("DeliveryOrderLines.Product_template").Preload(clause.Associations).Where("id", id).First(&result)
-	return result, res.Error
+func (r *deliveryOrders) FindDeliveryOrder(query map[string]interface{}) (orders.DeliveryOrders, error) {
+	var data orders.DeliveryOrders
+
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
+
+	if err.RowsAffected == 0 {
+		return data, errors.New("record not found")
+	}
+
+	if err.Error != nil {
+		return data, err.Error
+	}
+
+	return data, nil
 }
 
-func (r *deliveryOrders) AllDeliveryOrders(p *pagination.Paginatevalue) ([]orders.DeliveryOrders, error) {
+func (r *deliveryOrders) AllDeliveryOrders(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.DeliveryOrders, error) {
 	var data []orders.DeliveryOrders
-	res := r.db.Preload(clause.Associations).Model(&orders.DeliveryOrders{}).Scopes(helpers.Paginate(&orders.DeliveryOrders{}, p, r.db)).Where("is_active = true").Find(&data)
-	return data, res.Error
+
+	err := r.db.Model(&orders.DeliveryOrders{}).Preload(clause.Associations).Scopes(helpers.Paginate(&orders.DeliveryOrders{}, page, r.db)).Where(query).Find(&data)
+
+	if err.Error != nil {
+		return nil, err.Error
+	}
+
+	return data, nil
 }
 
-func (r *deliveryOrders) DeleteDeliveryOrder(id uint, user_id uint) error {
+func (r *deliveryOrders) DeleteDeliveryOrder(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"].(uint),
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&orders.DeliveryOrders{}).Where("id", id).Updates(data)
+	delete(query, "user_id")
+	res := r.db.Model(&orders.DeliveryOrders{}).Where(query).Updates(data)
 	return res.Error
 }
 

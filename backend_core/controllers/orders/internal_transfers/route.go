@@ -24,11 +24,10 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.ListInternalTransfers, cmiddleware.Authorization)
 	g.GET("/dropdown", h.ListInternalTransfersDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewInternalTransfers, cmiddleware.Authorization)
-	g.POST("/create", h.CreateInternalTransfers, cmiddleware.Authorization, InternalTransfersCreateValidate)
-	g.POST("/:id/update", h.UpdateInternalTransfers, cmiddleware.Authorization, InternalTransfersUpdateValidate)
+	g.POST("/create", h.CreateInternalTransfersEvent, cmiddleware.Authorization, InternalTransfersCreateValidate)
+	g.POST("/:id/update", h.UpdateInternalTransfersEvent, cmiddleware.Authorization, InternalTransfersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteInternalTransfers, cmiddleware.Authorization)
 	g.DELETE("/order_lines/:id/delete", h.DeleteInternalTransfersLines, cmiddleware.Authorization)
-	g.GET("/search", h.SearchInternalTransfers, cmiddleware.Authorization)
 
 	g.POST("/:id/downloadPdf", h.DownloadInternalTransfers, cmiddleware.Authorization)
 

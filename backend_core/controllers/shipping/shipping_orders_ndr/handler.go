@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -29,9 +32,16 @@ type handler struct {
 	service Service
 }
 
+var ShippingOrdersNdrHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ShippingOrdersNdrHandler != nil {
+		return ShippingOrdersNdrHandler
+	}
 	service := NewService()
-	return &handler{service}
+	ShippingOrdersNdrHandler = &handler{service}
+	return ShippingOrdersNdrHandler
 }
 
 // CreateNDR godoc
@@ -48,17 +58,40 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/create [post]
-func (h *handler) CreateNDR(c echo.Context) (err error) {
+func (h *handler) CreateNDREvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 	data := new(NDRRequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	id, err := h.service.CreateNDR(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
 	}
-	return res.RespSuccess(c, "Created", map[string]interface{}{"Created_NDR_Id": id})
+
+	eda.Produce(eda.CREATE_SHIPPING_ORDER_NDR, request_payload)
+	return res.RespSuccess(c, "Ndr Creation Inprogress", edaMetaData.RequestId)
+
+}
+
+func (h *handler) CreateNDR(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(shipping.NDR)
+	helpers.JsonMarshaller(data, createPayload)
+	err := h.service.CreateNDR(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_SHIPPING_ORDER_NDR_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{"created_id": createPayload.ID}
+	// eda.Produce(eda.CREATE_SHIPPING_ORDER_NDR_ACK, responseMessage)
+	// cache implementation
+	UpdateNdrInCache(edaMetaData)
+
 }
 
 // BulkCreateNDR godoc
@@ -79,13 +112,13 @@ func (h *handler) BulkCreateNDR(c echo.Context) (err error) {
 	data := new([]NDRRequest)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateNDR(data, token_id, access_template_id)
+	err = h.service.BulkCreateNDR(metaData, data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -107,14 +140,18 @@ func (h *handler) BulkCreateNDR(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/{id} [get]
 func (h *handler) GetNDR(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetNDR(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	ndrId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": ndrId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetNDR(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	var response NDRRequest
+	helpers.JsonMarshaller(result, &response)
 	return res.RespSuccess(c, "success", result)
 }
 
@@ -136,14 +173,30 @@ func (h *handler) GetNDR(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr [get]
 func (h *handler) GetAllNDR(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllNDR(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []NDRGetResponse
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetNdrFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllNDR(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 	return res.RespSuccessInfo(c, "NDR list Retrieved successfully", result, p)
 }
 
@@ -165,14 +218,30 @@ func (h *handler) GetAllNDR(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/dropdown [get]
 func (h *handler) GetAllNDRDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllNDR(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []NDRRequest
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetNdrFromCache(tokenUserId)
+	}
+
+	if response != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllNDR(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	helpers.JsonMarshaller(result, &response)
 	return res.RespSuccessInfo(c, "DropDown NDR list Retrieved successfully", result, p)
 }
 
@@ -191,19 +260,45 @@ func (h *handler) GetAllNDRDropDown(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/{id}/update [post]
-func (h *handler) UpdateNDR(c echo.Context) (err error) {
-	var data NDRRequest
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
+func (h *handler) UpdateNDREvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	ndrId := c.Param("id")
+	data := new(NDRRequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateNDR(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         ndrId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Updated Successfully", map[string]int{"Updated id": id})
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
+	}
+
+	eda.Produce(eda.UPDATE_SHIPPING_ORDER_NDR, request_payload)
+	return res.RespSuccess(c, "Shipping_order ndr Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+
+}
+
+func (h *handler) UpdateNDR(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	updatePayload := new(shipping.NDR)
+	helpers.JsonMarshaller(data, updatePayload)
+	err := h.service.UpdateNDR(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_SHIPPING_ORDER_NDR_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{"updated_id": edaMetaData.Query["id"]}
+	// eda.Produce(eda.UPDATE_SHIPPING_ORDER_NDR_ACK, responseMessage)
+	// cache implementation
+	UpdateNdrInCache(edaMetaData)
+
 }
 
 // DeleteNDR godoc
@@ -221,16 +316,22 @@ func (h *handler) UpdateNDR(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/{id}/delete [delete]
 func (h *handler) DeleteNDR(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteNDR(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	ndrId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         ndrId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteNDR(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Deleted Successfully", map[string]string{"Deleted_NDR_ID": get_id})
+
+	// cache implementation
+	UpdateNdrInCache(metaData)
+
+	return res.RespSuccess(c, "Deleted Successfully", map[string]string{"Deleted_NDR_ID": ndrId})
 }
 
 // DeleteNDRLine godoc
@@ -249,18 +350,16 @@ func (h *handler) DeleteNDR(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_ndr/ndr_lines/{id}/delete [delete]
 func (h *handler) DeleteNDRLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	query := map[string]interface{}{
-		"non_delivery_request_id": uint(id),
-		"ndrs_id":                 c.QueryParam("ndrs_id"),
+	metaData := c.Get("MetaData").(core.MetaData)
+	ndrId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         ndrId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	fmt.Println("!!!", query)
-	err = h.service.DeleteNDRLines(query, token_id, access_template_id)
+	err = h.service.DeleteNDRLines(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "NDR Line successfully deleted", query)
+	return res.RespSuccess(c, "NDR Line successfully deleted", ndrId)
 }

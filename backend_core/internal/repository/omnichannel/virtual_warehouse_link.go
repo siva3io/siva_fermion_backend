@@ -42,9 +42,16 @@ type virtual_warehouse_details struct {
 	Db *gorm.DB
 }
 
+var virtualWarehouseRepository *virtual_warehouse_details //singleton object
+
+// singleton function
 func NewVirtualWarehouseDetails() *virtual_warehouse_details {
+	if virtualWarehouseRepository != nil {
+		return virtualWarehouseRepository
+	}
 	db := db.DbManager()
-	return &virtual_warehouse_details{db}
+	virtualWarehouseRepository = &virtual_warehouse_details{db}
+	return virtualWarehouseRepository
 }
 
 func (r *virtual_warehouse_details) CreateVirtualWarehouseDetail(data *omnichannel.User_Virtual_Warehouse_Link) error {

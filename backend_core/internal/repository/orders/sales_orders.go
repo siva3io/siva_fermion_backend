@@ -30,169 +30,155 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Sales interface {
-	Save(data *orders.SalesOrders) error
-	FindAll(page *pagination.Paginatevalue) (interface{}, error)
-	FindOne(query map[string]interface{}) (interface{}, error)
-	Update(query map[string]interface{}, data *orders.SalesOrders) error
-	Delete(query map[string]interface{}) error
+	Save(data *orders.SalesOrders) (uint, error)
+	SaveOrderLines(data *orders.SalesOrderLines) error
 
-	SaveOrderLines(orders.SalesOrderLines) error
-	UpdateOrderLines(map[string]interface{}, orders.SalesOrderLines) (int64, error)
+	Update(query map[string]interface{}, data *orders.SalesOrders) error
+	UpdateOrderLines(query map[string]interface{}, data *orders.SalesOrderLines) error
+
+	Delete(query map[string]interface{}) error
 	DeleteOrderLine(map[string]interface{}) error
+
+	FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.SalesOrders, error)
+
+	FindOne(query map[string]interface{}) (orders.SalesOrders, error)
 	FindOrderLines(map[string]interface{}) (orders.SalesOrderLines, error)
 
-	Search(query string) (interface{}, error)
-	GetSalesHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error)
+	GetSalesHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.SalesOrders, error)
 }
 
 type SalesOrders struct {
 	db *gorm.DB
 }
 
+var SalesOrdersRepository *SalesOrders //singleton object
+
+// singleton function
 func NewSalesOrder() *SalesOrders {
-	db := db.DbManager()
-	return &SalesOrders{db}
-
-}
-
-func (r *SalesOrders) Save(data *orders.SalesOrders) error {
-	err := r.db.Model(&orders.SalesOrders{}).Create(data).Error
-
-	if err != nil {
-
-		return err
-
+	if SalesOrdersRepository != nil {
+		return SalesOrdersRepository
 	}
+	SalesOrdersRepository = &SalesOrders{
+		db.DbManager(),
+	}
+	return SalesOrdersRepository
 
-	return nil
 }
 
-func (r *SalesOrders) FindAll(page *pagination.Paginatevalue) (interface{}, error) {
+func (r *SalesOrders) Save(data *orders.SalesOrders) (uint, error) {
+
+	err := r.db.Model(&orders.SalesOrders{}).Create(data).Error
+	if err != nil {
+		return data.ID, err
+	}
+	return data.ID, nil
+}
+
+func (r *SalesOrders) FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.SalesOrders, error) {
 
 	var data []orders.SalesOrders
-
-	err := r.db.Model(&orders.SalesOrders{}).Scopes(helpers.Paginate(&orders.SalesOrders{}, page, r.db)).Preload(clause.Associations).Find(&data)
-
+	err := r.db.Model(&orders.SalesOrders{}).Preload(clause.Associations + "." + clause.Associations).Preload("CreatedBy.Company").Preload("SalesOrderLines.Product.Category").Scopes(helpers.Paginate(&orders.SalesOrders{}, page, r.db)).Find(&data)
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }
 
-func (r *SalesOrders) FindOne(query map[string]interface{}) (interface{}, error) {
-	var data orders.SalesOrders
+func (r *SalesOrders) FindOne(query map[string]interface{}) (orders.SalesOrders, error) {
 
-	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
+	var data orders.SalesOrders
+	err := r.db.Model(&orders.SalesOrders{}).Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
 
 	if err.RowsAffected == 0 {
-		return nil, errors.New("record not found")
+		return data, errors.New("record not found")
 	}
-
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
-
 	return data, nil
 }
 
 func (r *SalesOrders) Update(query map[string]interface{}, data *orders.SalesOrders) error {
-	res := r.db.Model(&orders.SalesOrders{}).Where(query).Updates(data)
 
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.SalesOrders{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
+	if err.Error != nil {
+		return err.Error
+	}
 	return nil
 }
 
 func (r *SalesOrders) Delete(query map[string]interface{}) error {
+
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
-	res := r.db.Model(&orders.SalesOrders{}).Where(query).Updates(data)
-
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.SalesOrders{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
+	if err.Error != nil {
+		return err.Error
+	}
 	return nil
 }
 
-func (r *SalesOrders) SaveOrderLines(data orders.SalesOrderLines) error {
+func (r *SalesOrders) SaveOrderLines(data *orders.SalesOrderLines) error {
 
-	res := r.db.Model(&orders.SalesOrderLines{}).Create(&data)
-
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.SalesOrderLines{}).Create(data)
+	if err.Error != nil {
+		return err.Error
 	}
-
 	return nil
 }
 
 func (r *SalesOrders) FindOrderLines(query map[string]interface{}) (orders.SalesOrderLines, error) {
-	var result orders.SalesOrderLines
-	fmt.Println(query)
-	res := r.db.Model(&orders.SalesOrderLines{}).Where(query).First(&result)
-
-	if res.Error != nil {
-		return result, res.Error
+	var data orders.SalesOrderLines
+	err := r.db.Model(&orders.SalesOrderLines{}).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("record not found")
 	}
-
-	return result, nil
-}
-
-func (r *SalesOrders) UpdateOrderLines(query map[string]interface{}, data orders.SalesOrderLines) (int64, error) {
-	res := r.db.Model(&orders.SalesOrderLines{}).Where(query).Updates(&data)
-
-	if res.Error != nil {
-
-		return res.RowsAffected, res.Error
-
-	}
-
-	return res.RowsAffected, nil
-}
-
-func (r *SalesOrders) DeleteOrderLine(query map[string]interface{}) error {
-	res := r.db.Model(&orders.SalesOrderLines{}).Where(query).Delete(&orders.SalesOrderLines{})
-
-	if res.Error != nil {
-		return res.Error
-	}
-
-	return nil
-}
-
-func (r *SalesOrders) Search(query string) (interface{}, error) {
-	var data []orders.SalesOrders
-
-	fields := []string{"customer_name", "channel_name", "reference_number", "sales_order_number"}
-
-	fields_string, values := helpers.ApplySearch(query, fields)
-
-	err := r.db.Model(&orders.SalesOrders{}).Limit(20).Preload(clause.Associations).Where(fields_string, values...).Find(&data)
-
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
-
 	return data, nil
 }
 
-func (r *SalesOrders) GetSalesHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error) {
+func (r *SalesOrders) UpdateOrderLines(query map[string]interface{}, data *orders.SalesOrderLines) error {
+
+	err := r.db.Model(&orders.SalesOrderLines{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
+}
+
+func (r *SalesOrders) DeleteOrderLine(query map[string]interface{}) error {
+
+	err := r.db.Model(&orders.SalesOrderLines{}).Where(query).Delete(&orders.SalesOrderLines{})
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
+}
+
+func (r *SalesOrders) GetSalesHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.SalesOrders, error) {
 	var data []orders.SalesOrders
 	var ids = make([]uint, 0)
+
+	productId := query["product_id"]
 
 	page.Filters = fmt.Sprintf("[[\"product_id\", \"=\", %v]]", productId)
 	err := r.db.Model(&orders.SalesOrderLines{}).Select("so_id").Scopes(helpers.Paginate(&orders.SalesOrderLines{}, page, r.db)).Scan(&ids)
@@ -201,10 +187,8 @@ func (r *SalesOrders) GetSalesHistory(productId uint, page *pagination.Paginatev
 		return nil, err.Error
 	}
 	err = r.db.Model(&orders.SalesOrders{}).Where("id IN ?", ids).Find(&data)
-
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }

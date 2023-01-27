@@ -18,9 +18,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type PaymentTerms struct {
 	model_core.Model
-	PaymentTermName      string                `gorm:"unique; not null" json:"payment_term_name"`
+	PaymentTermName      string                `gorm:"" json:"payment_term_name"`
 	DescriptionOnInvoice string                `json:"description_on_invoice"`
-	AccountTypeId        uint                  `json:"account_type_id"`
+	AccountTypeId        *uint                 `json:"account_type_id"`
 	AccountType          model_core.Lookupcode `gorm:"foreignkey:AccountTypeId;references:ID" json:"account_type"`
 	PaymentTermDetails   []PaymentTermDetails  `gorm:"foreignkey:PaymentTermsId;references:ID" json:"term_details"`
 }
@@ -29,7 +29,7 @@ type PaymentTermDetails struct {
 	model_core.Model
 	PaymentTermsId  uint                  `json:"-"`
 	PaymentTermNo   uint                  `json:"payment_term_no" gorm:"unique"`
-	TermTypeId      uint                  `json:"term_type_id"`
+	TermTypeId      *uint                 `json:"term_type_id"`
 	TermType        model_core.Lookupcode `gorm:"foreignkey:TermTypeId;references:ID" json:"term_type"`
 	Value           uint                  `gorm:"not null" json:"value"`
 	Due             uint                  `json:"due"`

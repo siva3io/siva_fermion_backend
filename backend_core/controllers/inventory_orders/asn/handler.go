@@ -6,7 +6,10 @@ import (
 	"strconv"
 
 	concurrency_management "fermion/backend_core/controllers/concurrency_management"
+	"fermion/backend_core/controllers/eda"
 	inventory_orders_base "fermion/backend_core/controllers/inventory_orders/base"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -34,11 +37,18 @@ type handler struct {
 	concurrencyService concurrency_management.Service
 }
 
+var AsnHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if AsnHandler != nil {
+		return AsnHandler
+	}
 	service := NewService()
 	base_service := inventory_orders_base.NewServiceBase()
 	concurrencyService := concurrency_management.NewService()
-	return &handler{service, base_service, concurrencyService}
+	AsnHandler = &handler{service, base_service, concurrencyService}
+	return AsnHandler
 }
 
 // FavouriteAsnView godoc
@@ -88,18 +98,37 @@ func (h *handler) FavouriteAsnView(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/create [post]
-func (h *handler) CreateAsn(c echo.Context) (err error) {
-	data := c.Get("asn").(*AsnRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	t := uint(user_id)
-	data.CreatedByID = &t
-	id, err := h.service.CreateAsn(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) CreateAsnEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("asn"),
 	}
-	return res.RespSuccess(c, "Asn created successfully", map[string]interface{}{"created_id": id})
+	eda.Produce(eda.CREATE_ASN, request_payload)
+	return res.RespSuccess(c, "Asn creation inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateAsn(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	createPayload := new(inventory_orders.ASN)
+	helpers.JsonMarshaller(data, createPayload)
+	createPayload.CreatedByID = &edaMetaData.TokenUserId
+	err := h.service.CreateAsn(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_ASN_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateAsnInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_ASN_ACK, responseMessage)
 }
 
 // BulkCreateAsn godoc
@@ -117,19 +146,20 @@ func (h *handler) CreateAsn(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/asn/bulk_create [post]
 func (h *handler) BulkCreateAsn(c echo.Context) (err error) {
-	data := new([]AsnRequest)
+	data := new([]inventory_orders.ASN)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateAsn(data, token_id, access_template_id)
+	err = h.service.BulkCreateAsn(metaData, data)
 	if err != nil {
 		return res.RespError(c, err)
 	}
+	UpdateAsnInCache(metaData)
 	return res.RespSuccess(c, "Asn multiple records created successfully", data)
 }
 
@@ -148,25 +178,51 @@ func (h *handler) BulkCreateAsn(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/{id}/edit [put]
-func (h *handler) UpdateAsn(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("asn").(*AsnRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
+func (h *handler) UpdateAsnEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	asnId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         asnId,
+		"company_id": edaMetaData.CompanyId,
+	}
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("asn"),
+	}
+	eda.Produce(eda.UPDATE_ASN, request_payload)
+	return res.RespSuccess(c, "Asn Update inprogress", edaMetaData.RequestId)
 	//--------------------------concurrency_management_start-----------------------------------------
-	response, PreviousStatusId, err := h.concurrencyService.CheckConcurrencyStatus(uint(id), "status_id", "asns")
+	response, PreviousStatusId, err := h.concurrencyService.CheckConcurrencyStatus((*helpers.ConvertStringToUint(asnId)), "status_id", "asns")
 	if response.Block {
 		return res.RespErr(c, errors.New(response.Message))
 	}
-	defer h.concurrencyService.ReleaseConcurrencyLock(uint(id), PreviousStatusId, "status_id", "asns")
+	defer h.concurrencyService.ReleaseConcurrencyLock(*helpers.ConvertStringToUint(asnId), PreviousStatusId, "status_id", "asn")
 	//--------------------------concurrency_management_end-----------------------------------------
-	err = h.service.UpdateAsn(uint(id), data, token_id, access_template_id)
+	return res.RespSuccess(c, "Asn update inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateAsn(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(inventory_orders.ASN)
+	helpers.JsonMarshaller(data, updatePayLoad)
+
+	updatePayLoad.UpdatedByID = &edaMetaData.TokenUserId
+	err := h.service.UpdateAsn(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespError(c, err)
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_ASN_ACK, responsemessage)
+		return
 	}
-	return res.RespSuccess(c, "Asn updated successfully", map[string]interface{}{"updated_id": id})
+	// cache implementation
+	UpdateAsnInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_ASN_ACK, responsemessage)
 }
 
 // GetAsn godoc
@@ -184,15 +240,19 @@ func (h *handler) UpdateAsn(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/{id} [get]
 func (h *handler) GetAsn(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAsn(uint(id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	asnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": asnId,
+		// "company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Asn fetched successfully", result)
+	result, err := h.service.GetAsn(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// var response AsnGet
+	// helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Credit Note Details Retrieved successfully", result)
 }
 
 // GetAllAsn godoc
@@ -213,15 +273,29 @@ func (h *handler) GetAsn(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn [get]
 func (h *handler) GetAllAsn(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllAsn(p, token_id, access_template_id, "LIST")
-	if err != nil {
-		return res.RespError(c, err)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []AsnGetAllResponse
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetAsnFromCache(tokenUserId)
 	}
-	return res.RespSuccessInfo(c, "Asn data Retrieved successfully", result, p)
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllAsn(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Asn list Retrieved Successfully", result, p)
 }
 
 // DeleteAsn godoc
@@ -239,16 +313,20 @@ func (h *handler) GetAllAsn(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/{id}/delete [delete]
 func (h *handler) DeleteAsn(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteAsn(uint(id), uint(user_id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	asnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         asnId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Asn deleted successfully", map[string]interface{}{"deleted_id": id})
+	err = h.service.DeleteAsn(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// cache implementation
+	UpdateAsnInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", asnId)
 }
 
 // DeleteAsnLines godoc
@@ -267,17 +345,16 @@ func (h *handler) DeleteAsn(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/{id}/delete_products [delete]
 func (h *handler) DeleteAsnLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
 	product_id := c.QueryParam("product_id")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var id = c.Param("id")
+	ID, _ := strconv.Atoi(id)
 	prod_id, _ := strconv.Atoi(product_id)
 	query := map[string]interface{}{
-		"asn_id":     uint(id),
+		"asn_id":     ID,
 		"product_id": uint(prod_id),
 	}
-	err = h.service.DeleteAsnLines(query, token_id, access_template_id)
+	var metaData core.MetaData
+	err = h.service.DeleteAsnLines(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
@@ -344,20 +421,26 @@ func (h *handler) DownloadPdfAsn(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/asn/{id}/favourite [post]
 func (h *handler) FavouriteAsn(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	asnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         asnId,
+		"company_id": metaData.CompanyId,
 	}
-	fmt.Println("handler ------------------------ -1", query)
+	_, err = h.service.GetAsn(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+	query := map[string]interface{}{
+		"ID":      asnId,
+		"user_id": metaData.TokenUserId,
+	}
+
 	err = h.base_service.FavouriteAsn(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Asn is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Asn Ais Marked as Favourite", map[string]string{"id": asnId})
 }
 
 // UnFavouriteAsn godoc
@@ -375,19 +458,19 @@ func (h *handler) FavouriteAsn(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/asn/{id}/unfavourite [post]
 func (h *handler) UnFavouriteAsn(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+	asnId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      asnId,
+		"user_id": metaData.TokenUserId,
 	}
+
 	err = h.base_service.UnFavouriteAsn(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Asn is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "asn is Marked as UnFavourite", map[string]string{"credinote_id": asnId})
 }
 
 // GetAsnTab godoc
@@ -416,11 +499,12 @@ func (h *handler) GetAsnTab(c echo.Context) (err error) {
 
 	id := c.Param("id")
 	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetAsnTab(id, tab, page, access_template_id, token_id)
+	var metaData core.MetaData
+	metaData.AdditionalFields = map[string]interface{}{
+		"asn":      id,
+		"tab_name": tab,
+	}
+	data, err := h.service.GetAsnTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -446,13 +530,24 @@ func (h *handler) GetAsnTab(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/asn/dropdown [get]
 func (h *handler) GetAllAsnDropdown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllAsn(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetAsnFromCache(tokenUserId)
+	}
+	if cacheResponse != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, p)
+	}
+	//var data []AsnGetAllResponse
+	response, err := h.service.GetAllAsn(metaData, p)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "Asn data Retrieved successfully", result, p)
+	//helpers.JsonMarshaller(response, &data)
+	return res.RespSuccessInfo(c, "dropdown list of asn fetched", response, p)
 }

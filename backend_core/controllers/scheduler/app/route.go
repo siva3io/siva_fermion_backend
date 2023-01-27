@@ -22,9 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 func (h *handler) Route(g *echo.Group) {
 	g.POST("/add_scheduler_job", h.AddSchedulerJob, cmiddleware.Authorization)
-	g.GET("/", h.ListSchedulerJob, cmiddleware.Authorization)
+	g.GET("", h.ListSchedulerJob, cmiddleware.Authorization)
+	g.GET("/logs", h.ListSchedulerLogs, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewSchedulerJob, cmiddleware.Authorization)
-	g.GET("/:id/logs", h.ListSchedulerLogs, cmiddleware.Authorization)
 	g.POST("/:id/update", h.UpdateSchedulerJob, cmiddleware.Authorization)
 	g.DELETE("/:id/delete", h.DeleteSchedulerJob, cmiddleware.Authorization)
+	g.GET("/functions", h.ListSchedulerFunctions, cmiddleware.Authorization)
 }

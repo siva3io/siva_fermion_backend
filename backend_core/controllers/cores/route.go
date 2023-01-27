@@ -35,8 +35,12 @@ func (h *handler) Route(g *echo.Group) {
 	g.DELETE("/lookup_code/:id/delete", h.DeleteLookupCode, cmiddleware.Authorization)
 	g.GET("/channels/lookup_codes", h.GetChannelLookupCodes)
 
-	g.POST("/cache/update", h.UpdateCacheData)
-	g.GET("/cache/get/:key", h.GetCacheData, cmiddleware.Authorization)
+	// cache api's
+	g.POST("/local_cache/update", h.UpdateLocalCacheData)
+	g.GET("/local_cache/get/:key", h.GetLocalCacheData, cmiddleware.Authorization)
+	g.POST("/redis_cache/update", h.UpdateRedisCacheData)
+	g.GET("/redis_cache/get/:key", h.GetRedisCacheData, cmiddleware.Authorization)
+
 	//not sure where "/lookup_types" are used so using "/lookup_types/list" apis are developed
 	g.GET("/lookup_types/list", h.GetAllLookupTypes, cmiddleware.Authorization)
 	g.GET("/lookup_codes/list", h.GetAllLookupCodes, cmiddleware.Authorization)
@@ -48,13 +52,31 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("/apps/installed", h.ListInstalledApps, cmiddleware.Authorization)
 	g.POST("/store/apps/:app_code/install", h.InstallApp, cmiddleware.Authorization)
 	g.POST("/store/apps/:app_code/uninstall", h.UninstallApp, cmiddleware.Authorization)
+	g.POST("/apps/installed/update", h.UpdateInstalledApp, cmiddleware.Authorization)
+	g.POST("/app/installed/renew", h.RenewSubscription, cmiddleware.Authorization)
 
 	// meta data
 	g.GET("/meta_data", h.ListMetaData)
 	g.GET("/meta_data/:model_name", h.ViewMetaData)
-	g.POST("/company_preferences/:id/update", h.UpdateCompanyPreferences, cmiddleware.Authorization)
+
+	//company APIs
 	g.GET("/company_preferences/:id", h.GetCompanyPreferences, cmiddleware.Authorization)
+	g.GET("/company_preferences", h.ListCompanyPreferences, cmiddleware.Authorization)
 	g.GET("/company/:id/list_users", h.ListCompanyUsers, cmiddleware.Authorization)
 	g.POST("/company/:id/update", h.UpdateCompany, cmiddleware.Authorization)
+	g.POST("/company/:id/register_ondc", h.OndcRegistration, cmiddleware.Authorization)
+	g.POST("/ondc/update", h.UpdateOndcDetails, cmiddleware.Authorization)
+	g.POST("/validate_aadhaar", h.AadhaarValidation, cmiddleware.Authorization)
 
+	//channel status api's
+	g.GET("/channel_status", h.ListChannelStatus, cmiddleware.Authorization)
+	g.GET("/channel_status/:id", h.ViewChannelStatus, cmiddleware.Authorization)
+	g.POST("/channel_status/create", h.CreateChannelStatus, cmiddleware.Authorization)
+	g.POST("/channel_status/:id/update", h.UpdateChannelStatus, cmiddleware.Authorization)
+	g.DELETE("/channel_status/:id/delete", h.DeleteChannelStatus, cmiddleware.Authorization)
+
+	g.POST("/custom_solution", h.RequestSolution, cmiddleware.Authorization)
+
+	//================================ADMIN==========================================
+	g.GET("/company/admin/list", h.ListCompaniesAdmin, cmiddleware.Authorization)
 }

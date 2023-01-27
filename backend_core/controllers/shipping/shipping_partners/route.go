@@ -1,6 +1,8 @@
 package shipping_partners
 
 import (
+	// mddlwr "euni_plt_go_gorm/backend_core/internal/middleware"
+
 	cmiddleware "fermion/backend_core/middleware"
 
 	"github.com/labstack/echo/v4"
@@ -21,11 +23,11 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/register", h.CreateUserShippingPartnerRegistration, cmiddleware.Authorization, ShippingPartnersCreateValidate)
+	g.POST("/register", h.CreateUserShippingPartnerRegistrationEvent, cmiddleware.Authorization, ShippingPartnersCreateValidate)
 	g.GET("", h.GetAllUserShippingPartnerRegistration, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetAllUserShippingPartnerRegistrationDropDown, cmiddleware.Authorization)
 	g.GET("/registered/:id", h.GetUserShippingPartnerRegistration, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdateUserShippingPartnerRegistration, cmiddleware.Authorization, ShippingPartnersUpdateValidate)
+	g.POST("/:id/update", h.UpdateUserShippingPartnerRegistrationEvent, cmiddleware.Authorization, ShippingPartnersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteUserShippingPartnerRegistration, cmiddleware.Authorization)
 	g.POST("/rate_calc", h.ShippingPartnerEstimateCosts, cmiddleware.Authorization)
 	g.POST("/:id/favourite", h.FavouriteUserShippingPartnerRegistration, cmiddleware.Authorization)

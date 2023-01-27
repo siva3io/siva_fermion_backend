@@ -31,8 +31,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Purchase interface {
 	Save(data *orders.PurchaseOrders) error
-	FindAll(page *pagination.Paginatevalue) (interface{}, error)
-	FindOne(query map[string]interface{}) (interface{}, error)
+	FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.PurchaseOrders, error)
+	FindOne(query map[string]interface{}) (orders.PurchaseOrders, error)
 	Update(query map[string]interface{}, data *orders.PurchaseOrders) error
 	Delete(query map[string]interface{}) error
 
@@ -42,16 +42,23 @@ type Purchase interface {
 	FindOrderLines(map[string]interface{}) (orders.PurchaseOrderLines, error)
 
 	Search(query string) (interface{}, error)
-	GetPurchaseHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error)
+	GetPurchaseHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.PurchaseOrders, error)
 }
 
 type PurchaseOrders struct {
 	db *gorm.DB
 }
 
+var PurchaseOrdersRepository *PurchaseOrders //singleton object
+
+// singleton function
 func NewPurchaseOrder() *PurchaseOrders {
+	if PurchaseOrdersRepository != nil {
+		return PurchaseOrdersRepository
+	}
 	db := db.DbManager()
-	return &PurchaseOrders{db}
+	PurchaseOrdersRepository = &PurchaseOrders{db}
+	return PurchaseOrdersRepository
 
 }
 
@@ -67,10 +74,10 @@ func (r *PurchaseOrders) Save(data *orders.PurchaseOrders) error {
 	return nil
 }
 
-func (r *PurchaseOrders) FindAll(page *pagination.Paginatevalue) (interface{}, error) {
+func (r *PurchaseOrders) FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.PurchaseOrders, error) {
 	var data []orders.PurchaseOrders
 
-	err := r.db.Model(&orders.PurchaseOrders{}).Scopes(helpers.Paginate(&orders.PurchaseOrders{}, page, r.db)).Preload(clause.Associations).Find(&data)
+	err := r.db.Model(&orders.PurchaseOrders{}).Preload(clause.Associations).Scopes(helpers.Paginate(&orders.PurchaseOrders{}, page, r.db)).Where(query).Find(&data)
 
 	if err.Error != nil {
 		return nil, err.Error
@@ -79,17 +86,17 @@ func (r *PurchaseOrders) FindAll(page *pagination.Paginatevalue) (interface{}, e
 	return data, nil
 }
 
-func (r *PurchaseOrders) FindOne(query map[string]interface{}) (interface{}, error) {
+func (r *PurchaseOrders) FindOne(query map[string]interface{}) (orders.PurchaseOrders, error) {
 	var data orders.PurchaseOrders
 
 	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
 
 	if err.RowsAffected == 0 {
-		return nil, errors.New("record not found")
+		return data, errors.New("record not found")
 	}
 
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
 
 	return data, nil
@@ -111,7 +118,7 @@ func (r *PurchaseOrders) Delete(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"].(uint),
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
@@ -189,10 +196,10 @@ func (r *PurchaseOrders) Search(query string) (interface{}, error) {
 	return data, nil
 }
 
-func (r *PurchaseOrders) GetPurchaseHistory(productId uint, page *pagination.Paginatevalue) (interface{}, error) {
+func (r *PurchaseOrders) GetPurchaseHistory(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.PurchaseOrders, error) {
 	var data []orders.PurchaseOrders
 	var ids = make([]uint, 0)
-
+	productId := query["product_id"]
 	page.Filters = fmt.Sprintf("[[\"product_id\", \"=\", %v]]", productId)
 	err := r.db.Model(&orders.PurchaseOrderLines{}).Select("po_id").Scopes(helpers.Paginate(&orders.PurchaseOrderLines{}, page, r.db)).Scan(&ids)
 

@@ -2,7 +2,6 @@ package mdm
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -42,11 +41,8 @@ type BasicInventory interface {
 	FindOneCentralizedInventory(query map[string]interface{}) (mdm.CentralizedBasicInventory, error)
 	FindOneDecentralizedInventory(query map[string]interface{}) (mdm.DecentralizedBasicInventory, error)
 
-	FindAllCentralizedInventory(query interface{}, p *pagination.Paginatevalue) ([]mdm.CentralizedBasicInventory, error)
-	FindAllDecentralizedInventory(query interface{}, p *pagination.Paginatevalue) ([]mdm.DecentralizedBasicInventory, error)
-
-	SearchCentralizedInventory(query string) ([]mdm.CentralizedBasicInventory, error)
-	SearchDecentralizedInventory(query string) ([]mdm.DecentralizedBasicInventory, error)
+	FindAllCentralizedInventory(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.CentralizedBasicInventory, error)
+	FindAllDecentralizedInventory(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.DecentralizedBasicInventory, error)
 
 	CentralizedInventoryTransactionSave(data *mdm.CentralizedInventoryTransactions) error
 }
@@ -55,9 +51,16 @@ type basicInventory struct {
 	db *gorm.DB
 }
 
+var basicInventoryRepository *basicInventory //singleton object
+
+// singleton function
 func NewBasicInventory() *basicInventory {
+	if basicInventoryRepository != nil {
+		return basicInventoryRepository
+	}
 	db := db.DbManager()
-	return &basicInventory{db}
+	basicInventoryRepository = &basicInventory{db}
+	return basicInventoryRepository
 
 }
 
@@ -82,59 +85,75 @@ func (r *basicInventory) UpdateCentralizedInventory(query map[string]interface{}
 		"commited_stock":  0,
 	}
 	if data.AvailableStock == 0 || data.StockExpected == 0 || data.CommitedStock == 0 {
-		err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(AvaliableQuantityPayload).Error
-		if err != nil {
-			return err
+		err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(AvaliableQuantityPayload)
+		if err.RowsAffected == 0 {
+			return errors.New("oops! record not found")
 		}
+		if err.Error != nil {
+			return err.Error
+		}
+		return nil
 	}
-	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *basicInventory) UpdateDecentralizedInventory(query map[string]interface{}, data *mdm.DecentralizedBasicInventory) error {
 
-	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *basicInventory) DeleteCentralizedInventory(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
-	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *basicInventory) DeleteDecentralizedInventory(query map[string]interface{}) error {
-	fmt.Println("===================")
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
-	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
+
 }
 func (r *basicInventory) FindOneCentralizedInventory(query map[string]interface{}) (mdm.CentralizedBasicInventory, error) {
 	var data mdm.CentralizedBasicInventory
 	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -145,14 +164,14 @@ func (r *basicInventory) FindOneDecentralizedInventory(query map[string]interfac
 	var data mdm.DecentralizedBasicInventory
 	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
 	return data, nil
 }
-func (r *basicInventory) FindAllCentralizedInventory(query interface{}, p *pagination.Paginatevalue) ([]mdm.CentralizedBasicInventory, error) {
+func (r *basicInventory) FindAllCentralizedInventory(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.CentralizedBasicInventory, error) {
 	var data []mdm.CentralizedBasicInventory
 	err := r.db.Preload(clause.Associations).Model(&mdm.CentralizedBasicInventory{}).Scopes(helpers.Paginate(&mdm.CentralizedBasicInventory{}, p, r.db)).Where(query).Find(&data).Error
 	if err != nil {
@@ -160,25 +179,9 @@ func (r *basicInventory) FindAllCentralizedInventory(query interface{}, p *pagin
 	}
 	return data, nil
 }
-func (r *basicInventory) FindAllDecentralizedInventory(query interface{}, p *pagination.Paginatevalue) ([]mdm.DecentralizedBasicInventory, error) {
+func (r *basicInventory) FindAllDecentralizedInventory(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.DecentralizedBasicInventory, error) {
 	var data []mdm.DecentralizedBasicInventory
 	err := r.db.Preload(clause.Associations).Model(&mdm.DecentralizedBasicInventory{}).Scopes(helpers.Paginate(&mdm.DecentralizedBasicInventory{}, p, r.db)).Where(query).Find(&data).Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *basicInventory) SearchCentralizedInventory(query string) ([]mdm.CentralizedBasicInventory, error) {
-	var data []mdm.CentralizedBasicInventory
-	err := r.db.Model(&mdm.CentralizedBasicInventory{}).Find(&data, "name ILIKE ? ", "%"+query+"%").Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *basicInventory) SearchDecentralizedInventory(query string) ([]mdm.DecentralizedBasicInventory, error) {
-	var data []mdm.DecentralizedBasicInventory
-	err := r.db.Model(&mdm.DecentralizedBasicInventory{}).Find(&data, "name ILIKE ? ", "%"+query+"%").Error
 	if err != nil {
 		return data, err
 	}

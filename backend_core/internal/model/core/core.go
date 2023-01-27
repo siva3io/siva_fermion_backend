@@ -24,7 +24,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 var Tables = []interface{}{
 	&Company{},
+	&OndcDetails{},
 	&CoreUsers{},
+	&CustomSolution{},
 	&Tags{},
 	&State{},
 	&Country{},
@@ -47,6 +49,7 @@ var Tables = []interface{}{
 	&ExternalMapper{},
 	&ViewSchema{},
 	&ChannelLookupCodes{},
+	&Notifications{},
 }
 
 type Model struct {
@@ -168,6 +171,8 @@ type Lookupcode struct {
 	LookupType   Lookuptype
 	LookupCode   string `gorm:"type:varchar(50); not null; uniqueIndex:idx_lookup_type_id_lookup_code;" json:"lookup_code"`
 	DisplayName  string `gorm:"type:varchar(50); not null;" json:"display_name"`
+	SourceCode   string `json:"source_code"`
+	Description  string `json:"description"`
 	IsEnabled    *bool  `json:"is_enabled" gorm:"default:true"`
 	gorm.Model
 }
@@ -267,15 +272,22 @@ type EunimartBaseSettings struct {
 
 type Company struct {
 	ID                       uint           `json:"id" gorm:"primarykey"`
-	Name                     string         `gorm:"type:text;unique; not null;" json:"company_name"`
-	Addresses                datatypes.JSON `gorm:"type:json;default:'[]'" json:"addresses"`
+	Name                     string         `gorm:"type:text;unique; not null;" json:"name"`
 	Phone                    string         `gorm:"varchar(50)" json:"phone"`
 	Email                    string         `gorm:"type:varchar(50);not null" json:"email"`
-	CompanyDetails           datatypes.JSON `gorm:"type:json;default:'{}';not null" json:"company_details"`
+	Website                  string         `json:"website" gorm:"type:varchar(100)"`
+	LanguagePreferred        string         `gorm:"varchar(50)" json:"language_preferred"`
+	TimeSlotsPreferred       string         `gorm:"varchar(50)" json:"time_slots_preferred"`
+	WorkingHoursStartTime    time.Time      `json:"working_hours_start_time" gorm:"type:time"`
+	WorkingHoursEndTime      time.Time      `json:"working_hours_end_time" gorm:"type:time"`
+	CompanyDetails           CompanyDetails `gorm:"embedded" json:"company_details"`
+	OndcDetailsId            *uint          `json:"ondc_details_id"`
+	OndcDetails              OndcDetails    `json:"ondc_details" gorm:"foreignkey:OndcDetailsId; references:ID"`
 	IsEnterpise              bool           `json:"is_enterpise"`
 	ParentId                 uint           `gorm:"type:integer" json:"parent_id"`
 	ChildIds                 pq.Int64Array  `json:"child_ids" gorm:"type:int[]"`
-	Type                     int            `json:"type"`
+	Type                     *uint          `json:"type"`
+	CompanyType              Lookupcode     `json:"company_type" gorm:"foreignkey:Type; references:ID"`
 	CompanyDefaults          datatypes.JSON `gorm:"type:json;default:'{}';not null" json:"company_defaults"`
 	PltPointIds              pq.Int32Array  `json:"plt_point_ids" gorm:"type:int[]"`
 	TotalPoints              int            `json:"total_points" gorm:"type:integer"`
@@ -290,21 +302,95 @@ type Company struct {
 	IsActive                 bool           `json:"is_active" gorm:"default:true"`
 	CreatedByID              *uint          `json:"created_by" gorm:"column:created_by"`
 	CreatedBy                *CoreUsers
-	UpdatedDate              time.Time `json:"updated_date" gorm:"autoCreateTime"`
+	UpdatedDate              time.Time `json:"updated_date" gorm:"autoUpdateTime"`
 	UpdatedByID              *uint     `json:"updated_by" gorm:"column:updated_by"`
 	UpdatedBy                *CoreUsers
-	CreatedDate              time.Time      `json:"created_date" gorm:"autoUpdateTime"`
-	OrganizationDetails      datatypes.JSON `json:"organization_details" gorm:"type:json;default:'{}'"`
+	CreatedDate              time.Time      `json:"created_date" gorm:"autoCreateTime"`
 	KycDocuments             datatypes.JSON `json:"kyc_documents" gorm:"type:json;default:'[]'"`
+	BankDetails              BankDetails    `gorm:"embedded" json:"bank_details"`
 	FilePreferenceID         *uint          `json:"file_preference_id"`
 	FilePreference           Lookupcode     `json:"file_preference" gorm:"foreignkey:FilePreferenceID; references:ID"`
 	InvoiceGenerationId      *uint          `json:"invoice_generation_id"`
 	InvoiceGeneration        Lookupcode     `json:"invoice_generation" gorm:"foreignkey:InvoiceGenerationId; references:ID"`
 	BusinessTypeID           *uint          `json:"business_type_id"`
 	BusinessType             Lookupcode     `json:"business_type" gorm:"foreignkey:BusinessTypeID; references:ID"`
+	ShippingPreferenceID     *uint          `json:"shipping_preference_id"`
+	ShippingPreference       Lookupcode     `json:"shipping_preference" gorm:"foreignkey:ShippingPreferenceID; references:ID"`
+	DeliveryTypeID           *uint          `json:"delivery_type_id"`
+	DeliveryType             Lookupcode     `json:"delivery_type" gorm:"foreignkey:DeliveryTypeID; references:ID"`
+	DeliveryPreferencesID    *uint          `json:"delivery_preferences_id"`
+	DeliveryPreferences      Lookupcode     `json:"delivery_preferences" gorm:"foreignkey:DeliveryPreferencesID; references:ID"`
+	OTPPreferenceID          *uint          `json:"otp_preference_id"`
+	OTPPreferences           Lookupcode     `json:"otp_preferences" gorm:"foreignkey:OTPPreferenceID; references:ID"`
+	NotificationPreferenceID *uint          `json:"notification_preference_id"`
+	NotificationPreferences  Lookupcode     `json:"notification_preferences" gorm:"foreignkey:NotificationPreferenceID; references:ID"`
+	AadhaarNumber            string         `json:"aadhaar_number" gorm:"type:text" `
+	GSTIN                    string         `json:"gstin" gorm:"type:text" `
+	PANNumber                string         `json:"pan_number" gorm:"type:text" `
+	RatingAverage            float64        `json:"rating_average"`
+	RatingCount              uint           `json:"rating_count"`
 	// PltPointId      *uint           `json:"plt_point_id"`
+
 }
 
+type BankDetails struct {
+	Bank_name                string         `json:"bank_name" gorm:"varchar"`
+	Holder_name              string         `json:"holder_name" gorm:"varchar"`
+	Account_number           string         `json:"account_number"`
+	Ifsc_code                string         `json:"ifsc_code" gorm:"varchar"`
+	Bank_statement           datatypes.JSON `json:"bank_statement" gorm:"json"`
+	State                    string         `json:"state"`
+	City                     string         `json:"city"`
+	PennyTransferVerfication bool           `json:"penny_transfer_verification"`
+	UPIAddress               string         `json:"upi_address"`
+	BranchName               string         `json:"branch_name"`
+	Cancelled_cheque         datatypes.JSON `json:"cancelled_cheque" gorm:"json"`
+}
+type CompanyDetails struct {
+	BusinessName               string         `gorm:"type:text" json:"business_name"`
+	BusinessAddress            string         `gorm:"type:text" json:"business_address"`
+	FinancialYearStartId       *uint          `json:"financial_year_start_id"`
+	FinancialYearStart         Lookupcode     `json:"financial_year_start" gorm:"foreignkey:FinancialYearStartId; references:ID"`
+	FinancialYearEndId         *uint          `json:"financial_year_end_id"`
+	FinancialYearEnd           Lookupcode     `json:"financial_year_end" gorm:"foreignkey:FinancialYearEndId; references:ID"`
+	AuthorisedSignatory        string         `gorm:"type:text" json:"authorised_signatory"`
+	AuthorisedSignatoryAddress string         `gorm:"type:text"  json:"authorised_signatory_address"`
+	StdCodeID                  *uint          `json:"std_code_id"`
+	StdCode                    Lookupcode     `json:"std_code" gorm:"foreignkey:StdCodeID; references:ID"`
+	StoreName                  string         `gorm:"type:text" json:"store_name"`
+	StoreDescription           string         `gorm:"type:text" json:"store_description"`
+	ServiceableAreas           datatypes.JSON `gorm:"type:json;default:'[]'" json:"serviceable_areas"`
+	DomainId                   *uint          `json:"domain_id"`
+	Domain                     Lookupcode     `json:"domain" gorm:"foreignkey:DomainId; references:ID"`
+	EstablishedOn              time.Time      `json:"established_on"`
+	StoreTimings               datatypes.JSON `gorm:"type:json;default:'[]'" json:"store_timings"`
+	SellerApps                 pq.StringArray `json:"seller_apps" gorm:"type:text[]"`
+	EnableEmailNotifications   bool           `json:"enable_email_notifications" gorm:"default:true"`
+	EnablePhoneNotifications   bool           `json:"enable_phone_notifications" gorm:"default:true"`
+}
+
+type OndcDetails struct {
+	ID                      *uint     `json:"id" gorm:"primarykey"`
+	SubscriberId            string    `gorm:"type:text" json:"subscriber_id"`
+	SubscriberURL           string    `gorm:"type:text" json:"subscriber_url"`
+	SigningPublicKey        string    `gorm:"type:text" json:"signing_public_key"`
+	SigningPrivateKey       string    `gorm:"type:text" json:"signing_private_key"`
+	EncryptionPrivateKey    string    `gorm:"type:text" json:"encryption_private_key"`
+	EncryptionPublicKey     string    `gorm:"type:text" json:"encryption_public_key"`
+	UniqueId                string    `gorm:"type:text" json:"unique_id"`
+	Type                    *uint     `json:"type"`
+	BuyerAppFinderFeeType   string    `gorm:"type:text" json:"buyer_app_finder_fee_type"`
+	BuyerAppFinderFeeAmount string    `gorm:"type:text" json:"buyer_app_finder_fee_amount"`
+	IsCollector             bool      `gorm:"type:boolean" json:"is_collector"`
+	CreatedDate             time.Time `json:"created_date" gorm:"autoCreateTime"`
+	UpdatedDate             time.Time `json:"updated_date" gorm:"autoUpdateTime"`
+}
+
+type CustomSolution struct {
+	CompanyId        *uint          `json:"company_id" gorm:"column:company_id"`
+	ContactPerson    string         `gorm:"type:text" json:"contact_person"`
+	RequiredFeatures pq.StringArray `gorm:"type:text[]" json:"required_features"`
+}
 type AppsEdit struct {
 	AppsId      int            `gorm:"type:varchar(100)" json:"apps_id"`
 	UserId      int            `gorm:"type:varchar(100)" json:"user_id"`
@@ -381,4 +467,38 @@ type ChannelLookupCodes struct {
 	ExternalCode string `json:"external_code" gorm:"type:varchar(20)"`
 	ExternalId   int    `json:"external_id" gorm:"type:integer"`
 	Model
+}
+
+type Notifications struct {
+	Title              string         `json:"title" gorm:"type:varchar(50)"`
+	Message            string         `json:"message" gorm:"type:varchar(250)"`
+	ImageOptions       datatypes.JSON `json:"image_options" gorm:"type:json;default:'[]'"`
+	SourceType         string         `json:"source_type" gorm:"type:varchar(50); not null;"`
+	SourceId           string         `json:"source_id" gorm:"type:varchar(20); not null;"`
+	NotificationTypeId uint           `json:"notification_type_id"`
+	NotificationType   Lookupcode     `json:"notification_type" gorm:"foreignkey:NotificationTypeId; references:ID"`
+
+	// NotificationType    string         `json:"channel" gorm:"type:varchar(20)"`
+	IsRead              bool          `json:"is_read" gorm:"default:false"`
+	BroadcastScope      pq.Int64Array `json:"broadcast_scope" gorm:"type:int[]"`
+	NotificationEventId uint          `json:"notification_event_id"`
+	NotificationEvent   Lookupcode    `json:"notification_event" gorm:"foreignkey:NotificationEventId"`
+	Platform            uint          `json:"platform"`
+	Archive             bool          `json:"archive" gorm:"default:false"`
+
+	ExpiresAt time.Time `json:"expires_at" gorm:"autoUpdateTime"`
+	Model
+}
+
+type MetaData struct {
+	RequestId          string                 `json:"request_id"`
+	Host               string                 `json:"host"`
+	Scheme             string                 `json:"scheme"`
+	TokenUserId        uint                   `json:"token_user_id"`
+	AccessTemplateId   uint                   `json:"access_template_id"`
+	CompanyId          uint                   `json:"company_id"`
+	Encryption         bool                   `json:"encryption"`
+	Query              map[string]interface{} `json:"query"`
+	ModuleAccessAction string                 `json:"module_access_action"`
+	AdditionalFields   map[string]interface{} `json:"additional_fields"`
 }

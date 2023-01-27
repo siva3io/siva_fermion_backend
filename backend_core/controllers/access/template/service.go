@@ -40,8 +40,15 @@ type service struct {
 	moduleRepository   access_repo.Module
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{access_repo.NewTemplate(), access_repo.NewModule()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{access_repo.NewTemplate(), access_repo.NewModule()}
+	return newServiceObj
 
 }
 

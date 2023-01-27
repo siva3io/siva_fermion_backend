@@ -25,10 +25,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type (
 	NDRRequest struct {
 		model_core.Model
-		ShippingOrderId     uint       `json:"shipping_order_id"`
-		Amount              float64    `json:"amount"`
-		DeliveryAttemptLeft uint       `json:"delivery_attempt_left"`
-		NDRLines            []NDRLines `json:"ndr_lines"`
+		ShippingOrderId         uint       `json:"shipping_order_id"`
+		Amount                  float64    `json:"amount"`
+		DeliveryAttemptLeft     uint       `json:"delivery_attempt_left"`
+		NDRLines                []NDRLines `json:"ndr_lines"`
+		LastDeliveryAttemptDate time.Time  `json:"last_delivery_attempt_date"`
+		FailureReason           string     `json:"failure_reason"`
 	}
 
 	NDRLines struct {

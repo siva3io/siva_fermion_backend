@@ -5,8 +5,12 @@ import (
 
 	"fermion/backend_core/db"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/mdm"
+	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/pkg/util/helpers"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 /*
@@ -27,15 +31,23 @@ type Accounting interface {
 	CreateAccounting(data *accounting.UserAccountingLink) error
 	UpdateAccounting(query map[string]interface{}, data *accounting.UserAccountingLink) error
 	FindOne(query map[string]interface{}) (accounting.UserAccountingLink, error)
+	FindAllAccountingink(query interface{}, p *pagination.Paginatevalue) ([]accounting.UserAccountingLink, error)
 }
 
 type AccountingRepo struct {
 	Db *gorm.DB
 }
 
+var AccountingRepository *AccountingRepo //singleton object
+
+// singleton function
 func NewAccountingRepo() *AccountingRepo {
+	if AccountingRepository != nil {
+		return AccountingRepository
+	}
 	db := db.DbManager()
-	return &AccountingRepo{db}
+	AccountingRepository = &AccountingRepo{db}
+	return AccountingRepository
 }
 
 func (r *AccountingRepo) CreateAccounting(data *accounting.UserAccountingLink) error {
@@ -64,6 +76,15 @@ func (r *AccountingRepo) FindOne(query map[string]interface{}) (accounting.UserA
 	}
 	if err.Error != nil {
 		return data, err.Error
+	}
+	return data, nil
+}
+
+func (r *AccountingRepo) FindAllAccountingink(query interface{}, p *pagination.Paginatevalue) ([]accounting.UserAccountingLink, error) {
+	var data []accounting.UserAccountingLink
+	err := r.Db.Preload(clause.Associations).Model(&accounting.UserAccountingLink{}).Scopes(helpers.Paginate(&mdm.Partner{}, p, r.Db)).Where(query).Find(&data).Error
+	if err != nil {
+		return data, err
 	}
 	return data, nil
 }

@@ -55,9 +55,16 @@ type serviceBase struct {
 	ordersRepository orders.OrdersBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	ordersRepository := orders.NewOrdersBase()
-	return &serviceBase{ordersRepository}
+	newServiceObj = &serviceBase{ordersRepository}
+	return newServiceObj
 }
 
 func (s *serviceBase) FavouriteInternalTransfers(q map[string]interface{}) error {

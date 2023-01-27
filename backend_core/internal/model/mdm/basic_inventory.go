@@ -43,15 +43,15 @@ type DecentralizedBasicInventory struct {
 	ProductDetails     datatypes.JSON `json:"product_details"`
 	PhysicalLocationId uint           `json:"physical_location_id"`
 	PhysicalLocation   datatypes.JSON `json:"physical_location" gorm:"type:json; default:'{}'"`
-	Quantity           int64          `json:"quantity"`
-	OnHandQuantity     int64          `json:"on_hand_quantity"`
-	PlannedInQuantity  int64          `json:"planned_in_quantity"`
-	PlannedOutQuantity int64          `json:"planned_out_quantity"`
+	Quantity           int64          `json:"quantity" gorm:"default:0"`
+	OnHandQuantity     int64          `json:"on_hand_quantity" gorm:"default:0"`
+	PlannedInQuantity  int64          `json:"planned_in_quantity" gorm:"default:0"`
+	PlannedOutQuantity int64          `json:"planned_out_quantity" gorm:"default:0"`
 	BinTag             string         `json:"bin_tag"`
-	AvailableStock     int64          `json:"available_stock"`
-	StockExpected      int64          `json:"stock_expected"`
-	CommitedStock      int64          `json:"commited_stock"`
-	NoOfUnits          int64          `json:"no_of_units"`
+	AvailableStock     int64          `json:"available_stock" gorm:"default:0"`
+	StockExpected      int64          `json:"stock_expected" gorm:"default:0"`
+	CommitedStock      int64          `json:"commited_stock" gorm:"default:0"`
+	NoOfUnits          int64          `json:"no_of_units" gorm:"default:0"`
 }
 
 type CentralizedInventoryTransactions struct {

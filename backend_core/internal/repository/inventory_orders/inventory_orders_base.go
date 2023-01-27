@@ -42,9 +42,16 @@ type inventoryOrdersBase struct {
 	db *gorm.DB
 }
 
+var inventoryOrdersBaseRepository *inventoryOrdersBase //singleton object
+
+// singleton function
 func NewInventoryOrdersBase() *inventoryOrdersBase {
-	database := db.DbManager()
-	return &inventoryOrdersBase{database}
+	if inventoryOrdersBaseRepository != nil {
+		return inventoryOrdersBaseRepository
+	}
+	db := db.DbManager()
+	inventoryOrdersBaseRepository = &inventoryOrdersBase{db}
+	return inventoryOrdersBaseRepository
 
 }
 func (r *inventoryOrdersBase) GetInvAdjFavourites(data pq.Int64Array, p *pagination.Paginatevalue) ([]inventory_orders.InventoryAdjustments, error) {

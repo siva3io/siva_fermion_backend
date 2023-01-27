@@ -23,8 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.ListPurchaseReturns, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewPurchaseReturns, cmiddleware.Authorization)
-	g.POST("/create", h.CreatePurchaseReturns, cmiddleware.Authorization, PurchaseReturnsCreateValidate)
-	g.POST("/:id/update", h.UpdatePurchaseReturns, cmiddleware.Authorization, PurchaseReturnsUpdateValidate)
+	g.POST("/create", h.CreatePurchaseReturnsEvent, cmiddleware.Authorization, PurchaseReturnsCreateValidate)
+	g.POST("/:id/update", h.UpdatePurchaseReturnsEvent, cmiddleware.Authorization, PurchaseReturnsUpdateValidate)
 	g.DELETE("/:id/delete", h.DeletePurchaseReturns, cmiddleware.Authorization)
 	g.DELETE("/return_lines/:id/delete", h.DeletePurchaseReturnLines, cmiddleware.Authorization)
 	g.GET("/search", h.SearchPurchaseReturns, cmiddleware.Authorization)

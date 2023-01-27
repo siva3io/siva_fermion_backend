@@ -42,9 +42,16 @@ type marketplace struct {
 	db *gorm.DB
 }
 
+var marketplaceRepository *marketplace //singleton object
+
+// singleton function
 func NewMarketplace() *marketplace {
+	if marketplaceRepository != nil {
+		return marketplaceRepository
+	}
 	db := db.DbManager()
-	return &marketplace{db}
+	marketplaceRepository = &marketplace{db}
+	return marketplaceRepository
 }
 
 func (r *marketplace) CreateMarketplace(data *omnichannel.User_Marketplace_Registration) error {

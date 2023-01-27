@@ -39,9 +39,16 @@ type serviceBase struct {
 	returnsRepository returns_repo.ReturnsBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	returnsRepository := returns_repo.NewReturnsBase()
-	return &serviceBase{returnsRepository}
+	newServiceObj = &serviceBase{returnsRepository}
+	return newServiceObj
 }
 
 func (s *serviceBase) FavouriteSalesReturns(q map[string]interface{}) error {

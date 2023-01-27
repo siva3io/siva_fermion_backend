@@ -1,8 +1,6 @@
 package shipping_partners
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -54,11 +52,12 @@ func ShippingPartnersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
+
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("invalid payload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

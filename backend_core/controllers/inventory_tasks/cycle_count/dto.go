@@ -37,6 +37,7 @@ type SearchQuery struct {
 type (
 	CycleCountRequest struct {
 		CycleCountNumber          string                   `json:"cycle_count_number"`
+		CycleCountDate            time.Time                `json:"cycle_count_date"`
 		WarehouseID               uint                     `json:"warehouse_id"`
 		PartnerID                 uint                     `json:"partner_id"`
 		StatusID                  uint                     `json:"status_id"`
@@ -158,6 +159,7 @@ type (
 // Get all Cycle Count response
 type (
 	CycleCountGetAll struct {
+		model_core.Model
 		CycleCountNumber          string                                `json:"cycle_count_number"`
 		WarehouseID               uint                                  `json:"warehouse_id"`
 		Warehouse                 shared_pricing_and_location.Locations `json:"warehouse"`

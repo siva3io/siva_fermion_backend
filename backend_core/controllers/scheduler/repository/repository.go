@@ -7,6 +7,8 @@ import (
 
 	model "fermion/backend_core/controllers/scheduler/model"
 	"fermion/backend_core/db"
+	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/pkg/util/helpers"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -28,10 +30,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Scheduler interface {
 	Save(data model.SchedulerJob) (model.SchedulerJob, error)
-	FindAll(query map[string]interface{}) ([]model.SchedulerJob, error)
+	FindAll(page *pagination.Paginatevalue, query map[string]interface{}) ([]model.SchedulerJob, error)
 	SaveSchedulerLog(data model.SchedulerLog) (model.SchedulerLog, error)
 	SaveSchedulerLogs(data []model.SchedulerLog) ([]model.SchedulerLog, error)
-	FindAllSchedulerLog(query map[string]interface{}) ([]model.SchedulerLog, error)
+	FindAllSchedulerLog(page *pagination.Paginatevalue, query map[string]interface{}) ([]model.SchedulerLog, error)
 
 	FindOneSchedulerJob(query map[string]interface{}) (model.SchedulerJob, error)
 	UpdateSchedulerLog(query map[string]interface{}, data model.SchedulerLog) error
@@ -61,11 +63,18 @@ func (r *scheduler) Save(data model.SchedulerJob) (model.SchedulerJob, error) {
 	return data, nil
 }
 
-func (r *scheduler) FindAll(query map[string]interface{}) ([]model.SchedulerJob, error) {
+func (r *scheduler) FindAll(page *pagination.Paginatevalue, query map[string]interface{}) ([]model.SchedulerJob, error) {
 	var data []model.SchedulerJob
 
-	err := r.db.Model(&model.SchedulerJob{}).Where(query).Find(&data)
+	if page == nil || page.Per_page == -1 {
+		err := r.db.Model(&model.SchedulerJob{}).Where(query).Find(&data)
+		if err.Error != nil {
+			return nil, err.Error
+		}
+		return data, nil
+	}
 
+	err := r.db.Model(&model.SchedulerJob{}).Scopes(helpers.Paginate(&model.SchedulerJob{}, page, r.db)).Where(query).Find(&data)
 	if err.Error != nil {
 		return nil, err.Error
 	}
@@ -93,19 +102,26 @@ func (r *scheduler) SaveSchedulerLogs(data []model.SchedulerLog) ([]model.Schedu
 	return data, nil
 }
 
-func (r *scheduler) FindAllSchedulerLog(query map[string]interface{}) ([]model.SchedulerLog, error) {
+func (r *scheduler) FindAllSchedulerLog(page *pagination.Paginatevalue, query map[string]interface{}) ([]model.SchedulerLog, error) {
 	var data []model.SchedulerLog
 
-	if query["state"] != nil && query["start_time"] != nil {
-		err := r.db.Model(&model.SchedulerLog{}).Preload(clause.Associations).Where("state = ? AND start_time < ?", query["state"], query["start_time"]).Find(&data)
+	if page == nil || page.Per_page == -1 {
+		if query["state"] != nil && query["start_time"] != nil {
+			err := r.db.Model(&model.SchedulerLog{}).Preload(clause.Associations).Where("state = ? AND start_time < ?", query["state"], query["start_time"]).Find(&data)
+			if err.Error != nil {
+				return nil, err.Error
+			}
+			return data, nil
+		}
+
+		err := r.db.Model(&model.SchedulerLog{}).Preload(clause.Associations).Where(query).Find(&data)
+
 		if err.Error != nil {
 			return nil, err.Error
 		}
 		return data, nil
 	}
-
-	err := r.db.Model(&model.SchedulerLog{}).Preload(clause.Associations).Where(query).Find(&data)
-
+	err := r.db.Model(&model.SchedulerLog{}).Scopes(helpers.Paginate(&model.SchedulerLog{}, page, r.db)).Preload(clause.Associations).Where(query).Find(&data)
 	if err.Error != nil {
 		return nil, err.Error
 	}

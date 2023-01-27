@@ -1,0 +1,721 @@
+{"//": "Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)",
+"//": "All rights reserved.",
+"//": "This program is free software: you can redistribute it and/or modify",
+"//": "it under the terms of the GNU Lesser General Public License v3.0 as published by",
+"//": "the Free Software Foundation, either version 3 of the License, or",
+"//": "(at your option) any later version.",
+"//": "This program is distributed in the hope that it will be useful,",
+"//": "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+"//": "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the",
+"//": "GNU Lesser General Public License v3.0 for more details.",
+"//": "You should have received a copy of the GNU Lesser General Public License v3.0",
+"//": "along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.",
+    "name": "mapper_template",
+    "description": "mapper_template",
+    "fields": [
+        {
+            "id": "obj_context",
+            "scope": "local",
+            "input": "context",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_transaction_id"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_transaction_id",
+            "scope": "local",
+            "input": "transaction_id",
+            "input_type": "keyvalue",
+            "output": "reference_number",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_currency_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "currency_id",
+            "output_type": "keyvalue",
+            "default_value": 1,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_message",
+            "scope": "local",
+            "input": "message",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_order"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_order",
+            "scope": "local",
+            "input": "order",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_billing",
+                "obj_quote",
+                "arr_items",
+                "obj_billing_address",
+                "obj_shipping_address"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_billing",
+            "scope": "local",
+            "input": "billing",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_billing_name"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_billing_name",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "customer_name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_channel_name",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "channel_name",
+            "output_type": "keyvalue",
+            "default_value": "ONDC",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_invoiced_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "invoiced_id",
+            "output_type": "keyvalue",
+            "default_value": 115,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_payment_received_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "payment_received_id",
+            "output_type": "keyvalue",
+            "default_value": 112,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_payment_terms_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "payment_terms_id",
+            "output_type": "keyvalue",
+            "default_value": 47,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_quote",
+            "scope": "local",
+            "input": "quote",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_price"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_price",
+            "scope": "local",
+            "input": "price",
+            "input_type": "object",
+            "output": "so_payment_details",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_price_value"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_price_value",
+            "scope": "local",
+            "input": "value",
+            "input_type": "keyvalue",
+            "output": "total_amount",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "StringtoFloat",
+                    "params": [
+                        {
+                            "key": "total_amount",
+                            "type": "variable",
+                            "value": "total_amount"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_status_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "status_id",
+            "output_type": "keyvalue",
+            "default_value": 287,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "arr_items",
+            "scope": "local",
+            "input": "items",
+            "input_type": "array",
+            "output": "sales_order_lines",
+            "output_type": "array",
+            "default_value": "",
+            "fields": [
+                "obj_items"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_items",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_item_id",
+                "field_item_template_id",
+                "obj_quantity",
+                "field_serial_number"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_item_id",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "product_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "ExecuteGetApiCall",
+                    "params": [
+                        {
+                            "key": "task_object",
+                            "type": "static",
+                            "value": {
+                                "endpoint": "{host}/api/v1/products/variant",
+                                "link": "/files/apis/eunimart.mapper_api_call.json",
+                                "query_params": [
+                                    {
+                                        "key": "filters",
+                                        "type": "static",
+                                        "value": [
+                                            {
+                                                "column": "sku_id",
+                                                "operator": "=",
+                                                "type": "variable",
+                                                "value": "product_id"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ExecuteGetApiCall"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "data"
+                        }
+                    ]
+                },
+                {
+                    "name": "ReturnIndexObjectFromArray",
+                    "params": [
+                        {
+                            "key": "response_array",
+                            "type": "variable",
+                            "value": "ParseJsonPathFromObject"
+                        },
+                        {
+                            "key": "index",
+                            "type": "static",
+                            "value": "0"
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ReturnIndexObjectFromArray"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "id"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_item_template_id",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "product_template_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "ExecuteGetApiCall",
+                    "params": [
+                        {
+                            "key": "task_object",
+                            "type": "static",
+                            "value": {
+                                "endpoint": "{host}/api/v1/products",
+                                "link": "/files/apis/eunimart.mapper_api_call.json",
+                                "query_params": [
+                                    {
+                                        "key": "filters",
+                                        "type": "static",
+                                        "value": [
+                                            {
+                                                "column": "sku_code",
+                                                "operator": "=",
+                                                "type": "variable",
+                                                "value": "product_template_id"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ExecuteGetApiCall"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "data"
+                        }
+                    ]
+                },
+                {
+                    "name": "ReturnIndexObjectFromArray",
+                    "params": [
+                        {
+                            "key": "response_array",
+                            "type": "variable",
+                            "value": "ParseJsonPathFromObject"
+                        },
+                        {
+                            "key": "index",
+                            "type": "static",
+                            "value": "0"
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ReturnIndexObjectFromArray"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "id"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_ondc_context",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "ondc_context",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_quantity",
+            "scope": "local",
+            "input": "quantity",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_count"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_count",
+            "scope": "local",
+            "input": "count",
+            "input_type": "keyvalue",
+            "output": "quantity",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_serial_number",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "serial_number",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_billing_address",
+            "scope": "local",
+            "input": "billing",
+            "input_type": "object",
+            "output": "customer_billing_address",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_address",
+                "field_contact_person_number",
+                "field_contact_person_name"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_shipping_address",
+            "scope": "local",
+            "input": "fulfillments[0]",
+            "input_type": "array",
+            "output": "customer_shipping_address",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_shipping_address_address"                
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        
+        {
+            "id": "obj_shipping_address_address",
+            "scope": "local",
+            "input": "end",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["obj_ship_address","obj_cus_phone"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_cus_phone",
+            "scope": "local",
+            "input": "contact",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_contact_person_number"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_contact_person_number",
+            "scope": "local",
+            "input": "phone",
+            "input_type": "keyvalue",
+            "output": "contact_person_number",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_ship_address",
+            "scope": "local",
+            "input": "location",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["obj_address"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_address",
+            "scope": "local",
+            "input": "address",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_city",
+                "field_state",
+                "field_country",
+                "field_pincode",
+                "field_landmark",
+                "field_location_name",
+                "field_address_line_1",
+                "field_address_line_2",
+                "field_address_line_3",
+                "field_contact_person_name"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_city",
+            "scope": "local",
+            "input": "city",
+            "input_type": "keyvalue",
+            "output": "city",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_state",
+            "scope": "local",
+            "input": "state",
+            "input_type": "keyvalue",
+            "output": "state",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_country",
+            "scope": "local",
+            "input": "country",
+            "input_type": "keyvalue",
+            "output": "country",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_pincode",
+            "scope": "local",
+            "input": "area_code",
+            "input_type": "keyvalue",
+            "output": "pin_code",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_landmark",
+            "scope": "local",
+            "input": "building",
+            "input_type": "keyvalue",
+            "output": "landmark",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_location_name",
+            "scope": "local",
+            "input": "city",
+            "input_type": "keyvalue",
+            "output": "location_name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_address_line_1",
+            "scope": "local",
+            "input": "door",
+            "input_type": "keyvalue",
+            "output": "address_line_1",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_address_line_2",
+            "scope": "local",
+            "input": "street",
+            "input_type": "keyvalue",
+            "output": "address_line_2",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_address_line_3",
+            "scope": "local",
+            "input": "building",
+            "input_type": "keyvalue",
+            "output": "address_line_3",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_contact_person_name",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "contact_person_name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_seller_np_type",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "seller_np_type_id",
+            "output_type": "keyvalue",
+            "default_value": 717,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_delivery_type",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "delivery_type_id",
+            "output_type": "keyvalue",
+            "default_value": 755,
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        }
+    ]
+}

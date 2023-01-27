@@ -1,14 +1,16 @@
 package pricing
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	mdm_base "fermion/backend_core/controllers/mdm/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm/shared_pricing_and_location"
 	"fermion/backend_core/internal/model/pagination"
+	mdm_repo "fermion/backend_core/internal/repository/mdm"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -32,12 +34,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type handler struct {
 	service      Service
 	base_service mdm_base.ServiceBase
+	pricing_repo mdm_repo.Pricing
 }
 
+var PricingHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
-	service := NewService()
-	base_service := mdm_base.NewServiceBase()
-	return &handler{service, base_service}
+	if PricingHandler != nil {
+		return PricingHandler
+	}
+	PricingHandler = &handler{
+		NewService(),
+		mdm_base.NewServiceBase(),
+		mdm_repo.NewPricing(),
+	}
+	return PricingHandler
 }
 
 // CreatePricing godoc
@@ -57,50 +69,91 @@ func NewHandler() *handler {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing/create [post]
-func (h *handler) CreatePricing(c echo.Context) (err error) {
+func (h *handler) CreatePricingEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	var reqPayload map[string]interface{}
-	json.NewDecoder(c.Request().Body).Decode(&reqPayload)
-	reqBytes, _ := json.Marshal(reqPayload)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("pricing"),
+	}
+	eda.Produce(eda.CREATE_PRICING, request_payload)
+	return res.RespSuccess(c, "Pricing Creation Inprogress", edaMetaData.RequestId)
+}
 
-	pricing := c.Get("pricing").(*shared_pricing_and_location.Pricing)
-	json.Unmarshal(reqBytes, pricing)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	t := helpers.ConvertStringToUint(token_id)
-	pricing.CreatedByID = t
-	if pricing.Price_list_id == 1 {
-		sales := c.Get("sales").(*shared_pricing_and_location.SalesPriceList)
-		json.Unmarshal(reqBytes, sales)
-		sales.CreatedByID = t
-		err = h.service.CreateSalesPricing(pricing, sales, token_id, access_template_id)
-		if err != nil {
-			return res.RespErr(c, err)
-		}
-		return res.RespSuccess(c, "created successfully", map[string]interface{}{"created_sales_id": pricing.ID})
-	} else if pricing.Price_list_id == 2 {
-		purchase := c.Get("purchase").(*shared_pricing_and_location.PurchasePriceList)
-		json.Unmarshal(reqBytes, purchase)
-		purchase.CreatedByID = t
-		err = h.service.CreatePurchasePricing(pricing, purchase, token_id, access_template_id)
-		if err != nil {
-			return res.RespErr(c, err)
-		}
-		return res.RespSuccess(c, "created successfully", map[string]interface{}{"created_purchase_id": pricing.ID})
-	} else if pricing.Price_list_id == 3 {
-		transfer := c.Get("transfer").(*shared_pricing_and_location.TransferPriceList)
-		json.Unmarshal(reqBytes, transfer)
-		transfer.CreatedByID = t
-		err = h.service.CreateTransferPricing(pricing, transfer, token_id, access_template_id)
-		if err != nil {
-			return res.RespErr(c, err)
-		}
-		return res.RespSuccess(c, "created successfully", map[string]interface{}{"created_transfer_id": pricing.ID})
-	} else {
-		return res.RespErr(c, fmt.Errorf("invalid price list id"))
+func (h *handler) CreatePricing(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	pricing := new(shared_pricing_and_location.Pricing)
+	helpers.JsonMarshaller(data, pricing)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	edaMetaData.Query = map[string]interface{}{
+		"price_list_name": pricing.PriceListName,
+		"company_id":      edaMetaData.CompanyId,
+	}
+	_, err := h.service.FindPricing(edaMetaData)
+	if err == nil {
+		responseMessage.ErrorMessage = fmt.Errorf("price list already exists")
+		// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+		return
 	}
 
-	// return res.RespSuccess(c, "created successfully", map[string]interface{}{"created_id": pricing.ID})
+	if pricing.PriceListId == 1 {
+		salesPriceList := new(shared_pricing_and_location.SalesPriceList)
+		helpers.JsonMarshaller(data, salesPriceList)
+		err := h.service.CreateSalesPricing(edaMetaData, salesPriceList)
+		if err != nil {
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+			return
+		}
+		pricing.SalesPriceListId = &salesPriceList.ID
+
+	} else if pricing.PriceListId == 2 {
+		purchasePriceList := new(shared_pricing_and_location.PurchasePriceList)
+		helpers.JsonMarshaller(data, purchasePriceList)
+		err := h.service.CreatePurchasePricing(edaMetaData, purchasePriceList)
+		if err != nil {
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+			return
+		}
+		pricing.PurchasePriceListId = &purchasePriceList.ID
+
+	} else if pricing.PriceListId == 3 {
+		transferPriceList := new(shared_pricing_and_location.TransferPriceList)
+		helpers.JsonMarshaller(data, transferPriceList)
+		err := h.service.CreateTransferPricing(edaMetaData, transferPriceList)
+		if err != nil {
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+			return
+		}
+		pricing.TransferPriceListId = &transferPriceList.ID
+	} else {
+		responseMessage.ErrorMessage = errors.New("oops! invalid price_list_id")
+		// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+		return
+	}
+	err = h.service.CreatePricing(edaMetaData, pricing)
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
+		return
+	}
+
+	// updating cache
+	UpdatePricingInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"created_id": pricing.ID,
+	}
+	// eda.Produce(eda.CREATE_PRICING_ACK, responseMessage)
 }
 
 // UpdatePriceList godoc
@@ -121,20 +174,44 @@ func (h *handler) CreatePricing(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing/{id}/edit [post]
-func (h *handler) UpdatePricing(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var reqPayload map[string]interface{}
-	json.NewDecoder(c.Request().Body).Decode(&reqPayload)
-	reqBytes, _ := json.Marshal(reqPayload)
+func (h *handler) UpdatePricingEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
 
-	err = h.service.UpdatePricing(uint(id), reqBytes, c, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         pricingId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Update Pricing successfully done", map[string]interface{}{"updated_pricing_id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("pricing"),
+	}
+
+	eda.Produce(eda.UPDATE_PRICING, request_payload)
+	return res.RespSuccess(c, "Update Pricing Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdatePricing(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	err := h.service.UpdatePricing(edaMetaData, data)
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRICING_ACK, responseMessage)
+		return
+	}
+
+	//update cache
+	UpdatePricingInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{"updated_id": edaMetaData.Query["id"]}
+	// eda.Produce(eda.UPDATE_PRICING_ACK, responseMessage)
 }
 
 // FindPriceList godoc
@@ -152,15 +229,31 @@ func (h *handler) UpdatePricing(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/{id}/pricing [get]
 func (h *handler) FindPricing(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.PricingByid(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": pricingId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.FindPricing(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "data Retrieved successfully", result)
+
+	var response PricingDTO
+	helpers.JsonMarshaller(result, &response)
+	if response.Price_list_id == 1 {
+		response.PurchasePriceList = nil
+		response.TransferPriceList = nil
+	} else if response.Price_list_id == 2 {
+		response.SalesPriceList = nil
+		response.TransferPriceList = nil
+	} else {
+		response.SalesPriceList = nil
+		response.PurchasePriceList = nil
+	}
+
+	return res.RespSuccess(c, "data Retrieved successfully", response)
 }
 
 // PricingList godoc
@@ -181,15 +274,33 @@ func (h *handler) FindPricing(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing [get]
 func (h *handler) PricingList(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.ListPricing(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PricingDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPricingFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.ListPricing(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "data Retrieved successfully", response, p)
 }
 
 // PricingListDropdown godoc
@@ -210,15 +321,33 @@ func (h *handler) PricingList(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing/dropdown [get]
 func (h *handler) PricingListDropdown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.ListPricing(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PricingDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPricingFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.ListPricing(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "data Retrieved successfully", response, p)
 }
 
 // DeletePricing godoc
@@ -236,16 +365,22 @@ func (h *handler) PricingListDropdown(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing/{id}/delete [delete]
 func (h *handler) DeletePricing(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeletePricing(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         pricingId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeletePricing(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Delete Pricing successfully done", map[string]interface{}{"deleted_pricing_id": id})
+
+	// updating cache
+	UpdatePricingInCache(metaData)
+
+	return res.RespSuccess(c, "Delete Pricing successfully done", map[string]interface{}{"deleted_id": pricingId})
 }
 
 // DeletePricingLineItems godoc
@@ -264,46 +399,23 @@ func (h *handler) DeletePricing(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pricing/{id}/delete_line_items [delete]
 func (h *handler) DeleteLineItems(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	prod_id := c.QueryParam("product_id")
-	product_id, _ := strconv.Atoi(prod_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	err = h.service.DeleteLineItems(uint(id), uint(product_id), token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
+	productVariantId := c.QueryParam("product_id")
+	metaData.Query = map[string]interface{}{
+		"id":         pricingId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "line items successfully Deleted", map[string]interface{}{"pricing_id": id, "product_id": product_id})
-}
+	metaData.AdditionalFields = map[string]interface{}{
+		"product_variant_id": productVariantId,
+	}
 
-// PricingList godoc
-// @Summary      get all Purchase Price List and filter it by search query
-// @Description  a get all Purchase Price List and filter it by search query
-// @Tags         Pricing
-// @Accept       json
-// @Produce      json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @Param        filters				  query     string false "filters"
-// @Param        per_page 			 query     int false "per_page"
-// @Param        page_no              query     int false "page_no"
-// @Param        sort				  query     string false "sort"
-// @Success      200  {object}  PricingListResponse
-// @Failure      400  {object}  res.ErrorResponse
-// @Failure      404  {object}  res.ErrorResponse
-// @Failure      500  {object}  res.ErrorResponse
-// @Router       /api/v1/pricing [get]
-func (h *handler) PurchasePricingList(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.ListPurchasePricing(p, token_id, access_template_id)
+	err = h.service.DeleteLineItems(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data Retrieved successfully", result, p)
+	return res.RespSuccess(c, "line items successfully Deleted", map[string]interface{}{"pricing_id": pricingId, "product_id": productVariantId})
 }
 
 // FavouritePricings godoc
@@ -321,24 +433,25 @@ func (h *handler) PurchasePricingList(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/pricing/{id}/favourite [post]
 func (h *handler) FavouritePricings(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         pricingId,
+		"company_id": metaData.CompanyId,
 	}
-	_, er := h.service.PricingByid(uint(ID), token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
+	_, err = h.service.FindPricing(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+	query := map[string]interface{}{
+		"ID":      pricingId,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.FavouritePricings(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Pricing is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Pricing is Marked as Favourite", map[string]string{"record_id": pricingId})
 }
 
 // UnFavouritePricings godoc
@@ -356,19 +469,18 @@ func (h *handler) FavouritePricings(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/pricing/{id}/unfavourite [post]
 func (h *handler) UnFavouritePricings(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pricingId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      pricingId,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.UnFavouritePricings(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Pricing is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Pricing is Unmarked as Favourite", map[string]string{"record_id": pricingId})
 }
 
 // GetFavouritePricing godoc
@@ -389,11 +501,11 @@ func (h *handler) UnFavouritePricings(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/pricing/favourite_list [get]
 func (h *handler) FavouritePricingView(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
-	data, er := h.base_service.GetArrPricing(user_id)
+	tokenUserId := int(metaData.TokenUserId)
+	data, er := h.base_service.GetArrPricing(tokenUserId)
 	if er != nil {
 		return errors.New("favourite list not found for the specified user")
 	}
@@ -404,42 +516,43 @@ func (h *handler) FavouritePricingView(c echo.Context) (err error) {
 	return res.RespSuccessInfo(c, "Favourite Pricing list Retrieved Successfully", result, p)
 }
 
-// -----------sales Price line Items-------------------------
-func (h *handler) SalesPriceLineItems(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.ListSalesPiceLineItems(p, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccessInfo(c, "data Retrieved successfully", result, p)
-}
-
 // -------------------------Channel API's ----------------------------------------------------
-func (h *handler) ChannelSalesPriceUpsert(c echo.Context) (err error) {
+func (h *handler) ChannelSalesPriceUpsertEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 	var arrayData []interface{}
 	var objectData interface{}
-
 	var data interface{}
 
 	c.Bind(&data)
-
-	jsonData, _ := json.Marshal(data)
-
-	err = json.Unmarshal(jsonData, &arrayData)
+	err = helpers.JsonMarshaller(data, &arrayData)
 	if err != nil {
-		_ = json.Unmarshal(jsonData, &objectData)
+		helpers.JsonMarshaller(data, &objectData)
 		arrayData = append(arrayData, objectData)
 	}
 
-	TokenUserID := c.Get("TokenUserID").(string)
-	msg, err := h.service.ChannelSalesPriceUpsert(arrayData, TokenUserID)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      arrayData,
 	}
-	fmt.Println("upsert api response-->>>", msg)
+	eda.Produce(eda.UPSERT_SALES_PRICE_LIST, request_payload)
+	return res.RespSuccess(c, "Multiple Records Upsert Inprogress", edaMetaData.RequestId)
+}
+func (h *handler) ChannelSalesPriceUpsert(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
 
-	return res.RespSuccess(c, "Multiple records executed successfully", msg)
+	var data []interface{}
+	helpers.JsonMarshaller(request["data"], &data)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	response, err := h.service.ChannelSalesPriceUpsert(edaMetaData, data)
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPSERT_SALES_PRICE_LIST_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = response
+	// eda.Produce(eda.UPSERT_SALES_PRICE_LIST_ACK, responseMessage)
 }

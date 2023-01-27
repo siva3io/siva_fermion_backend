@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
 	orders_repo "fermion/backend_core/internal/repository/orders"
@@ -29,14 +30,13 @@ import (
 */
 
 type Service interface {
-	CreatePurchaseInvoice(data *accounting.PurchaseInvoice, token_id string, access_template_id string) error
-	ListPurchaseInvoice(page *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
-	ViewPurchaseInvoice(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	UpdatePurchaseInvoice(query map[string]interface{}, data *accounting.PurchaseInvoice, token_id string, access_template_id string) error
-	DeletePurchaseInvoice(query map[string]interface{}, token_id string, access_template_id string) error
-	DeletePurchaseInvoiceLines(query map[string]interface{}, token_id string, access_template_id string) error
-	SearchPurchaseInvoice(query string, token_id string, access_template_id string) (interface{}, error)
-	GetPurchaseInvoiceTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	CreatePurchaseInvoice(metaData core.MetaData, data *accounting.PurchaseInvoice) error
+	UpdatePurchaseInvoice(metaData core.MetaData, data accounting.PurchaseInvoice) error
+	DeletePurchaseInvoice(metaData core.MetaData) error
+	ListPurchaseInvoice(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	ViewPurchaseInvoice(metaData core.MetaData) (interface{}, error)
+	DeletePurchaseInvoiceLines(metaData core.MetaData) error
+	GetPurchaseInvoiceTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
@@ -45,24 +45,33 @@ type service struct {
 	purchaseOrdersRepositary  orders_repo.Purchase
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	purchaseInvoiceRepository := accounting_repo.NewPurchaseInvoice()
-	return &service{purchaseInvoiceRepository, accounting_repo.NewDebitNote(), orders_repo.NewPurchaseOrder()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	//purchaseInvoiceRepository := accounting_repo.NewPurchaseInvoice()
+	newServiceObj = &service{
+		accounting_repo.NewPurchaseInvoice(),
+		accounting_repo.NewDebitNote(),
+		orders_repo.NewPurchaseOrder()}
+	return newServiceObj
 }
 
-func (s *service) CreatePurchaseInvoice(data *accounting.PurchaseInvoice, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) CreatePurchaseInvoice(metaData core.MetaData, data *accounting.PurchaseInvoice) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create purchase invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create purchase invoice at data level")
 	}
-	temp := data.CreatedByID
-	user_id := strconv.Itoa(int(*temp))
-	data.PurchaseInvoiceNumber = helpers.GenerateSequence("PI", user_id, "purchase_invoices")
-
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
+	data.PurchaseInvoiceNumber = helpers.GenerateSequence("PI", fmt.Sprint(metaData.TokenUserId), "purchase_invoices")
 	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusId)
 	data.StatusHistory = result
 	defaultStatus, err := helpers.GetLookupcodeId("PURCHASE_INVOICE_STATUS", "DRAFT")
@@ -71,99 +80,57 @@ func (s *service) CreatePurchaseInvoice(data *accounting.PurchaseInvoice, token_
 	}
 	data.StatusId = defaultStatus
 	err = s.purchaseInvoiceRepository.Save(data)
-
 	if err != nil {
-		fmt.Println("error", err.Error())
-		return res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
-
 	return nil
 }
 
-func (s *service) ListPurchaseInvoice(page *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list purchase invoice at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list purchase invoice at data level")
-	}
-	data, err := s.purchaseInvoiceRepository.FindAll(page)
-
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	return data, nil
-}
-
-func (s *service) ViewPurchaseInvoice(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for view purchase invoice at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for view purchase invoice at data level")
-	}
-	data, err := s.purchaseInvoiceRepository.FindOne(query)
-
-	if err != nil && err.Error() == "record not found" {
-		return nil, res.BuildError(res.ErrDataNotFound, err)
-	}
-
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	return data, nil
-}
-
-func (s *service) UpdatePurchaseInvoice(query map[string]interface{}, data *accounting.PurchaseInvoice, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdatePurchaseInvoice(metaData core.MetaData, data accounting.PurchaseInvoice) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update purchase invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update purchase invoice at data level")
 	}
-	var find_query = map[string]interface{}{
-		"id": query["id"],
-	}
 
+	var find_query = map[string]interface{}{
+		"id": metaData.Query["id"],
+	}
+	data.UpdatedByID = &metaData.TokenUserId
 	found_data, er := s.purchaseInvoiceRepository.FindOne(find_query)
 	if er != nil {
 		return res.BuildError(res.ErrDataNotFound, er)
 	}
-
-	old_data := found_data.(accounting.PurchaseInvoice)
-
+	//found_data:=found_data_model.(*accounting.PurchaseInvoice)
+	old_data := found_data //.(accounting.PurchaseInvoice)
 	old_status := old_data.StatusId
 	new_status := data.StatusId
-
 	if new_status != old_status && new_status != 0 {
 		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusId)
 		data.StatusHistory = result
 	}
-
-	err := s.purchaseInvoiceRepository.Update(query, data)
+	err := s.purchaseInvoiceRepository.Update(metaData.Query, &data)
 	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	}
 	for _, invoice_line := range data.PurchaseInvoiceLines {
 		update_query := map[string]interface{}{
 			"product_id":          invoice_line.ProductId,
-			"purchase_invoice_id": uint(query["id"].(int)),
+			"purchase_invoice_id": found_data.ID,
 		}
+		invoice_line.UpdatedByID = &metaData.TokenUserId
 		count, err1 := s.purchaseInvoiceRepository.UpdateInvoiceLines(update_query, invoice_line)
 		if err1 != nil {
 			return err1
 		} else if count == 0 {
-			invoice_line.PurchaseInvoiceId = uint(query["id"].(int))
+			invoice_line.PurchaseInvoiceId = found_data.ID
+			invoice_line.CreatedByID = &metaData.TokenUserId
+			invoice_line.CompanyId = metaData.CompanyId
+			invoice_line.UpdatedByID = nil
 			e := s.purchaseInvoiceRepository.SaveInvoiceLines(invoice_line)
-			fmt.Println(e)
 			if e != nil {
 				return e
 			}
@@ -171,28 +138,52 @@ func (s *service) UpdatePurchaseInvoice(query map[string]interface{}, data *acco
 	}
 	return nil
 }
-
-func (s *service) DeletePurchaseInvoice(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return fmt.Errorf("you dont have access for delete purchase invoice at view level")
+func (s *service) ListPurchaseInvoice(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return nil, fmt.Errorf("you dont have access for list purchase invoice at view level")
 	}
 	if data_access == nil {
+		return nil, fmt.Errorf("you dont have access for list purchase invoice at data level")
+	}
+	data, err := s.purchaseInvoiceRepository.FindAll(metaData.Query, page)
+	if err != nil {
+		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+	}
+	return data, nil
+}
+
+func (s *service) ViewPurchaseInvoice(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return nil, fmt.Errorf("you dont have access for view purchase invoice at view level")
+	}
+	if dataAccess == nil {
+		return nil, fmt.Errorf("you dont have access for view purchase invoice at data level")
+	}
+	data, err := s.purchaseInvoiceRepository.FindOne(metaData.Query)
+	if err != nil {
+		return data, res.BuildError(res.ErrUnprocessableEntity, err)
+	}
+	return data, nil
+}
+
+func (s *service) DeletePurchaseInvoice(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for delete purchase invoice at view level")
+	}
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete purchase invoice at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.purchaseInvoiceRepository.FindOne(q)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.purchaseInvoiceRepository.Delete(query)
+	err := s.purchaseInvoiceRepository.Delete(metaData.Query)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	} else {
-		query := map[string]interface{}{"id": query["id"]}
+		query := map[string]interface{}{"purchase_invoice_id": metaData.Query["id"]}
 		er := s.purchaseInvoiceRepository.DeleteInvoiceLine(query)
 		if er != nil {
 			return res.BuildError(res.ErrDataNotFound, er)
@@ -201,83 +192,50 @@ func (s *service) DeletePurchaseInvoice(query map[string]interface{}, token_id s
 	return nil
 }
 
-func (s *service) DeletePurchaseInvoiceLines(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PURCHASE_INVOICE", *token_user_id)
+func (s *service) DeletePurchaseInvoiceLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "PURCHASE_INVOICE", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete purchase invoice at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete purchase invoice at data level")
 	}
-	_, er := s.purchaseInvoiceRepository.FindInvoiceLines(query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.purchaseInvoiceRepository.DeleteInvoiceLine(query)
-
+	err := s.purchaseInvoiceRepository.DeleteInvoiceLine(metaData.Query)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
-
 	return nil
 }
 
-func (s *service) SearchPurchaseInvoice(query string, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list purchase invoice at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list purchase invoice at data level")
-	}
-	data, err := s.purchaseInvoiceRepository.Search(query)
+func (s *service) GetPurchaseInvoiceTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	return data, nil
-}
-
-func (s *service) GetPurchaseInvoiceTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
-
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PURCHASE_INVOICE", *token_user_id)
-	if !access_module_flag {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "PURCHASE_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view purchase invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view purchase invoice at data level")
 	}
-
-	debitNoteId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
-
+	tab := metaData.AdditionalFields["tab"].(string)
+	debitNoteId := metaData.AdditionalFields["id"]
 	if tab == "debit_note" {
-
 		sourceDocumentId, _ := helpers.GetLookupcodeId("DEBIT_NOTE_SOURCE_DOCUMENT_TYPES", "PURCHASE_INVOICE")
-
 		debitNotePage := page
 		fmt.Println(sourceDocumentId, debitNoteId)
 		debitNotePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, debitNoteId)
-		query := make(map[string]interface{}, 0)
-		data, err := s.debitNoteRepositary.FindAllDebitNote(query, debitNotePage)
+		data, err := s.debitNoteRepositary.FindAllDebitNote(metaData, debitNotePage)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 	}
 	if tab == "purchase_orders" {
-
 		sourceDocumentId, _ := helpers.GetLookupcodeId("PURCHASE_ORDERS_SOURCE_DOCUMENT_TYPES", "PURCHASE_INVOICE")
-
 		purchaseOrderPage := page
 		purchaseOrderPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, debitNoteId)
-		data, err := s.purchaseOrdersRepositary.FindAll(purchaseOrderPage)
+		data, err := s.purchaseOrdersRepositary.FindAll(nil, purchaseOrderPage)
 		if err != nil {
 			return nil, err
 		}

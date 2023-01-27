@@ -8,8 +8,11 @@ import (
 
 	"fermion/backend_core/controllers/accounting/purchase_invoice"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
+	orders_repo "fermion/backend_core/internal/repository/orders"
+	returns_repo "fermion/backend_core/internal/repository/returns"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -30,48 +33,71 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateDebitNote(data *accounting.DebitNote, token_id string, access_template_id string) error
-	UpdateDebitNote(query map[string]interface{}, data *DebitNoteDTO, token_id string, access_template_id string) error
-	DeleteDebitNote(query map[string]interface{}, token_id string, access_template_id string) error
-	GetDebitNote(query map[string]interface{}, token_id string, access_template_id string) (DebitNoteResponseDTO, error)
-	GetDebitNoteList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]DebitNoteResponseDTO, error)
-	GetDebitNoteTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	CreateDebitNote(metaData core.MetaData, data *accounting.DebitNote) error
+	UpdateDebitNote(metaData core.MetaData, data *accounting.DebitNote) error
+	DeleteDebitNote(metaData core.MetaData) error
+	GetDebitNote(metaData core.MetaData) (interface{}, error)
+	GetDebitNoteList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetDebitNoteTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 	//SearchDebitNote(query string) ([]PartnersObjDTO, error)
 }
 
 type service struct {
-	debit_note_repository  accounting_repo.DebitNotes
-	purchaseInvoiceService purchase_invoice.Service
+	debitNoteRepository       accounting_repo.DebitNotes
+	purchaseInvoiceService    purchase_invoice.Service
+	purchaseReturnsRepository returns_repo.PurchaseReturn
+	purchaseOrdersRepository  orders_repo.Purchase
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	debit_note_repository := accounting_repo.NewDebitNote()
-	return &service{debit_note_repository, purchase_invoice.NewService()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	debitNoteRepository := accounting_repo.NewDebitNote()
+	newServiceObj = &service{
+		debitNoteRepository,
+		purchase_invoice.NewService(),
+		returns_repo.NewPurchaseReturn(),
+		orders_repo.NewPurchaseOrder()}
+	return newServiceObj
 }
 
-func (s *service) CreateDebitNote(data *accounting.DebitNote, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) CreateDebitNote(metaData core.MetaData, data *accounting.DebitNote) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "DEBIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create debit note at data level")
 	}
-	//data.DebitNoteID = strings.ToLower(data.PrimaryEmail)
-	query := map[string]interface{}{
-		"debit_note_id": data.DebitNoteID,
+	var dtoData DebitNoteDTO
+	seqDebit := helpers.GenerateSequence("debt", fmt.Sprint(metaData.TokenUserId), "debit_notes")
+	seqRef := helpers.GenerateSequence("Ref", fmt.Sprint(metaData.TokenUserId), "debit_notes")
+	if dtoData.GenerateDebitNoteId {
+		dtoData.DebitNoteID = seqDebit
+	}
+	if dtoData.GenerateReferenceId {
+		dtoData.ReferenceId = seqRef
 	}
 	defaultStatus, err := helpers.GetLookupcodeId("DEBIT_NOTE_STATUS", "DRAFT")
 	if err != nil {
 		return err
 	}
+	searchQuery := map[string]interface{}{
+		"company_id": data.CompanyId,
+	}
 	data.StatusId = defaultStatus
-	_, err = s.debit_note_repository.FindOneDebitNote(query)
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	_, err = s.debitNoteRepository.FindOneDebitNote(searchQuery)
 	if err == nil {
 		return res.BuildError(res.ErrDuplicate, errors.New("oops! Record already Exists"))
 	} else {
-		err := s.debit_note_repository.SaveDebitNote(data)
+		err := s.debitNoteRepository.SaveDebitNote(data)
 		if err != nil {
 			return res.BuildError(res.ErrUnprocessableEntity, err)
 		}
@@ -79,37 +105,35 @@ func (s *service) CreateDebitNote(data *accounting.DebitNote, token_id string, a
 	return nil
 }
 
-func (s *service) UpdateDebitNote(query map[string]interface{}, data *DebitNoteDTO, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdateDebitNote(metaData core.MetaData, data *accounting.DebitNote) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "DEBIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update debit note at data level")
 	}
-	_, err := s.debit_note_repository.FindOneDebitNote(query)
+	_, err := s.debitNoteRepository.FindOneDebitNote(metaData.Query)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
-	var d accounting.DebitNote
-	value, _ := json.Marshal(data)
-	json.Unmarshal(value, &d)
-	err = s.debit_note_repository.UpdateDebitNote(query, &d)
+	data.UpdatedByID = &metaData.TokenUserId
+	err = s.debitNoteRepository.UpdateDebitNote(metaData.Query, data)
 	if err != nil {
 		return res.BuildError(res.ErrDataNotFound, err)
 	}
-	for _, order_line := range d.DebitNoteLineItems {
+	for _, order_line := range data.DebitNoteLineItems {
 		query := map[string]interface{}{
-			"debit_note_id":      int(query["id"].(int)),
+			"debit_note_id":      helpers.ConvertStringToUint(metaData.Query["id"].(string)),
 			"product_variant_id": order_line.ProductVariantId,
 		}
-		count, er := s.debit_note_repository.UpdateDebitLines(query, order_line)
+		count, er := s.debitNoteRepository.UpdateDebitLines(query, order_line)
 		if er != nil && order_line.ID != uint(0) {
 			return er
 		} else if count == 0 {
 			order_line.DebitNoteId = query["id"].(uint)
-			e := s.debit_note_repository.SaveDebitLines(order_line)
+			e := s.debitNoteRepository.SaveDebitLines(order_line)
 			if e != nil {
 				return e
 			}
@@ -118,90 +142,149 @@ func (s *service) UpdateDebitNote(query map[string]interface{}, data *DebitNoteD
 	return nil
 }
 
-func (s *service) DeleteDebitNote(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) DeleteDebitNote(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "DEBIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete debit note at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.debit_note_repository.FindOneDebitNote(q)
-	if er != nil {
-		return er
-	}
-	err := s.debit_note_repository.DeleteDebitNote(query)
+	err := s.debitNoteRepository.DeleteDebitNote(metaData.Query)
 	if err != nil {
 		return err
+	} else {
+		query := map[string]interface{}{"debit_note_id": metaData.Query["id"]}
+		er := s.debitNoteRepository.DeleteDebitLine(query)
+		if er != nil {
+			return err
+		}
 	}
 	return nil
 }
-func (s *service) GetDebitNote(query map[string]interface{}, token_id string, access_template_id string) (DebitNoteResponseDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetDebitNote(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "DEBIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return DebitNoteResponseDTO{}, fmt.Errorf("you dont have access for view debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return DebitNoteResponseDTO{}, fmt.Errorf("you dont have access for view debit note at data level")
 	}
-	result, err := s.debit_note_repository.FindOneDebitNote(query)
-	var responses DebitNoteResponseDTO
-	value, _ := json.Marshal(result)
-	json.Unmarshal(value, &responses)
+	result, err := s.debitNoteRepository.FindOneDebitNote(metaData.Query)
 	if err != nil {
-		return responses, err
+		return result, err
 	}
-	return responses, nil
+	return result, nil
 }
 
-func (s *service) GetDebitNoteList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]DebitNoteResponseDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetDebitNoteList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "DEBIT_NOTE", metaData.AccessTemplateId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list debit note at data level")
 	}
-	result, _ := s.debit_note_repository.FindAllDebitNote(query, p)
-	var response []DebitNoteResponseDTO
-	for _, data := range result {
-		var debitnotedata DebitNoteResponseDTO
-		value, _ := json.Marshal(data)
-		json.Unmarshal(value, &debitnotedata)
-		response = append(response, debitnotedata)
+	result, err := s.debitNoteRepository.FindAllDebitNote(metaData.Query, p)
+	if err != nil {
+		return result, err
 	}
-	return response, nil
+	return result, nil
 }
 
-func (s *service) GetDebitNoteTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
-
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "DEBIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetDebitNoteTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "LIST", "DEBIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list debit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list debit note at data level")
 	}
-
-	debitNoteId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
-
+	tab := metaData.AdditionalFields["tab"].(string)
+	debitNoteId := metaData.AdditionalFields["id"]
 	if tab == "purchase_invoice" {
 
 		sourceDocumentId, _ := helpers.GetLookupcodeId("PURCHASE_INVOICE_SOURCE_DOCUMENT_TYPES", "DEBIT_NOTE")
-
+		var metaData core.MetaData
 		purchaseInvoicePage := page
 		purchaseInvoicePage.Filters = fmt.Sprintf("[[\"link_source_document_type\",\"=\",%v],[\"link_source_document\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, debitNoteId)
-		data, err := s.purchaseInvoiceService.ListPurchaseInvoice(purchaseInvoicePage, token_id, access_template_id, "LIST")
+		data, err := s.purchaseInvoiceService.ListPurchaseInvoice(metaData, purchaseInvoicePage)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	if tab == "purchase_returns" {
+		debitPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("DEBIT_NOTE_SOURCE_DOCUMENT_TYPES", "PURCHASE_RETURNS")
+		debitPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", debitNoteId, source_document_type_id)
+		debit_order_interface, err := s.GetDebitNoteList(metaData, debitPagination)
+		if err != nil {
+			return nil, err
+		}
+		debit_order := debit_order_interface.([]accounting.DebitNote)
+		if len(debit_order) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var debitOrderSourceDoc map[string]interface{}
+		debitOrderSourceDocJson := debit_order[0].SourceDocuments
+		dto, err := json.Marshal(debitOrderSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &debitOrderSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		debitOrderSourceDocId := debitOrderSourceDoc["id"]
+		if debitOrderSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+		purchaseReturnsPage := page
+		purchaseReturnsPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", debitOrderSourceDoc["id"])
+		data, err := s.purchaseReturnsRepository.FindAll(nil, page)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	if tab == "purchase_orders" {
+		debitPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("DEBIT_NOTE_SOURCE_DOCUMENT_TYPES", "PURCHASE_ORDERS")
+		debitPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", debitNoteId, source_document_type_id)
+		debit_order_interface, err := s.GetDebitNoteList(metaData, debitPagination)
+		if err != nil {
+			return nil, err
+		}
+		debit_order := debit_order_interface.([]accounting.DebitNote)
+		if len(debit_order) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var debitOrderSourceDoc map[string]interface{}
+		debitOrderSourceDocJson := debit_order[0].SourceDocuments
+		dto, err := json.Marshal(debitOrderSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &debitOrderSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		debitOrderSourceDocId := debitOrderSourceDoc["id"]
+		if debitOrderSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+		purchaseOrdersPage := page
+		purchaseOrdersPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", debitOrderSourceDoc["id"])
+		data, err := s.purchaseOrdersRepository.FindAll(nil, page)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +295,7 @@ func (s *service) GetDebitNoteTab(id, tab string, page *pagination.Paginatevalue
 
 // func (s *service) SearchDebitNote(query string) ([]PartnersObjDTO, error) {
 
-// 	result, err := s.debit_note_repository.SearchDebitNote(query)
+// 	result, err := s.debitNoteRepository.SearchDebitNote(query)
 // 	var debit_notedetails []PartnersObjDTO
 // 	if err != nil {
 // 		return nil, res.BuildError(res.ErrUnprocessableEntity, err)

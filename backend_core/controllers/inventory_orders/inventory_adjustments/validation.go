@@ -1,8 +1,6 @@
 package inventory_adjustments
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -26,28 +24,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 func (c InventoryAdjustmentsRequest) Validate() error {
 	return validation.ValidateStruct(&c,
-		validation.Field(
-			&c.AdjustmentDate,
-			validation.Required,
-		),
-		validation.Field(
-			&c.ReasonID,
-			validation.Required,
-		),
-		validation.Field(&c.InventoryAdjustmentLines),
+		validation.Field(&c.AdjustmentDate, validation.Required),
+		validation.Field(&c.ReasonID, validation.Required),
+		validation.Field(&c.InventoryAdjustmentLines, validation.Required),
 	)
 }
 
 func (d InventoryAdjustmentLines) Validate() error {
 	return validation.ValidateStruct(&d,
-		validation.Field(
-			&d.ProductID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.ProductVariantID,
-			validation.Required,
-		),
+		//validation.Field(&d.ProductID, validation.Required),
+		validation.Field(&d.ProductVariantID, validation.Required),
+		validation.Field(&d.Description, validation.Required),
+		validation.Field(&d.StockInHand, validation.Required),
+		validation.Field(&d.UnitPrice, validation.Required),
+		validation.Field(&d.AdjustedPrice, validation.Required),
+		validation.Field(&d.AdjustedQuantity, validation.Required),
+		validation.Field(&d.BalanceQuantity, validation.Required),
 	)
 }
 
@@ -61,11 +53,11 @@ func InventoryAdjustmentsCreateValidate(next echo.HandlerFunc) echo.HandlerFunc 
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("InvalidPayload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

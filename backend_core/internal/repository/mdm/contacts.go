@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"fermion/backend_core/db"
+	db "fermion/backend_core/db"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -30,81 +30,86 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Contacts interface {
-	SaveContact(data *mdm.Partner) error
-	UpdateContact(query map[string]interface{}, data *mdm.Partner) error
-	DeleteContact(query map[string]interface{}) error
-	FindOneContact(query map[string]interface{}) (mdm.Partner, error)
-	FindAllContact(query interface{}, p *pagination.Paginatevalue) ([]mdm.Partner, error)
-	SearchContact(query string) ([]mdm.Partner, error)
+	Create(data *mdm.Partner) error
+	Update(query map[string]interface{}, data *mdm.Partner) error
+	Delete(query map[string]interface{}) error
+	FindOne(query map[string]interface{}) (mdm.Partner, error)
+	FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.Partner, error)
 }
 
 type contacts struct {
-	db *gorm.DB
+	Db *gorm.DB
 }
 
+var contactsRepository *contacts //singleton object
+
+// singleton function
 func NewContacts() *contacts {
+	if contactsRepository != nil {
+		return contactsRepository
+	}
 	db := db.DbManager()
-	return &contacts{db}
+	contactsRepository = &contacts{db}
+	return contactsRepository
 
 }
-func (r *contacts) SaveContact(data *mdm.Partner) error {
+func (r *contacts) Create(data *mdm.Partner) error {
 
-	err := r.db.Model(&mdm.Partner{}).Create(data).Error
+	err := r.Db.Model(&mdm.Partner{}).Create(data).Error
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (r *contacts) UpdateContact(query map[string]interface{}, data *mdm.Partner) error {
+func (r *contacts) Update(query map[string]interface{}, data *mdm.Partner) error {
 
-	err := r.db.Model(&mdm.Partner{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.Db.Model(&mdm.Partner{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
-func (r *contacts) DeleteContact(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+func (r *contacts) Delete(query map[string]interface{}) error {
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
 
-	response, _ := r.FindOneContact(query)
+	contactDetails, _ := r.FindOne(query)
+	data["primary_email"] = contactDetails.PrimaryEmail + fmt.Sprintf("_%v", time.Now().UnixMilli())
 
-	data["primary_email"] = response.PrimaryEmail + fmt.Sprintf("_%v", time.Now().UnixMilli())
-	err := r.db.Model(&mdm.Partner{}).Where(query).Updates(data).Error //As it is a soft delete, we use updates inorder to update deleted_by too
-	if err != nil {
-		return err
+	err := r.Db.Model(&mdm.Partner{}).Where(query).Updates(data) //As it is a soft delete, we use updates inorder to update deleted_by too
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
-func (r *contacts) FindOneContact(query map[string]interface{}) (mdm.Partner, error) {
+func (r *contacts) FindOne(query map[string]interface{}) (mdm.Partner, error) {
 	var data mdm.Partner
-	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&mdm.Partner{}).Where(query).First(&data)
+
+	err := r.Db.Preload(clause.Associations + "." + clause.Associations).Model(&mdm.Partner{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
-	data.Properties = helpers.GetLookupCodesFromArrOfObjectIdsToArrOfObjects(data.Properties)
+
 	return data, nil
 }
-func (r *contacts) FindAllContact(query interface{}, p *pagination.Paginatevalue) ([]mdm.Partner, error) {
+func (r *contacts) FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]mdm.Partner, error) {
 	var data []mdm.Partner
-	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&mdm.Partner{}).Scopes(helpers.Paginate(&mdm.Partner{}, p, r.db)).Where(query).Find(&data).Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *contacts) SearchContact(query string) ([]mdm.Partner, error) {
-	var data []mdm.Partner
-	err := r.db.Preload(clause.Associations).Find(&data, "name ILIKE ? OR primary_email ILIKE ?", "%"+query+"%", "%"+query+"%").Error
+	err := r.Db.Preload(clause.Associations + "." + clause.Associations).Model(&mdm.Partner{}).Scopes(helpers.Paginate(&mdm.Partner{}, p, r.Db)).Where(query).Find(&data).Error
 	if err != nil {
 		return data, err
 	}

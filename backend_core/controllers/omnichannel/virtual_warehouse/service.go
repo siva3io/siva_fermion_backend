@@ -46,8 +46,15 @@ type service struct {
 	virtual_warehouse_details_Repository omnichannel_repo.VirtualWarehouseDetails
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{omnichannel_repo.NewVirtualWarehouse(), omnichannel_repo.NewVirtualWarehouseDetails()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{omnichannel_repo.NewVirtualWarehouse(), omnichannel_repo.NewVirtualWarehouseDetails()}
+	return newServiceObj
 	// return &service{omnichannel_repo.NewVirtualWarehouseDetails()}
 }
 

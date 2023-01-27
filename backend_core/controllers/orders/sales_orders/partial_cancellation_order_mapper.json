@@ -1,0 +1,185 @@
+{"//": "Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)",
+"//": "All rights reserved.",
+"//": "This program is free software: you can redistribute it and/or modify",
+"//": "it under the terms of the GNU Lesser General Public License v3.0 as published by",
+"//": "the Free Software Foundation, either version 3 of the License, or",
+"//": "(at your option) any later version.",
+"//": "This program is distributed in the hope that it will be useful,",
+"//": "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+"//": "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the",
+"//": "GNU Lesser General Public License v3.0 for more details.",
+"//": "You should have received a copy of the GNU Lesser General Public License v3.0",
+"//": "along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.",
+    "name": "mapper_template",
+    "description": "mapper_template",
+    "fields": [
+        {
+            "id": "obj_message",
+            "scope": "local",
+            "input": "message",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_order"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_order",
+            "scope": "local",
+            "input": "order",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "arr_items"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "arr_items",
+            "scope": "local",
+            "input": "items",
+            "input_type": "array",
+            "output": "sales_order_lines",
+            "output_type": "array",
+            "default_value": "",
+            "fields": [
+                "obj_items"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_items",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_item_id",
+                "obj_quantity"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_item_id",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "product_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "ExecuteGetApiCall",
+                    "params": [
+                        {
+                            "key": "task_object",
+                            "type": "static",
+                            "value": {
+                                "endpoint": "{host}/api/v1/products/variant",
+                                "link": "/files/apis/eunimart.mapper_api_call.json",
+                                "query_params": [
+                                    {
+                                        "key": "filters",
+                                        "type": "static",
+                                        "value": [
+                                            {
+                                                "column": "sku_id",
+                                                "operator": "=",
+                                                "type": "variable",
+                                                "value": "product_id"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ExecuteGetApiCall"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "data"
+                        }
+                    ]
+                },
+                {
+                    "name": "ReturnIndexObjectFromArray",
+                    "params": [
+                        {
+                            "key": "response_array",
+                            "type": "variable",
+                            "value": "ParseJsonPathFromObject"
+                        },
+                        {
+                            "key": "index",
+                            "type": "static",
+                            "value": "0"
+                        }
+                    ]
+                },
+                {
+                    "name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ReturnIndexObjectFromArray"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "id"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_quantity",
+            "scope": "local",
+            "input": "quantity",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_count"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_count",
+            "scope": "local",
+            "input": "count",
+            "input_type": "keyvalue",
+            "output": "quantity",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        }
+    ]
+}

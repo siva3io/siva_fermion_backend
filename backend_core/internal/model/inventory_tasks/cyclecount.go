@@ -26,6 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type CycleCount struct {
 	CycleCountNumber          string                                `json:"cycle_count_number" gorm:"type:varchar(50);unique"`
+	CycleCountDate            time.Time                             `json:"cycle_count_date" gorm:"type:time"`
 	WarehouseID               uint                                  `json:"warehouse_id" gorm:"type:integer"`
 	Warehouse                 shared_pricing_and_location.Locations `json:"warehouse" gorm:"foreignkey:WarehouseID; references:ID"`
 	PartnerID                 uint                                  `json:"partner_id" gorm:"type:integer"`
@@ -48,10 +49,10 @@ type CycleCount struct {
 
 type CycleCountLines struct {
 	Cycle_count_id              uint                  `json:"-"`
-	ProductID                   uint                  `json:"product_id" gorm:"type:integer"`
-	Product                     mdm.ProductTemplate   `json:"product" gorm:"foreignKey:ProductID"`
-	ProductVariantID            uint                  `json:"product_variant_id"`
-	ProductVariant              mdm.ProductVariant    `json:"product_variant" gorm:"foreignKey:ProductVariantID; references:ID"`
+	ProductID                   *uint                 `json:"product_id" gorm:"type:integer"`
+	Product                     *mdm.ProductTemplate  `json:"product" gorm:"foreignKey:ProductID"`
+	ProductVariantID            *uint                 `json:"product_variant_id"`
+	ProductVariant              *mdm.ProductVariant   `json:"product_variant" gorm:"foreignKey:ProductVariantID; references:ID"`
 	BinLocationID               datatypes.JSON        `json:"bin_location_id" gorm:"type:json"`
 	InventoryCount              uint                  `json:"inventory_count" gorm:"type:integer"`
 	LocationDetails             datatypes.JSON        `json:"location_details" gorm:"type:json"`

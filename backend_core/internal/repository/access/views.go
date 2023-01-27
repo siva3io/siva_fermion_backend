@@ -39,8 +39,15 @@ type view struct {
 	db *gorm.DB
 }
 
+var viewRepository *view //singleton object
+
+// singleton function
 func NewView() *view {
+	if viewRepository != nil {
+		return viewRepository
+	}
 	db := db.DbManager()
+	viewRepository = &view{db}
 	return &view{db}
 }
 

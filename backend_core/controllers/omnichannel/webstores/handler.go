@@ -32,10 +32,17 @@ type handler struct {
 	base_service webstore_base.ServiceBase
 }
 
+var WebstoresHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if WebstoresHandler != nil {
+		return WebstoresHandler
+	}
 	service := NewService()
 	base_service := webstore_base.NewServiceBase()
-	return &handler{service, base_service}
+	WebstoresHandler = &handler{service, base_service}
+	return WebstoresHandler
 }
 
 //----------------------------------Webstore--------------------------------------------------
@@ -64,6 +71,10 @@ func (h *handler) RegisterWebstore(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateWebstoreInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "webstore registered successfully", map[string]interface{}{"created_id": data.ID})
 }
 
@@ -94,6 +105,10 @@ func (h *handler) UpdateWebstore(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateWebstoreInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "webstore details updates successfully", map[string]interface{}{"updated_id": id})
 }
 
@@ -119,11 +134,21 @@ func (h *handler) FetchAllWebstores(c echo.Context) (err error) {
 	access_template_id := c.Get("AccessTemplateId").(string)
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetWebstoreFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	result, err := h.service.FindAllWebstore(p, token_id, access_template_id, "LIST")
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", result, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", result, p)
 }
 
 // AllWebstores godoc
@@ -148,11 +173,21 @@ func (h *handler) FetchAllWebstoresDropDown(c echo.Context) (err error) {
 	access_template_id := c.Get("AccessTemplateId").(string)
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetWebstoreFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	result, err := h.service.FindAllWebstore(p, token_id, access_template_id, "DROPDOWN_LIST")
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "dropdown data retrived successfully", result, p)
+	return res.RespSuccessInfo(c, "dropdown data retrieved successfully", result, p)
 }
 
 // FindWebstores godoc
@@ -207,6 +242,10 @@ func (h *handler) DeleteWebstore(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateWebstoreInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "deleted webstore details.", map[string]int{"deleted_id": id})
 }
 
@@ -236,7 +275,7 @@ func (h *handler) AvailableWebstores(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", result, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", result, p)
 }
 
 // Get AuthKeys godoc

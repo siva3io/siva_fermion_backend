@@ -4,16 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"fermion/backend_core/controllers/inventory_orders/asn"
 	"fermion/backend_core/controllers/inventory_orders/grn"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
 	orders_repo "fermion/backend_core/internal/repository/orders"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
-	res "fermion/backend_core/pkg/util/response"
 )
 
 /*
@@ -31,37 +30,46 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateInternalTransfers(data *orders.InternalTransfers, access_template_id string, token_id string) error
-	ListInternalTransfers(page *pagination.Paginatevalue, access_template_id string, token_id string, access_access string) (interface{}, error)
-	ViewInternalTransfers(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error)
-	UpdateInternalTransfers(query map[string]interface{}, data *orders.InternalTransfers, access_template_id string, token_id string) error
+	CreateInternalTransfers(metaData core.MetaData, data *orders.InternalTransfers) error
+	ListInternalTransfers(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	ViewInternalTransfers(metaData core.MetaData) (interface{}, error)
+	UpdateInternalTransfers(metaData core.MetaData, data *orders.InternalTransfers) error
+	DeleteInternalTransfers(metaData core.MetaData) error
+	DeleteIstLines(metaData core.MetaData) error
 
-	DeleteInternalTransfers(query map[string]interface{}, access_template_id string, token_id string) error
-	DeleteIstLines(query map[string]interface{}, access_template_id string, token_id string) error
-	SearchInternalTransfers(query string, access_template_id string, token_id string) (interface{}, error)
-	GetInternalTransfersTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	GetInternalTransfersTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
-	istRepository orders_repo.InternalTransfers
-	grnService    grn.Service
-	asnService    asn.Service
-	doRepository  orders_repo.DeliveryOrders
+	istRepository      orders_repo.InternalTransfers
+	grnService         grn.Service
+	asnService         asn.Service
+	doRepository       orders_repo.DeliveryOrders
+	purchaseRepositary orders_repo.Purchase
+	salesRepositary    orders_repo.Sales
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{
-		istRepository: orders_repo.NewInternalTransfer(),
-		grnService:    grn.NewService(),
-		asnService:    asn.NewService(),
-		doRepository:  orders_repo.NewDo(),
+	if newServiceObj != nil {
+		return newServiceObj
 	}
+	newServiceObj = &service{
+		istRepository:      orders_repo.NewInternalTransfer(),
+		grnService:         grn.NewService(),
+		asnService:         asn.NewService(),
+		doRepository:       orders_repo.NewDo(),
+		purchaseRepositary: orders_repo.NewPurchaseOrder(),
+		salesRepositary:    orders_repo.NewSalesOrder(),
+	}
+	return newServiceObj
 }
 
-func (s *service) CreateInternalTransfers(data *orders.InternalTransfers, access_template_id string, token_id string) error {
+func (s *service) CreateInternalTransfers(metaData core.MetaData, data *orders.InternalTransfers) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "IST", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "CREATE", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create ist order at view level")
 	}
@@ -69,32 +77,23 @@ func (s *service) CreateInternalTransfers(data *orders.InternalTransfers, access
 		return fmt.Errorf("you dont have access for create ist order at data level")
 	}
 
-	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusId)
-	data.StatusHistory = result
-	temp := data.CreatedByID
-	user_id := strconv.Itoa(int(*temp))
-	data.IstNumber = helpers.GenerateSequence("IST", user_id, "internal_transfers")
-	defaultStatus, err := helpers.GetLookupcodeId("IST_STATUS", "DRAFT")
+	data.StatusHistory, _ = helpers.UpdateStatusHistory(data.StatusHistory, *data.StatusId)
+	data.IstNumber = helpers.GenerateSequence("IST", fmt.Sprint(metaData.TokenUserId), "internal_transfers")
+	defaultStatus, _ := helpers.GetLookupcodeId("IST_STATUS", "DRAFT")
+	data.StatusId = &defaultStatus
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	data = s.GetTotalQuantity(data)
+	err := s.istRepository.Save(data)
 	if err != nil {
 		return err
 	}
-	data.StatusId = defaultStatus
-	data = s.GetTotalQuantity(data)
-	err = s.istRepository.Save(data)
-
-	if err != nil {
-		fmt.Println("error", err.Error())
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
 	return nil
-	//}
-	//return nil
 }
 
-func (s *service) ListInternalTransfers(page *pagination.Paginatevalue, access_template_id string, token_id string, access_access string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_access, "IST", *token_user_id)
+func (s *service) ListInternalTransfers(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), metaData.ModuleAccessAction, "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list ist order at view level")
 	}
@@ -102,45 +101,33 @@ func (s *service) ListInternalTransfers(page *pagination.Paginatevalue, access_t
 		return nil, fmt.Errorf("you dont have access for list ist order at data level")
 	}
 
-	data, err := s.istRepository.FindAll(page)
-
+	data, err := s.istRepository.FindAll(metaData.Query, page)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
-	//}
-	//return nil, nil
 }
 
-func (s *service) ViewInternalTransfers(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) ViewInternalTransfers(metaData core.MetaData) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "IST", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view ist order at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view ist order at data level")
 	}
-	data, err := s.istRepository.FindOne(query)
 
-	if err != nil && err.Error() == "record not found" {
-		return nil, res.BuildError(res.ErrDataNotFound, err)
-	}
-
+	data, err := s.istRepository.FindOne(metaData.Query)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
-	//}
-	//return nil, nil
 }
 
-func (s *service) UpdateInternalTransfers(query map[string]interface{}, data *orders.InternalTransfers, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "IST", *token_user_id)
+func (s *service) UpdateInternalTransfers(metaData core.MetaData, data *orders.InternalTransfers) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "UPDATE", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update ist order at view level")
 	}
@@ -148,57 +135,44 @@ func (s *service) UpdateInternalTransfers(query map[string]interface{}, data *or
 		return fmt.Errorf("you dont have access for update ist order at data level")
 	}
 
-	var find_query = map[string]interface{}{
-		"id": query["id"],
+	foundData, err := s.istRepository.FindOne(metaData.Query)
+	if err != nil {
+		return err
 	}
 
-	found_data, er := s.istRepository.FindOne(find_query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-
-	old_data := found_data.(orders.InternalTransfers)
-
-	old_status := old_data.StatusId
-	new_status := data.StatusId
-
-	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusId)
-		data.StatusHistory = result
+	if data.StatusId != nil {
+		if *data.StatusId != *foundData.StatusId && *data.StatusId != 0 {
+			data.StatusHistory, _ = helpers.UpdateStatusHistory(foundData.StatusHistory, *data.StatusId)
+		}
 	}
 	if len(data.InternalTransferLines) > 0 {
 		data = s.GetTotalQuantity(data)
 	}
-	err := s.istRepository.Update(query, data)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+	data.UpdatedByID = &metaData.TokenUserId
+	err = s.istRepository.Update(metaData.Query, data)
+	if err != nil {
+		return err
 	}
-	for _, order_line := range data.InternalTransferLines {
-		update_query := map[string]interface{}{
-			"product_id": order_line.ProductId,
-			"ist_id":     uint(query["id"].(int)),
+	for _, orderLine := range data.InternalTransferLines {
+		updateQuery := map[string]interface{}{
+			"product_id": orderLine.ProductId,
+			"ist_id":     metaData.Query["id"],
 		}
-		count, err1 := s.istRepository.UpdateOrderLines(update_query, order_line)
-		if err1 != nil {
-			return err1
-		} else if count == 0 {
-			order_line.IstId = uint(query["id"].(int))
-			e := s.istRepository.SaveOrderLines(order_line)
-			fmt.Println(e)
-			if e != nil {
-				return e
+		err = s.istRepository.UpdateOrderLines(updateQuery, &orderLine)
+		if err != nil {
+			orderLine.IstId = uint(metaData.Query["id"].(float64))
+			err = s.istRepository.SaveOrderLines(&orderLine)
+			if err != nil {
+				return err
 			}
 		}
 	}
 	return nil
-	//}
-	//return nil
 }
 
-func (s *service) DeleteInternalTransfers(query map[string]interface{}, access_template_id string, token_id string) error {
+func (s *service) DeleteInternalTransfers(metaData core.MetaData) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "IST", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete ist order at view level")
 	}
@@ -206,77 +180,38 @@ func (s *service) DeleteInternalTransfers(query map[string]interface{}, access_t
 		return fmt.Errorf("you dont have access for delete ist order at data level")
 	}
 
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.istRepository.FindOne(q)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.istRepository.Delete(query)
+	err := s.istRepository.Delete(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	} else {
-		query := map[string]interface{}{"ist_id": query["id"]}
-		er := s.istRepository.DeleteOrderLine(query)
-		if er != nil {
-			return res.BuildError(res.ErrDataNotFound, er)
+		query := map[string]interface{}{
+			"ist_id": metaData.Query["id"],
+		}
+		err = s.istRepository.DeleteOrderLine(query)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
-	//}
-	//return nil
 }
 
-func (s *service) DeleteIstLines(query map[string]interface{}, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "IST", *token_user_id)
+func (s *service) DeleteIstLines(metaData core.MetaData) error {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete ist order at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete ist order at data level")
 	}
-	_, er := s.istRepository.FindOrderLines(query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.istRepository.DeleteOrderLine(query)
-
+	err := s.istRepository.DeleteOrderLine(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	}
-
 	return nil
-	//}
-	//return nil
 }
 
-func (s *service) SearchInternalTransfers(query string, access_template_id string, token_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "IST", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list ist order at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list ist order at data level")
-	}
-
-	data, err := s.istRepository.Search(query)
-
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	return data, nil
-	//}
-	//return nil, nil
-}
-
-func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
-
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "IST", *token_user_id)
+func (s *service) GetInternalTransfersTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "IST", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view ist order at view level")
 	}
@@ -284,17 +219,16 @@ func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Pagin
 		return nil, fmt.Errorf("you dont have access for view ist order at data level")
 	}
 
-	istId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
+	id := metaData.AdditionalFields["id"].(string)
+	tab := metaData.AdditionalFields["tab"].(string)
+
 	if tab == "grn" {
 
 		var query = make(map[string]interface{}, 0)
-		query["id"] = (uint(istId))
+		query["id"] = id
 		query["source_document_type_id"], _ = helpers.GetLookupcodeId("IST_SOURCE_DOCUMENT_TYPES", "GRN")
 
-		internal_transfer_order, err := s.ViewInternalTransfers(query, access_template_id, token_id)
+		internal_transfer_order, err := s.ViewInternalTransfers(metaData)
 		if err != nil {
 			return nil, errors.New("no source document")
 		}
@@ -302,11 +236,11 @@ func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Pagin
 		internalTransfersSourceDocJson := internal_transfer_order.(orders.InternalTransfers).SourceDocuments
 		dto, err := json.Marshal(internalTransfersSourceDocJson)
 		if err != nil {
-			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+			return 0, err
 		}
 		err = json.Unmarshal(dto, &internalTransfersSourceDoc)
 		if err != nil {
-			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+			return 0, err
 		}
 
 		internalTransfersSourceDocId := internalTransfersSourceDoc["id"]
@@ -315,7 +249,7 @@ func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Pagin
 		}
 		grnPage := page
 		grnPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", internalTransfersSourceDoc["id"])
-		data, err := s.grnService.GetAllGRN(grnPage, token_id, access_template_id, "LIST")
+		data, err := s.grnService.GetAllGRN(metaData, grnPage)
 		if err != nil {
 			return nil, err
 		}
@@ -326,8 +260,8 @@ func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Pagin
 		sourceDocumentId, _ := helpers.GetLookupcodeId("ASN_SOURCE_DOCUMENT_TYPES", "IST")
 
 		asnPage := page
-		asnPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, istId)
-		data, err := s.asnService.GetAllAsn(asnPage, token_id, access_template_id, "LIST")
+		asnPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, id)
+		data, err := s.asnService.GetAllAsn(metaData, asnPage)
 		if err != nil {
 			return nil, err
 		}
@@ -338,8 +272,83 @@ func (s *service) GetInternalTransfersTab(id, tab string, page *pagination.Pagin
 		sourceDocumentId, _ := helpers.GetLookupcodeId("DELIVERY_ORDERS_SOURCE_DOCUMENT_TYPES", "IST")
 
 		deliveryOrderPage := page
-		deliveryOrderPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, istId)
-		data, err := s.doRepository.AllDeliveryOrders(deliveryOrderPage)
+		deliveryOrderPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, id)
+		data, err := s.doRepository.AllDeliveryOrders(nil, deliveryOrderPage)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+
+	if tab == "purchase_orders" {
+		istPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("IST_SOURCE_DOCUMENT_TYPES", "PURCHASE_ORDERS")
+		istPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", id, source_document_type_id)
+		ist_order_interface, err := s.ListInternalTransfers(metaData, page)
+		if err != nil {
+			return nil, err
+		}
+		ist_order := ist_order_interface.([]orders.InternalTransfers)
+		if len(ist_order) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var istOrderSourceDoc map[string]interface{}
+		istOrderSourceDocJson := ist_order[0]
+		dto, err := json.Marshal(istOrderSourceDocJson)
+		if err != nil {
+			return 0, err
+		}
+		err = json.Unmarshal(dto, &istOrderSourceDoc)
+		if err != nil {
+			return 0, err
+		}
+
+		istOrderSourceDocId := istOrderSourceDoc["id"]
+		if istOrderSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+
+		purchaseOrdersPage := page
+		purchaseOrdersPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", istOrderSourceDoc["id"])
+		data, err := s.purchaseRepositary.FindAll(nil, page)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	if tab == "sales_orders" {
+		istPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("IST_SOURCE_DOCUMENT_TYPES", "SALES_ORDERS")
+		istPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", id, source_document_type_id)
+		ist_order_interface, err := s.ListInternalTransfers(metaData, page)
+		if err != nil {
+			return nil, err
+		}
+		ist_order := ist_order_interface.([]orders.InternalTransfers)
+		if len(ist_order) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var istOrderSourceDoc map[string]interface{}
+		istOrderSourceDocJson := ist_order[0]
+		dto, err := json.Marshal(istOrderSourceDocJson)
+		if err != nil {
+			return 0, err
+		}
+		err = json.Unmarshal(dto, &istOrderSourceDoc)
+		if err != nil {
+			return 0, err
+		}
+
+		istOrderSourceDocId := istOrderSourceDoc["id"]
+		if istOrderSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+
+		salesOrdersPage := page
+		salesOrdersPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", istOrderSourceDoc["id"])
+		data, err := s.salesRepositary.FindAll(nil, page)
 		if err != nil {
 			return nil, err
 		}

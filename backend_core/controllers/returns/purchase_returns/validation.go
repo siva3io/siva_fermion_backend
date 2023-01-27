@@ -23,9 +23,29 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a PurchaseReturnsDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		//validation.Field(&a.PurchaseReturnNumber, validation.Required),
+		validation.Field(&a.PrDate, validation.Required),
+		validation.Field(&a.VendorDetails, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.PurchaseReturnLines, validation.Required),
+	)
+}
+func (a PurchaseReturnLines) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.ProductId, validation.Required),
+		validation.Field(&a.UomId, validation.Required),
+		validation.Field(&a.QuantityPurchased, validation.Required),
+		validation.Field(&a.QuantityReturned, validation.Required),
+		validation.Field(&a.Rate, validation.Required),
+		validation.Field(&a.Amount, validation.Required),
+	)
+}
+
 func PurchaseReturnsCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(returns.PurchaseReturns)
+	var data = new(PurchaseReturnsDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {
@@ -33,7 +53,7 @@ func PurchaseReturnsCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

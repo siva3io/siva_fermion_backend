@@ -34,26 +34,30 @@ type SearchQuery struct {
 // Create and Update Request Payload for Picklist
 type (
 	PicklistRequest struct {
-		PickListNumber           string                   `json:"pick_list_number"`
-		AutoCreatePicklistNumber bool                     `json:"auto_create_picklist_number"`
-		ReferenceNumber          string                   `json:"reference_number"`
-		SourceDocumentTypeID     uint                     `json:"source_document_type_id"`
-		AssigneeToID             uint                     `json:"assignee_to_id"`
-		SelectCustomerId         uint                     `json:"select_customer_id"`
-		PartnerID                uint                     `json:"partner_id"`
-		WarehouseID              uint                     `json:"warehouse_id"`
-		StatusID                 uint                     `json:"status_id"`
-		StatusHistory            []map[string]interface{} `json:"status_history"`
-		PicklistLines            []PickListLines          `json:"picklist_lines"`
-		InternalNotes            string                   `json:"internal_notes"`
-		ExternalNotes            string                   `json:"external_notes"`
-		AttachmentFiles          []map[string]interface{} `json:"attachment_files"`
-		StartDateTime            time.Time                `json:"start_date_time"`
-		EndDateTime              time.Time                `json:"end_date_time"`
-		TotalItemsToPick         uint                     `json:"items_to_pick"`
-		TotalPickedItems         uint                     `json:"total_picked_items"`
-		PriceListID              uint                     `json:"price_list_id"`
-		SourceDocuments          map[string]interface{}   `json:"source_documents"`
+		PickListNumber           string                                `json:"pick_list_number"`
+		AutoCreatePicklistNumber bool                                  `json:"auto_create_picklist_number"`
+		ReferenceNumber          string                                `json:"reference_number"`
+		SourceDocumentTypeID     uint                                  `json:"source_document_type_id"`
+		SourceDocumentType       model_core.Lookupcode                 `json:"source_document_type"`
+		AssigneeToID             uint                                  `json:"assignee_to_id"`
+		AssigneeTo               mdm.Partner                           `json:"assignee_to"`
+		SelectCustomerId         uint                                  `json:"select_customer_id"`
+		PartnerID                uint                                  `json:"partner_id"`
+		WarehouseID              uint                                  `json:"warehouse_id"`
+		Warehouse                shared_pricing_and_location.Locations `json:"warehouse"`
+		StatusID                 uint                                  `json:"status_id"`
+		Status                   model_core.Lookupcode                 `json:"status"`
+		StatusHistory            []map[string]interface{}              `json:"status_history"`
+		PicklistLines            []PickListLines                       `json:"picklist_lines"`
+		InternalNotes            string                                `json:"internal_notes"`
+		ExternalNotes            string                                `json:"external_notes"`
+		AttachmentFiles          []map[string]interface{}              `json:"attachment_files"`
+		StartDateTime            time.Time                             `json:"start_date_time"`
+		EndDateTime              time.Time                             `json:"end_date_time"`
+		TotalItemsToPick         uint                                  `json:"items_to_pick"`
+		TotalPickedItems         uint                                  `json:"total_picked_items"`
+		PriceListID              uint                                  `json:"price_list_id"`
+		SourceDocuments          map[string]interface{}                `json:"source_documents"`
 		model_core.Model
 	}
 
@@ -66,6 +70,7 @@ type (
 		QuantityToPick    uint                     `json:"quantity_to_pick"`
 		QuantityPicked    uint                     `json:"quantity_picked"`
 		RemainingQuantity uint                     `json:"remaining_quantity"`
+		CustomerName      string                   `json:"customer_name"`
 		model_core.Model
 	}
 )

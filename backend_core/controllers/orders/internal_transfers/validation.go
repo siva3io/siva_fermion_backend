@@ -23,9 +23,28 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a InternalTransfersDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		//validation.Field(&a.IstNumber, validation.Required),
+		validation.Field(&a.IstDate, validation.Required),
+		validation.Field(&a.SourceLocationId, validation.Required),
+		validation.Field(&a.DestinationLocationId, validation.Required),
+		validation.Field(&a.ReasonId, validation.Required),
+		validation.Field(&a.InternalTransferLines, validation.Required),
+	)
+}
+func (a InternalTransferLines) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.ProductId, validation.Required),
+		validation.Field(&a.SourceStock, validation.Required),
+		validation.Field(&a.DestinationStock, validation.Required),
+		validation.Field(&a.TransferQuantity, validation.Required),
+		validation.Field(&a.UomId, validation.Required),
+	)
+}
 func InternalTransfersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(orders.InternalTransfers)
+	var data = new(InternalTransfersDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {
@@ -33,7 +52,7 @@ func InternalTransfersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

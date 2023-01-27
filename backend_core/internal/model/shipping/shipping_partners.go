@@ -34,11 +34,12 @@ type ShippingPartner struct {
 	SubscriptionOptions   datatypes.JSON        `json:"subscription_options" gorm:"type:json"`
 	SpDefaultPreferences  datatypes.JSON        `json:"sp_default_preferences" gorm:"type:json"`
 	SpTimePreferences     datatypes.JSON        `json:"sp_time_preferences" gorm:"type:json"`
+	SpContactDetails      datatypes.JSON        `json:"sp_contact_details" gorm:"type:json"`
 }
 
 type UserShippingPartnerRegistration struct {
 	model_core.Model
-	ShippingPartnerId        uint                     `json:"shipping_partner_id"`
+	ShippingPartnerId        *uint                    `json:"shipping_partner_id"`
 	ShippingPartner          ShippingPartner          `json:"shipping_partner" gorm:"foreignKey:ShippingPartnerId;references:ID"`
 	UserId                   uint                     `json:"user_id"`
 	User                     model_core.CoreUsers     `json:"user" gorm:"foreignKey:UserId;references:ID"`
@@ -59,17 +60,17 @@ type AccountDetails struct {
 	Web_service_key      string                `json:"web_service_key" gorm:"type:varchar(50)"`
 	Web_service_password string                `json:"web_service_password" gorm:"type:varchar(50)"`
 	Meter_number         string                `json:"meter_number" gorm:"type:varchar"`
-	Carrier_weight_id    uint                  `json:"carrier_weight_id" gorm:"type:int"`
+	Carrier_weight_id    *uint                 `json:"carrier_weight_id" gorm:"type:int"`
 	Carrier_weight       mdm.Uom               `json:"carrier_weight" gorm:"foreignKey:Carrier_weight_id; references:ID"`
-	Carrier_currency_id  uint                  `json:"carrier_currency_id" gorm:"type:integer"`
+	Carrier_currency_id  *uint                 `json:"carrier_currency_id" gorm:"type:integer"`
 	Currency             model_core.Currency   `json:"currency" gorm:"foreignKey:Carrier_currency_id; references:ID"`
 	Show_service_rates   *bool                 `json:"show_service_rates" gorm:"type:boolean"`
-	Payment_type_id      uint                  `json:"payment_type_id" gorm:"type:int"`
+	Payment_type_id      *uint                 `json:"payment_type_id" gorm:"type:int"`
 	Payment_Type         model_core.Lookupcode `json:"payment_type" gorm:"foreignKey:Payment_type_id; references:ID"`
 }
 
 type PickupDetails struct {
-	Shipper_details_id uint                                  `json:"shipper_details_id" gorm:"type:integer"`
+	Shipper_details_id *uint                                 `json:"shipper_details_id" gorm:"type:integer"`
 	Shipper_details    shared_pricing_and_location.Locations `json:"shipper_details" gorm:"foreignKey:Shipper_details_id; references:ID"`
 	From_time          time.Time                             `json:"from_time" gorm:"type:time"`
 	To_time            time.Time                             `json:"to_time" gorm:"type:time"`
@@ -77,7 +78,7 @@ type PickupDetails struct {
 
 type PackingDetails struct {
 	Use_volumetric_weight *bool                 `json:"use_volumetric_weight" gorm:"type:boolean"`
-	Packing_method_id     uint                  `json:"packing_method_id" gorm:"type:integer"`
+	Packing_method_id     *uint                 `json:"packing_method_id" gorm:"type:integer"`
 	Packing_method        model_core.Lookupcode `json:"packing_method" gorm:"foreignKey:Packing_method_id; references:ID"`
 	Maximum_weight        float64               `json:"maximum_weight" gorm:"type:double precision"`
 }
@@ -88,15 +89,15 @@ type CommericalInvoiceDetails struct {
 	Include_insurance_charges  *bool                 `json:"include_insurance_charges" gorm:"type:boolean"`
 	Customer_declaration       string                `json:"customer_declaration" gorm:"type:varchar"`
 	Maximum_weight_allowed     float64               `json:"maximum_weight_allowed" gorm:"type:double precision"`
-	Terms_of_sales_id          uint                  `json:"terms_of_sales_id" gorm:"type:integer"`
+	Terms_of_sales_id          *uint                 `json:"terms_of_sales_id" gorm:"type:integer"`
 	Terms_of_sales             model_core.Lookupcode `json:"terms_of_sales" gorm:"foreignKey:Terms_of_sales_id; references:ID"`
-	Uom_id                     uint                  `json:"uom_id" gorm:"type:integer"`
+	Uom_id                     *uint                 `json:"uom_id" gorm:"type:integer"`
 	UOM                        mdm.Uom               `json:"uom" gorm:"foreignkey:Uom_id; references:ID"`
-	Invoice_currency_id        uint                  `json:"invoice_currency_id" gorm:"type:integer"`
+	Invoice_currency_id        *uint                 `json:"invoice_currency_id" gorm:"type:integer"`
 	Currency_info              model_core.Currency   `json:"currency" gorm:"foreignKey:Invoice_currency_id; references:ID"`
-	ProductId                  uint                  `json:"product_id" gorm:"type:int"`
+	ProductId                  *uint                 `json:"product_id" gorm:"type:int"`
 	ProductVariant             mdm.ProductVariant    `json:"product_variant" gorm:"foreignkey:ProductId; references:ID"`
-	ProductTemplateId          uint                  `json:"product_template_id" gorm:"type:integer"`
+	ProductTemplateId          *uint                 `json:"product_template_id" gorm:"type:integer"`
 	ProductTemplate            mdm.ProductTemplate   `json:"product_template" gorm:"foreignkey:ProductTemplateId; references:ID"`
 }
 

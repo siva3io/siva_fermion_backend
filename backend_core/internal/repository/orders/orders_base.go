@@ -36,9 +36,16 @@ type orders_base struct {
 	db *gorm.DB
 }
 
+var ordersBaseRepository *orders_base //singleton object
+
+// singleton function
 func NewOrdersBase() *orders_base {
+	if ordersBaseRepository != nil {
+		return ordersBaseRepository
+	}
 	db := db.DbManager()
-	return &orders_base{db}
+	ordersBaseRepository = &orders_base{db}
+	return ordersBaseRepository
 
 }
 

@@ -128,6 +128,7 @@ type LocationListDTO struct {
 // -----------------LocationDTO for model struct-------------------------------
 type ModelDto struct {
 	ID          uint      `json:"id"`
+	CompanyId   uint      `json:"company_id" gorm:"column:company_id"`
 	IsEnabled   bool      `json:"is_enabled" gorm:"default:true"`
 	IsActive    *bool     `json:"is_active" gorm:"default:true"`
 	UpdatedDate time.Time `json:"updated_date" gorm:"autoUpdateTime"`
@@ -151,6 +152,7 @@ type LocationRequestDTO struct {
 	CreatedByID        *uint          `json:"created_by"`
 	UpdatedByID        *uint          `json:"updated_by"`
 	DeletedByID        *uint          `json:"deleted_by"`
+	CompanyId          *uint          `json:"company_id"`
 	Name               string         `json:"name"`
 	LocationTypeId     uint           `json:"location_type_id"`
 	LocationCode       string         `json:"location_id"`
@@ -170,34 +172,36 @@ type LocationRequestDTO struct {
 }
 type LocationResponseDTO struct {
 	ModelDto
-	Name               string                  `json:"name"`
-	LocationType       app_core.LookupCodesDTO `json:"LocationType"`
-	LocationCode       string                  `json:"location_id"`
-	Parent             *LocationResponseDTO    `json:"parent_location"`
-	ChildLocationIds   []LocationResponseDTO   `json:"child_locations"`
-	Address            datatypes.JSON          `json:"address"`
-	LocationDocs       datatypes.JSON          `json:"location_docs"`
-	Latitude           float32                 `json:"latitude"`
-	Longitude          float32                 `json:"longitude"`
-	ServiceableAreaIds datatypes.JSON          `json:"serviceable_area_ids"`
-	RelatedLocationID  uint                    `json:"related_location_id"`
-	LocationDetails    datatypes.JSON          `json:"location_details"`
-	Email              string                  `json:"email"`
-	MobileNumber       string                  `json:"mobile_number"`
-	Notes              string                  `json:"notes"`
-	IsEnabled          *bool                   `json:"is_enabled" gorm:"default:true"`
-	IsActive           *bool                   `json:"is_active" gorm:"default:true"`
+	Name                string                  `json:"name"`
+	LocationType        app_core.LookupCodesDTO `json:"location_type"`
+	LocationTypeDetails app_core.LookupCodesDTO `json:"LocationType"`
+	LocationCode        string                  `json:"location_id"`
+	Parent              *LocationResponseDTO    `json:"parent_location"`
+	ChildLocationIds    []LocationResponseDTO   `json:"child_locations"`
+	Address             datatypes.JSON          `json:"address"`
+	LocationDocs        datatypes.JSON          `json:"location_docs"`
+	Latitude            float32                 `json:"latitude"`
+	Longitude           float32                 `json:"longitude"`
+	ServiceableAreaIds  datatypes.JSON          `json:"serviceable_area_ids"`
+	RelatedLocationID   uint                    `json:"related_location_id"`
+	LocationDetails     datatypes.JSON          `json:"location_details"`
+	Email               string                  `json:"email"`
+	MobileNumber        string                  `json:"mobile_number"`
+	Notes               string                  `json:"notes"`
+	IsEnabled           *bool                   `json:"is_enabled" gorm:"default:true"`
+	IsActive            *bool                   `json:"is_active" gorm:"default:true"`
 }
 type LocationListResponseDTO struct {
 	ModelDto
-	Name         string                  `json:"name"`
-	LocationType app_core.LookupCodesDTO `json:"LocationType"`
-	LocationCode string                  `json:"location_id"`
-	LocationDocs datatypes.JSON          `json:"location_docs"`
-	Address      datatypes.JSON          `json:"address"`
-	Email        string                  `json:"email"`
-	MobileNumber string                  `json:"mobile_number"`
-	Notes        string                  `json:"notes"`
+	Name               string                  `json:"name"`
+	LocationType       app_core.LookupCodesDTO `json:"LocationType"`
+	LocationCode       string                  `json:"location_id"`
+	LocationDocs       datatypes.JSON          `json:"location_docs"`
+	Address            datatypes.JSON          `json:"address"`
+	Email              string                  `json:"email"`
+	MobileNumber       string                  `json:"mobile_number"`
+	Notes              string                  `json:"notes"`
+	ServiceableAreaIds datatypes.JSON          `json:"serviceable_area_ids"`
 }
 type VirtualLocationDetailsResponseDTO struct {
 	ExternalDetails          datatypes.JSON `json:"external_details"`

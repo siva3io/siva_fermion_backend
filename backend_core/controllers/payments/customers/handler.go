@@ -1,14 +1,17 @@
 package customers
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/payments"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -30,22 +33,56 @@ type handler struct {
 	service Service
 }
 
+var CustomersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CustomersHandler != nil {
+		return CustomersHandler
+	}
 	service := NewService()
-	return &handler{service}
+	CustomersHandler = &handler{service}
+	return CustomersHandler
 }
 
-func (h *handler) CreateCustomer(c echo.Context) error {
-
+func (h *handler) CreateCustomerEvent(c echo.Context) error {
 	input_data := c.Get("customers").(*payments.Customers)
-	s := c.Get("TokenUserID").(string)
-	input_data.CreatedByID = helpers.ConvertStringToUint(s)
+	token_id := c.Get("TokenUserID").(string)
+	user_id, _ := strconv.Atoi(token_id)
+	input_data.CreatedByID = helpers.ConvertStringToUint(token_id)
 	input_data.UserId = *input_data.CreatedByID
-	err := h.service.CreateCustomer(input_data)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = input_data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["user_id"] = user_id
+	//unique_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.CREATE_CUSTOMER, request_payload)
+	return res.RespSuccess(c, "Customer Creation Inprogress", map[string]interface{}{"request_id": request_id})
+
+}
+
+func (h *handler) CreateCustomer(request map[string]interface{}) {
+
+	data := request["data"].(map[string]interface{})
+	var final_data payments.Customers
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+
+	err := h.service.CreateCustomer(&final_data)
+	response_message := new(eda.ConsumerResponse)
 	if err != nil {
-		return res.SuccessWithError(c, err.Error(), nil)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CUSTOMER_ACK,*response_message)
+		return
 	}
-	return res.RespSuccess(c, "customer Created", map[string]interface{}{"customer_id": input_data.ID})
+	response_message.Response = map[string]interface{}{
+		"updated_id": final_data.ID,
+	}
+	// eda.Produce(eda.CREATE_CUSTOMER_ACK,*response_message)
+
 }
 
 func (h *handler) ListCustomers(c echo.Context) error {
@@ -75,7 +112,7 @@ func (h *handler) ViewCustomer(c echo.Context) error {
 	return res.RespSuccess(c, "customer fetched", resp)
 }
 
-func (h *handler) UpdateCustomer(c echo.Context) (err error) {
+func (h *handler) UpdateCustomerEvent(c echo.Context) (err error) {
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
 	ID, _ := strconv.Atoi(id)
@@ -83,13 +120,40 @@ func (h *handler) UpdateCustomer(c echo.Context) (err error) {
 	data := c.Get("customers").(*payments.Customers)
 	s := c.Get("TokenUserID").(string)
 	data.UpdatedByID = helpers.ConvertStringToUint(s)
-	err = h.service.UpdateCustomer(query, data)
-	if err != nil {
-		return res.RespError(c, err)
-	}
-	return res.RespSuccess(c, "customer updated succesfully", nil)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["query"] = query
+	//unique_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_CUSTOMER, request_payload)
+	return res.RespSuccess(c, "Customer Update Inprogress", map[string]interface{}{"request_id": request_id})
+
 }
 
+func (h *handler) UpdateCustomer(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data payments.Customers
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	query := meta_data["query"].(map[string]interface{})
+	//--------------------------concurrency_management_end-----------------------------------------
+	err := h.service.UpdateCustomer(query, &final_data)
+	response_message := new(eda.ConsumerResponse)
+	if err != nil {
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CUSTOMER_ACK,*response_message)
+		return
+	}
+	response_message.Response = map[string]interface{}{
+		"updated_id": final_data.ID,
+	}
+	// eda.Produce(eda.UPDATE_CUSTOMER_ACK,*response_message)
+
+}
 func (h *handler) DeleteCustomer(c echo.Context) (err error) {
 	var id = c.Param("id")
 	var query = make(map[string]interface{})

@@ -38,6 +38,10 @@ type User interface {
 	UpdateCompany(query map[string]interface{}, data model_core.Company) (model_core.Company, error)
 	GetCompany(query map[string]interface{}) (model_core.Company, error)
 	FindAllCompanyUsers(query map[string]interface{}, page *pagination.Paginatevalue) ([]model_core.CoreUsers, error)
+	UpdateUserDetails(id uint, data model_core.CoreUsers) (int64, error)
+	FindAllCoreUser(query map[string]interface{}, p *pagination.Paginatevalue) ([]model_core.CoreUsers, error)
+
+	FindAllCompanies(page *pagination.Paginatevalue) ([]model_core.Company, error)
 }
 
 type user struct {
@@ -115,6 +119,38 @@ func (r *user) GetCompany(query map[string]interface{}) (model_core.Company, err
 func (r *user) FindAllCompanyUsers(query map[string]interface{}, p *pagination.Paginatevalue) ([]model_core.CoreUsers, error) {
 	var data []model_core.CoreUsers
 	err := r.db.Preload(clause.Associations).Model(&model_core.CoreUsers{}).Scopes(helpers.Paginate(&model_core.CoreUsers{}, p, r.db)).Where(query).Find(&data).Error
+	if err != nil {
+		return data, err
+	}
+	return data, nil
+}
+
+func (r *user) UpdateUserDetails(id uint, data model_core.CoreUsers) (int64, error) {
+
+	res := r.db.Model(&model_core.CoreUsers{}).Where("id", id).Updates(&data)
+	if res.Error != nil {
+		return res.RowsAffected, res.Error
+	}
+
+	return res.RowsAffected, nil
+}
+
+func (r *user) FindAllCoreUser(query map[string]interface{}, p *pagination.Paginatevalue) ([]model_core.CoreUsers, error) {
+
+	var result []model_core.CoreUsers
+	res := r.db.Model(&model_core.CoreUsers{}).Scopes(helpers.Paginate(&model_core.CoreUsers{}, p, r.db)).Where("is_active = true")
+	final_res := res.Find(&result)
+	fmt.Println(final_res.Error)
+
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	return result, nil
+}
+
+func (r *user) FindAllCompanies(page *pagination.Paginatevalue) ([]model_core.Company, error) {
+	var data []model_core.Company
+	err := r.db.Preload(clause.Associations).Model(&model_core.Company{}).Scopes(helpers.Paginate(&model_core.Company{}, page, r.db)).Find(&data).Error
 	if err != nil {
 		return data, err
 	}

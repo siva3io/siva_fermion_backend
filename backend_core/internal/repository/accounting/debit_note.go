@@ -36,26 +36,28 @@ type DebitNotes interface {
 	FindOneDebitNote(query map[string]interface{}) (accounting.DebitNote, error)
 	FindAllDebitNote(query interface{}, p *pagination.Paginatevalue) ([]accounting.DebitNote, error)
 	//SearchDebitNote(query string) ([]accounting.DebitNote, error)
-	SaveDebitLines(accounting.DebitNoteLineItems) error
-	UpdateDebitLines(map[string]interface{}, accounting.DebitNoteLineItems) (int64, error)
-	DeleteDebitLine(map[string]interface{}) error
-	FindDebitLines(map[string]interface{}) (accounting.DebitNoteLineItems, error)
+	SaveDebitLines(data accounting.DebitNoteLineItems) error
+	UpdateDebitLines(query map[string]interface{}, data accounting.DebitNoteLineItems) (int64, error)
+	DeleteDebitLine(query map[string]interface{}) error
+	FindDebitLines(query map[string]interface{}) (accounting.DebitNoteLineItems, error)
 }
 type debit_note struct {
 	db *gorm.DB
 }
 
+var debitNoteRepository *debit_note //singleton object
+
+// singleton function
 func NewDebitNote() *debit_note {
+	if debitNoteRepository != nil {
+		return debitNoteRepository
+	}
 	db := db.DbManager()
-	return &debit_note{db}
+	debitNoteRepository = &debit_note{db}
+	return debitNoteRepository
 }
 
 func (r *debit_note) SaveDebitNote(data *accounting.DebitNote) error {
-
-	// err := tx.Model(&accounting.DebitNote{}).Create(data).Error
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
 	err := r.db.Model(&accounting.DebitNote{}).Create(data).Error
 	if err != nil {
 		return err
@@ -64,9 +66,12 @@ func (r *debit_note) SaveDebitNote(data *accounting.DebitNote) error {
 }
 func (r *debit_note) UpdateDebitNote(query map[string]interface{}, data *accounting.DebitNote) error {
 
-	err := r.db.Model(&accounting.DebitNote{}).Where(query).Updates(data).Error
+	err := r.db.Model(&accounting.DebitNote{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if err != nil {
-		return err
+		return err.Error
 	}
 	return nil
 }
@@ -74,11 +79,14 @@ func (r *debit_note) DeleteDebitNote(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
 	res := r.db.Model(&accounting.DebitNote{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}
@@ -86,7 +94,7 @@ func (r *debit_note) DeleteDebitNote(query map[string]interface{}) error {
 }
 func (r *debit_note) FindOneDebitNote(query map[string]interface{}) (accounting.DebitNote, error) {
 	var data accounting.DebitNote
-	err := r.db.Preload(clause.Associations).Model(&accounting.DebitNote{}).Where(query).First(&data)
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&accounting.DebitNote{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
 		return data, errors.New("record not found")
 	}
@@ -97,7 +105,7 @@ func (r *debit_note) FindOneDebitNote(query map[string]interface{}) (accounting.
 }
 func (r *debit_note) FindAllDebitNote(query interface{}, p *pagination.Paginatevalue) ([]accounting.DebitNote, error) {
 	var data []accounting.DebitNote
-	err := r.db.Preload(clause.Associations).Model(&accounting.DebitNote{}).Scopes(helpers.Paginate(&accounting.DebitNote{}, p, r.db)).Where(query).Find(&data).Error
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&accounting.DebitNote{}).Scopes(helpers.Paginate(&accounting.DebitNote{}, p, r.db)).Where(query).Find(&data).Error
 	if err != nil {
 		return data, err
 	}
@@ -114,15 +122,10 @@ func (r *debit_note) FindAllDebitNote(query interface{}, p *pagination.Paginatev
 // }
 
 func (r *debit_note) SaveDebitLines(data accounting.DebitNoteLineItems) error {
-
 	res := r.db.Model(&accounting.DebitNoteLineItems{}).Create(&data)
-
 	if res.Error != nil {
-
 		return res.Error
-
 	}
-
 	return nil
 }
 
@@ -130,32 +133,32 @@ func (r *debit_note) FindDebitLines(query map[string]interface{}) (accounting.De
 	var result accounting.DebitNoteLineItems
 	fmt.Println(query)
 	res := r.db.Model(&accounting.DebitNoteLineItems{}).Where(query).First(&result)
-
+	if res.RowsAffected == 0 {
+		return result, errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return result, res.Error
 	}
-
 	return result, nil
 }
 
 func (r *debit_note) UpdateDebitLines(query map[string]interface{}, data accounting.DebitNoteLineItems) (int64, error) {
 	res := r.db.Model(&accounting.DebitNoteLineItems{}).Where(query).Updates(&data)
-
 	if res.Error != nil {
 
 		return res.RowsAffected, res.Error
 
 	}
-
 	return res.RowsAffected, nil
 }
 
 func (r *debit_note) DeleteDebitLine(query map[string]interface{}) error {
 	res := r.db.Model(&accounting.DebitNoteLineItems{}).Where(query).Delete(&accounting.DebitNoteLineItems{})
-
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}
-
 	return nil
 }

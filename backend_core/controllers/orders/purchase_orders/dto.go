@@ -1,8 +1,6 @@
 package purchase_orders
 
 import (
-	"time"
-
 	app_core "fermion/backend_core/controllers/cores"
 	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
@@ -41,6 +39,7 @@ type (
 		PaidId               uint                   `json:"paid_id"`
 		Paid                 app_core.LookupCode    `json:"paid"`
 		Amount               float32                `json:"amount"`
+		TotalQuantity        int64                  `json:"total_quantity"`
 		PaymentTermsId       uint                   `json:"payment_terms_id"`
 		PaymentTerms         app_core.LookupCode    `json:"payment_terms"`
 		ExpectedDeliveryDate string                 `json:"expected_delivery_date"`
@@ -57,27 +56,25 @@ type (
 )
 
 type PurchaseOrdersDTO struct {
-	ID                          uint                   `json:"id"`
-	IsEnabled                   bool                   `json:"is_enabled" `
-	IsActive                    *bool                  `json:"is_active" `
-	UpdatedDate                 time.Time              `json:"updated_date" `
-	CreatedDate                 time.Time              `json:"created_date" `
-	CreatedByID                 *uint                  `json:"created_by"`
-	DateAndTime                 string                 `json:"date_and_time"`
+	model_core.Model
+	PurchaseOrderNumber         string                 `json:"purchase_order_number"`
 	ReferenceNumber             string                 `json:"reference_number"`
+	CurrencyId                  *uint                  `json:"currency_id"`
+	DateAndTime                 string                 `json:"date_and_time" gorm:"datetime"`
+	ExpectedDeliveryDate        string                 `json:"expected_delivery_date" gorm:"type:date"`
+	OrganizationDetails         map[string]interface{} `json:"organization_details"`
+	TotalQuantity               int64                  `json:"total_quantity"`
+	PaymentDueDate              string                 `json:"payment_due_date" gorm:"type:date"`
+	PriceListID                 *uint                  `json:"price_list_id" gorm:"type:INT"`
 	GenerateReferenceId         bool                   `json:"generate_reference_id"`
 	StatusId                    uint                   `json:"status_id"`
-	DeliveryToId                uint                   `json:"delivery_to_id"`
+	DeliveryToId                *uint                  `json:"delivery_to_id"`
 	StatusHistory               datatypes.JSON         `json:"status_history"`
-	BilledId                    uint                   `json:"billed_id"`
-	PaidId                      uint                   `json:"paid_id"`
-	PurchaseOrderNumber         string                 `json:"purchase_order_number"`
+	BilledId                    *uint                  `json:"billed_id"`
+	PaidId                      *uint                  `json:"paid_id"`
 	GeneratePurchaseOrderNumber bool                   `json:"generate_purchase_order_number"`
 	Amount                      float32                `json:"amount"`
 	PaymentTermsId              *uint                  `json:"payment_terms_id"`
-	ExpectedDeliveryDate        string                 `json:"expected_delivery_date"` //delivery date
-	CurrencyId                  uint                   `json:"currency_id"`
-	PriceListId                 uint                   `json:"price_list_id"`
 	VendorDetails               map[string]interface{} `json:"vendor_details"`
 	DeliveryAddress             map[string]interface{} `json:"delivery_address"`
 	BillingAddress              map[string]interface{} `json:"billing_address"`
@@ -97,7 +94,7 @@ type PurchaseOrderLines struct {
 	InventoryId         uint    `json:"inventory_id"`
 	UomId               uint    `json:"uom_id"`
 	SerialNumber        string  `json:"serial_number"`
-	Quantity            int     `json:"quantity"`
+	Quantity            int64   `json:"quantity"`
 	Price               float32 `json:"price"`
 	Discount            float32 `json:"discount"`
 	Tax                 float32 `json:"tax"`
@@ -105,7 +102,7 @@ type PurchaseOrderLines struct {
 	SalesPeriod         string  `json:"sales_period"`
 	CreditPeriod        string  `json:"credit_period"`
 	LeadTime            string  `json:"lead_time"`
-	ExpDeliveryLeadTiem string  `json:"exp_delivery_lead_time"`
+	ExpDeliveryLeadTime string  `json:"exp_delivery_lead_time"`
 }
 
 type AdditionalInformation struct {

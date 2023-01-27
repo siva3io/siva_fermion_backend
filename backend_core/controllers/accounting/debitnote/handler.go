@@ -1,14 +1,14 @@
 package debitnote
 
 import (
-	"encoding/json"
-	"fmt"
 	"strconv"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 
 	accounting_base "fermion/backend_core/controllers/accounting/base"
+	"fermion/backend_core/controllers/eda"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -35,10 +35,17 @@ type handler struct {
 	base_service accounting_base.ServiceBase
 }
 
+var DebitNoteHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if DebitNoteHandler != nil {
+		return DebitNoteHandler
+	}
 	service := NewService()
 	base_service := accounting_base.NewServiceBase()
-	return &handler{service, base_service}
+	DebitNoteHandler = &handler{service, base_service}
+	return DebitNoteHandler
 }
 
 // CreateDebitNote godoc
@@ -55,28 +62,36 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/create [post]
-func (h *handler) CreateDebitNote(c echo.Context) (err error) {
-	data := new(accounting.DebitNote)
-	dto_data := c.Get("debit_note").(*DebitNoteDTO)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	dto_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	deb_seq := helpers.GenerateSequence("Acc", token_id, "debit_notes")
-	ref_seq := helpers.GenerateSequence("Ref", token_id, "debit_notes")
-	if dto_data.GenerateDebitNoteId {
-		dto_data.DebitNoteID = deb_seq
+func (h *handler) CreateDebitNoteEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("debit_note"),
 	}
-	if dto_data.GenerateReferenceId {
-		dto_data.ReferenceId = ref_seq
-	}
+	eda.Produce(eda.CREATE_DEBITNOTE, request_payload)
+	return res.RespSuccess(c, "Debit note creation inprogress", edaMetaData.RequestId)
+}
 
-	byte_data, _ := json.Marshal(dto_data)
-	json.Unmarshal(byte_data, &data)
-	err = h.service.CreateDebitNote(data, token_id, access_template_id)
+func (h *handler) CreateDebitNote(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	debitNotePayload := new(accounting.DebitNote)
+	helpers.JsonMarshaller(data, debitNotePayload)
+	err := h.service.CreateDebitNote(edaMetaData, debitNotePayload)
+	debitNotePayload.CreatedByID = &edaMetaData.TokenUserId
+	var responseMessage eda.ConsumerResponse
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_DEBITNOTE_ACK, responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "Debit note created successfully", map[string]interface{}{"created_id": data.ID, "Details": data})
+	//cache implementation
+	UpdateDebitNoteInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": debitNotePayload.ID,
+	}
+	// eda.Produce(eda.CREATE_DEBITNOTE_ACK, responseMessage)
 }
 
 // UpdateDebitNote godoc
@@ -94,20 +109,43 @@ func (h *handler) CreateDebitNote(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/{id}/update [post]
-func (h *handler) UpdateDebitNote(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	data := c.Get("debit_note").(*DebitNoteDTO)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateDebitNote(query, data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdateDebitNoteEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	DebitNoteId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         DebitNoteId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Debit Note updated succesfully", data)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("debit_note"),
+	}
+	eda.Produce(eda.UPDATE_DEBITNOTE, request_payload)
+	return res.RespSuccess(c, "Debit Note Update inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateDebitNote(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(accounting.DebitNote)
+	helpers.JsonMarshaller(data, updatePayLoad)
+	err := h.service.UpdateDebitNote(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
+	if err != nil {
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_DEBITNOTE_ACK, responsemessage)
+		return
+	}
+	// cache implementation
+	UpdateDebitNoteInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_DEBITNOTE_ACK, responsemessage)
+
 }
 
 // DebitNoteView godoc
@@ -126,18 +164,19 @@ func (h *handler) UpdateDebitNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/{id} [get]
 func (h *handler) GetDebitNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetDebitNote(query, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	debitNoteId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         debitNoteId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Debit Note Details Retrieved successfully", result)
+	result, err := h.service.GetDebitNote(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	var response DebitNoteResponseDTO
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "DebitNote Note Details Retrieved successfully", response)
 }
 
 // GetAllDebitNote godoc
@@ -158,20 +197,29 @@ func (h *handler) GetDebitNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote [get]
 func (h *handler) GetAllDebitNote(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	// id := c.Param("id")
-	// ID, _ := strconv.Atoi(id)
-	// //println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	// query["id"] = ID
-	result, err := h.service.GetDebitNoteList(query, p, token_id, access_template_id, "LIST")
-	if err != nil {
-		return res.RespError(c, err)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []DebitNoteDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetDebitNoteFromCache(tokenUserId)
 	}
-	return res.RespSuccessInfo(c, "Debit Note list Retrieved Successfully", result, p)
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetDebitNoteList(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Debit Note list Retrieved Successfully", response, p)
 }
 
 // GetAllDebitNoteDropDown godoc
@@ -192,20 +240,28 @@ func (h *handler) GetAllDebitNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/dropdown [get]
 func (h *handler) GetAllDebitNoteDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	// id := c.Param("id")
-	// ID, _ := strconv.Atoi(id)
-	// //println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	// query["id"] = ID
-	result, err := h.service.GetDebitNoteList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
-	if err != nil {
-		return res.RespError(c, err)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []DebitNoteResponseDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetDebitNoteFromCache(tokenUserId)
 	}
-	return res.RespSuccessInfo(c, "Debit Note dropdown list Retrieved Successfully", result, p)
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetDebitNoteList(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Debit Note dropdown list Retrieved Successfully", response, p)
+
 }
 
 // DeleteDebitNote godoc
@@ -223,20 +279,20 @@ func (h *handler) GetAllDebitNoteDropDown(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/{id}/delete [delete]
 func (h *handler) DeleteDebitNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteDebitNote(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	debitNoteId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         debitNoteId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteDebitNote(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
+	// cache implementation
+	UpdateDebitNoteInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", debitNoteId)
 }
 
 // FavouriteDebitNote godoc
@@ -254,32 +310,25 @@ func (h *handler) DeleteDebitNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/{id}/favourite [post]
 func (h *handler) FavouriteDebitNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//var token = Token
-	//userId, _ := helpers.ExtractToken(token)
-	//var query = make(map[string]interface{}, 0)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id) //to be extracted from token payload
-	fmt.Println(user_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	debitNoteId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": debitNoteId,
+	}
+	_, err = h.service.GetDebitNote(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      debitNoteId,
+		"user_id": metaData.TokenUserId,
 	}
-	q := map[string]interface{}{
-		"id": ID,
-	}
-	_, er := h.service.GetDebitNote(q, token_id, access_template_id)
-	if er != nil {
-		//fmt.Println(er.Error())
-		return res.RespSuccess(c, "Specified record not found", er)
-	}
+
 	err = h.base_service.FavouriteDebitNote(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Debit Note is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Debit Note is Marked as Favourite", map[string]string{"debitnote_id": debitNoteId})
 }
 
 // UnFavouriteDebitNote godoc
@@ -297,22 +346,19 @@ func (h *handler) FavouriteDebitNote(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/debitnote/{id}/unfavourite [post]
 func (h *handler) UnFavouriteDebitNote(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//var token = Token
-	//userId, _ := helpers.ExtractToken(token)
-	//var query = make(map[string]interface{}, 0)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+	debitNoteId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      debitNoteId,
+		"user_id": metaData.TokenUserId,
 	}
-	err = h.base_service.UnFavouriteDebitNote(query)
+
+	err = h.base_service.UnFavouriteCreditNote(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Debit Note is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Debit Note is Marked as UnFavourite", map[string]string{"debitnote_id": debitNoteId})
 }
 
 // GetDebitNoteTab godoc
@@ -333,19 +379,19 @@ func (h *handler) UnFavouriteDebitNote(c echo.Context) (err error) {
 // @Router /api/v1/debitnote/{id}/filter_module/{tab} [get]
 func (h *handler) GetDebitNoteTab(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
 	err = c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-
 	id := c.Param("id")
 	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetDebitNoteTab(id, tab, page, access_template_id, token_id)
+	metaData.AdditionalFields = map[string]interface{}{
+		"debitnote_id": id,
+		"tab_name":     tab,
+	}
+	data, err := h.service.GetDebitNoteTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}

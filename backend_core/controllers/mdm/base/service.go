@@ -2,6 +2,7 @@ package mdm_base
 
 import (
 	"errors"
+	"strconv"
 
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/mdm/shared_pricing_and_location"
@@ -63,15 +64,22 @@ type serviceBase struct {
 	mdmRepository mdm_repo.MdmBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	mdmRepository := mdm_repo.NewMdmBase()
-	return &serviceBase{mdmRepository}
+	newServiceObj = &serviceBase{mdmRepository}
+	return newServiceObj
 }
 
 //--------------------------------Contacts------------------------------------
 
 func (s *serviceBase) UnFavouriteContacts(q map[string]interface{}) error {
-	id := q["ID"].(int)
+	id, _ := strconv.Atoi(q["ID"].(string))
 	user_id := q["user_id"].(int)
 	query := map[string]interface{}{
 		"user_id": user_id,
@@ -99,7 +107,7 @@ func (s *serviceBase) UnFavouriteContacts(q map[string]interface{}) error {
 
 func (s *serviceBase) FavouriteContacts(q map[string]interface{}) error {
 	//fmt.Println("start")
-	id := q["ID"].(int)
+	id, _ := strconv.Atoi(q["ID"].(string))
 	user_id := q["user_id"].(int)
 	//fmt.Println(id, user_id)
 	query := map[string]interface{}{

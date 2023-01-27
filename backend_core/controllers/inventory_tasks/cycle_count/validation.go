@@ -1,8 +1,6 @@
 package cycle_count
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -27,43 +25,19 @@ import (
 
 func (c CycleCountRequest) Validate() error {
 	return validation.ValidateStruct(&c,
-		validation.Field(
-			&c.CycleCountNumber,
-			validation.Required,
-		),
-		validation.Field(
-			&c.WarehouseID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.PartnerID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.CountMethodID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.OrderLines,
-			validation.Required,
-		),
-		validation.Field(
-			&c.FrequencyID,
-			validation.Required,
-		),
+		//validation.Field(&c.CycleCountNumber, validation.Required),
+		validation.Field(&c.OrderLines, validation.Required),
 	)
 }
 
 func (d CycleCountLines) Validate() error {
 	return validation.ValidateStruct(&d,
-		validation.Field(
-			&d.ProductID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.ProductVariantID,
-			validation.Required,
-		),
+		// validation.Field(&d.ProductID, validation.Required),
+		validation.Field(&d.ProductVariantID, validation.Required),
+		validation.Field(&d.LocationDetails, validation.Required),
+		validation.Field(&d.InventoryCount, validation.Required),
+		validation.Field(&d.RecordedQuantity, validation.Required),
+		validation.Field(&d.CycleCountDiscrepancyReason, validation.Required),
 	)
 }
 
@@ -77,11 +51,11 @@ func CycleCountCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("invalid payload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

@@ -26,6 +26,7 @@ type CoreAppModule struct {
 	ParentModuleId *uint  `json:"parent_module_id" gorm:"column:parent_module"`
 	ParentModule   *CoreAppModule
 	ItemSequence   *uint `json:"item_sequence"`
+	ExternalId     *uint `json:"external_id"`
 }
 type AccessModuleAction struct {
 	Model

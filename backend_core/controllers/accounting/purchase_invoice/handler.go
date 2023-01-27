@@ -1,15 +1,17 @@
 package purchase_invoice
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
 	accounting_base "fermion/backend_core/controllers/accounting/base"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
-	"fermion/backend_core/pkg/util/emitter"
-	"fermion/backend_core/pkg/util/events"
+
+	// "fermion/backend_core/pkg/util/emitter"
+	// "fermion/backend_core/pkg/util/events"
+	"fermion/backend_core/controllers/eda"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -35,10 +37,17 @@ type handler struct {
 	base_service accounting_base.ServiceBase
 }
 
+var PurchaseInvoiceHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if PurchaseInvoiceHandler != nil {
+		return PurchaseInvoiceHandler
+	}
 	service := NewService()
 	base_service := accounting_base.NewServiceBase()
-	return &handler{service, base_service}
+	PurchaseInvoiceHandler = &handler{service, base_service}
+	return PurchaseInvoiceHandler
 }
 
 // CreatePurchaseInvoice godoc
@@ -55,23 +64,44 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/create [post]
-func (h *handler) CreatePurchaseInvoice(c echo.Context) error {
+func (h *handler) CreatePurchaseInvoiceEvent(c echo.Context) error {
 
-	input_data := c.Get("purchase_invoice").(*accounting.PurchaseInvoice)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	input_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err := h.service.CreatePurchaseInvoice(input_data, token_id, access_template_id)
-
-	if err != nil {
-		return res.RespError(c, err)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("purchase_invoice"),
 	}
+	eda.Produce(eda.CREATE_PURCHASE_INVOICE, request_payload)
+	return res.RespSuccess(c, "Purchase Invoice Creation Inprogress", edaMetaData.RequestId)
+}
 
-	emitter := emitter.GetObj()
-	fmt.Println("ID---------------------->", input_data.ID)
-	emitter.Emit(events.CreatePurchaseInvoiceEvent+"Quickbooks", c, input_data.ID)
+func (h *handler) CreatePurchaseInvoice(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	createPayLoad := new(accounting.PurchaseInvoice)
+	helpers.JsonMarshaller(data, createPayLoad)
+	createPayLoad.CreatedByID = &edaMetaData.TokenUserId
+	err := h.service.CreatePurchaseInvoice(edaMetaData, createPayLoad)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PURCHASE_INVOICE_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayLoad.ID,
+	}
+	// eda.Produce(eda.CREATE_PURCHASE_INVOICE_ACK, responseMessage)
+	fmt.Println("-------cur_id----------", createPayLoad.CurrencyId)
 
-	return res.RespSuccess(c, "Purchase Invoice Created", map[string]interface{}{"purchase_invoice_id": input_data.ID})
+	// emitter := emitter.GetObj()
+	// fmt.Println("ID---------------------->", createPayLoad.ID)
+	// emitter.Emit(events.CreatePurchaseInvoiceEvent+"Quickbooks", createPayLoad.ID)
+	// cache implementation
+	UpdatePurchaseInvoiceInCache(edaMetaData)
+
 }
 
 // GetListPurchaseInvoice godoc
@@ -92,24 +122,27 @@ func (h *handler) CreatePurchaseInvoice(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice [get]
 func (h *handler) ListPurchaseInvoice(c echo.Context) error {
-
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
 	var data []ListPurchaseInvoiceDTO
-
-	resp, err := h.service.ListPurchaseInvoice(page, token_id, access_template_id, "LIST")
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
+	var cacheResponse interface{}
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPurchaseInvoiceFromCache(tokenUserId)
+	}
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &data)
+		return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, p)
+	}
+	resp, err := h.service.ListPurchaseInvoice(metaData, p)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-
-	return res.RespSuccessInfo(c, "list of purchase invoice fetched", data, page)
+	helpers.JsonMarshaller(resp, &data)
+	return res.RespSuccessInfo(c, "list of purchase invoice fetched", data, p)
 }
 
 // ListPurchaseInvoiceDropDown godoc
@@ -130,24 +163,28 @@ func (h *handler) ListPurchaseInvoice(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/dropdown [get]
 func (h *handler) ListPurchaseInvoiceDropDown(c echo.Context) error {
-
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
 	var data []ListPurchaseInvoiceDTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPurchaseInvoiceFromCache(tokenUserId)
+	}
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &data)
+		return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, p)
+	}
 
-	resp, err := h.service.ListPurchaseInvoice(page, token_id, access_template_id, "DROPDOWN_LIST")
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
+	response, err := h.service.ListPurchaseInvoice(metaData, p)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-
-	return res.RespSuccessInfo(c, "dropdown list of purchase invoice fetched", data, page)
+	helpers.JsonMarshaller(response, &data)
+	return res.RespSuccessInfo(c, "dropdown list of purchase invoice fetched", data, p)
 }
 
 // ViewPurchaseInvoice godoc
@@ -166,25 +203,19 @@ func (h *handler) ListPurchaseInvoiceDropDown(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/{id} [get]
 func (h *handler) ViewPurchaseInvoice(c echo.Context) error {
-
-	var query = make(map[string]interface{}, 0)
-
-	ID := c.Param("id")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	id, _ := strconv.Atoi(ID)
-
-	query["id"] = int(id)
-
-	fmt.Println("query", query)
-
-	resp, err := h.service.ViewPurchaseInvoice(query, token_id, access_template_id)
-
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	purchaseInoviceId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         purchaseInoviceId,
+		"company_id": metaData.CompanyId,
 	}
-
-	return res.RespSuccess(c, "purchase invoice fetched", resp)
+	result, err := h.service.ViewPurchaseInvoice(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// var response PurchaseInvoiceDTO
+	// helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Credit Note Details Retrieved successfully", result)
 }
 
 // UpdatePurchaseInvoice godoc
@@ -202,24 +233,43 @@ func (h *handler) ViewPurchaseInvoice(c echo.Context) error {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/{id}/update [post]
-func (h *handler) UpdatePurchaseInvoice(c echo.Context) (err error) {
-	var id = c.Param("id")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-
-	ID, _ := strconv.Atoi(id)
-
-	query["id"] = ID
-
-	data := c.Get("purchase_invoice").(*accounting.PurchaseInvoice)
-	s := c.Get("TokenUserID").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(s)
-	err = h.service.UpdatePurchaseInvoice(query, data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdatePurchaseInvoiceEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	purchaseInoviceId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         purchaseInoviceId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "purchase invoice updated succesfully", nil)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("purchase_invoice"),
+	}
+	eda.Produce(eda.UPDATE_PURCHASE_INVOICE, request_payload)
+	return res.RespSuccess(c, "Purchase Invoice Update inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdatePurchaseInvoice(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(accounting.PurchaseInvoice)
+	helpers.JsonMarshaller(data, updatePayLoad)
+	updatePayLoad.UpdatedByID = &edaMetaData.TokenUserId
+	err := h.service.UpdatePurchaseInvoice(edaMetaData, *updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
+	if err != nil {
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PURCHASE_INVOICE_ACK, responsemessage)
+		return
+	}
+	// cache implementation
+	UpdatePurchaseInvoiceInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_PURCHASE_INVOICE_ACK, responsemessage)
+
 }
 
 // DeletePurchaseInvoice godoc
@@ -237,21 +287,20 @@ func (h *handler) UpdatePurchaseInvoice(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/{id}/delete [delete]
 func (h *handler) DeletePurchaseInvoice(c echo.Context) (err error) {
-	var id = c.Param("id")
-	ID, _ := strconv.Atoi(id)
-
-	var query = make(map[string]interface{})
-
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeletePurchaseInvoice(query, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	purchaseInvoiceId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         purchaseInvoiceId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "purchase invoice deleted successfully", map[string]int{"deleted_id": ID})
+	err = h.service.DeletePurchaseInvoice(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// cache implementation
+	UpdatePurchaseInvoiceInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", purchaseInvoiceId)
 }
 
 // DeletePurchaseInvoiceLines godoc
@@ -272,52 +321,17 @@ func (h *handler) DeletePurchaseInvoice(c echo.Context) (err error) {
 func (h *handler) DeletePurchaseInvoiceLines(c echo.Context) (err error) {
 	var product_id = c.QueryParam("product_id")
 	var id = c.Param("id")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
 	ID, _ := strconv.Atoi(id)
 	var query = map[string]interface{}{
 		"purchase_invoice_id": ID,
 		"product_id":          product_id,
 	}
-	err = h.service.DeletePurchaseInvoiceLines(query, token_id, access_template_id)
+	var metaData core.MetaData
+	err = h.service.DeletePurchaseInvoiceLines(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
 	return res.RespSuccess(c, "purchase invoice line deleted successfully", query)
-}
-
-// SearchPurchaseInvoice godoc
-// @Summary Search PurchaseInvoice
-// @Description Search PurchaseInvoice
-// @Tags PurchaseInvoice
-// @Accept json
-// @Produce json
-// @Param   query 	query 	string 	true "query"
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @Success 200 {array} GetAllPurchaseInvoiceResponse
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/purchase_invoice/search [get]
-func (h *handler) SearchPurchaseInvoice(c echo.Context) error {
-
-	query := c.QueryParam("query")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var data []ListPurchaseInvoiceDTO
-
-	resp, err := h.service.SearchPurchaseInvoice(query, token_id, access_template_id)
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
-	if err != nil {
-		return res.RespError(c, err)
-	}
-
-	return res.RespSuccess(c, "OK", data)
 }
 
 // EmailPurchaseInvoice godoc
@@ -420,27 +434,25 @@ func (h *handler) GeneratePurchaseInvoicePDF(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/{id}/favourite [post]
 func (h *handler) FavouritePurchaseInvoice(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	purchaseInoviceId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": purchaseInoviceId,
+	}
+	_, err = h.service.ViewPurchaseInvoice(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      purchaseInoviceId,
+		"user_id": metaData.TokenUserId,
 	}
-	q := map[string]interface{}{
-		"id": ID,
-	}
-	_, er := h.service.ViewPurchaseInvoice(q, token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
-	}
+
 	err = h.base_service.FavouritePurchaseInvoice(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "PurchaseInvoice is Marked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "PurchaseInvoice is Marked as Favourite", map[string]string{"id": purchaseInoviceId})
 }
 
 // UnFavouritePurchaseInvoice godoc
@@ -458,36 +470,36 @@ func (h *handler) FavouritePurchaseInvoice(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/purchase_invoice/{id}/unfavourite [post]
 func (h *handler) UnFavouritePurchaseInvoice(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+	purchaseInvoiceId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      purchaseInvoiceId,
+		"user_id": metaData.TokenUserId,
 	}
+
 	err = h.base_service.UnFavouritePurchaseInvoice(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "PurchaseInvoice is Unmarked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "PurchaseInvoice is Marked as UnFavourite", map[string]string{"credinote_id": purchaseInvoiceId})
 }
 
 func (h *handler) GetPurchaseInvoiceTab(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
 	err = c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-
 	id := c.Param("id")
 	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetPurchaseInvoiceTab(id, tab, page, access_template_id, token_id)
+	metaData.AdditionalFields = map[string]interface{}{
+		"purchase_invoice": id,
+		"tab_name":         tab,
+	}
+	data, err := h.service.GetPurchaseInvoiceTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}

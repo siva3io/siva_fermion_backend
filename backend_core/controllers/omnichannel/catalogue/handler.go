@@ -30,9 +30,16 @@ type handler struct {
 	service Service
 }
 
+var CatalogueHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CatalogueHandler != nil {
+		return CatalogueHandler
+	}
 	service := NewService()
-	return &handler{service}
+	CatalogueHandler = &handler{service}
+	return CatalogueHandler
 }
 
 //----------------------------------CatalogueTemplate--------------------------------------------------
@@ -86,8 +93,14 @@ func (h *handler) GetCatalogue(c echo.Context) (err error) {
 	ext_category_id, _ := strconv.Atoi(c.QueryParam("ext_category_id"))
 	ext_channel_id, _ := strconv.Atoi(c.QueryParam("ext_channel_id"))
 	variant_id, _ := strconv.Atoi(c.QueryParam("variant_id"))
-
-	result, err := h.service.GetCatalogue(ext_category_id, ext_channel_id, variant_id)
+	company_id, _ := strconv.Atoi(c.QueryParam("company_id"))
+	query := map[string]interface{}{
+		"category_id": ext_category_id,
+		"channel_id":  ext_channel_id,
+		"variant_id":  variant_id,
+		"company_id":  company_id,
+	}
+	result, err := h.service.GetCatalogue(query)
 	fmt.Println(result)
 	if err != nil {
 		return res.RespError(c, err)

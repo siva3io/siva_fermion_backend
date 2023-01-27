@@ -1,9 +1,13 @@
 package accounting
 
 import (
-	accounting_repo "fermion/backend_core/internal/repository/accounting"
+	"fmt"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/pagination"
+	accounting_repo "fermion/backend_core/internal/repository/accounting"
+	access_checker "fermion/backend_core/pkg/util/access"
+	"fermion/backend_core/pkg/util/helpers"
 )
 
 /*
@@ -25,14 +29,22 @@ type Service interface {
 	CreateAccounting(data *accounting.UserAccountingLink) error
 	UpdateAccounting(query map[string]interface{}, data *accounting.UserAccountingLink) error
 	GetAuthKeys(query map[string]interface{}) (interface{}, error)
+	GetUserAccountLinkList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
 }
 
 type service struct {
 	accountingRepository accounting_repo.Accounting
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{accounting_repo.NewAccountingRepo()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{accounting_repo.NewAccountingRepo()}
+	return newServiceObj
 }
 
 func (s *service) CreateAccounting(data *accounting.UserAccountingLink) error {
@@ -56,5 +68,22 @@ func (s *service) GetAuthKeys(query map[string]interface{}) (interface{}, error)
 	if err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+
+func (s *service) GetUserAccountLinkList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
+	token_user_id := helpers.ConvertStringToUint(token_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "ACCOUNTING", *token_user_id)
+	if !access_module_flag {
+		return nil, fmt.Errorf("you dont have access for list contacts at view level")
+	}
+	if data_access == nil {
+		return nil, fmt.Errorf("you dont have access for list contacts at data level")
+	}
+	result, err := s.accountingRepository.FindAllAccountingink(query, p)
+	if err != nil {
+		return result, err
+	}
+
 	return result, nil
 }

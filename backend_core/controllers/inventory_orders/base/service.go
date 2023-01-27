@@ -50,9 +50,16 @@ type serviceBase struct {
 	inventoryOrdersRepository inventory_orders_repo.InventoryOrdersBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	inventoryOrdersRepository := inventory_orders_repo.NewInventoryOrdersBase()
-	return &serviceBase{inventoryOrdersRepository}
+	newServiceObj = &serviceBase{inventoryOrdersRepository}
+	return newServiceObj
 }
 func (s *serviceBase) GetArrInvAdj(user_id int) (pq.Int64Array, error) {
 	query := map[string]interface{}{

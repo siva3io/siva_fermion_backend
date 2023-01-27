@@ -1,12 +1,16 @@
 package sales_returns
 
 import (
+	"time"
+
 	app_core "fermion/backend_core/controllers/cores"
 	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/returns"
 	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util/response"
+
+	"gorm.io/datatypes"
 )
 
 /*
@@ -28,7 +32,6 @@ type (
 		model_core.Model
 		SalesReturnNumber    string                   `json:"sales_return_number"`
 		ReferenceNumber      string                   `json:"reference_number"`
-		SalesOrder           orders.SalesOrders       `json:"sales_order"`
 		SrDate               string                   `json:"sr_date"`
 		CustomerName         string                   `json:"customer_name"`
 		ShippingModeId       uint                     `json:"shipping_mode_id"`
@@ -46,6 +49,7 @@ type (
 		CreditIssued         app_core.LookupCode      `json:"credit_issued"`
 		SourceDocuments      map[string]interface{}   `json:"source_documents"`
 		SourceDocumentTypeId *uint                    `json:"source_document_type_id"`
+		TotalQuantity        int64                    `json:"total_quantity"`
 	}
 	GetAllSalesReturnsResponse struct {
 		Body struct {
@@ -56,37 +60,36 @@ type (
 )
 type SalesReturnsDTO struct {
 	model_core.Model
-	SoId uint `json:"so_id"`
-	DoId uint `json:"do_id"`
-	// AsnId                    uint                         `json:"asn_id"`
-	// GrnId                    uint                         `json:"grn_id"`
-	ReferenceNumber string `json:"reference_number"`
-	// LinkDocument           string                       `json:"link_document"`
-	SrDate            string                 `json:"sr_date"`
-	CustomerName      string                 `json:"customer_name"`
-	ShippingModeId    uint                   `json:"shipping_mode_id"`
-	ShippingDetails   map[string]interface{} `json:"shipping_details"`
-	ChannelName       string                 `json:"channel_name"`
-	Amount            float32                `json:"amount"`
-	ReasonId          uint                   `json:"reason_id"`
-	ShippingCarrierId uint                   `json:"shipping_carrier_id"`
-	StatusId          uint                   `json:"status_id"`
-	StatusHistory     map[string]interface{} `json:"status_history"`
-	CreditIssuedId    uint                   `json:"credit_issued_id"`
-	CurrencyId        uint                   `json:"currency_id"`
-	// LinkDocumentNumber     string                       `json:"link_document_number"`
-	ExpectedDeliveyDate    string                       `json:"expected_delivery_date"`
+	SalesReturnNumber      string                       `json:"sales_return_number" gorm:"type:text"`
+	TotalQuantity          int64                        `json:"total_quantity"`
+	ReferenceNumber        string                       `json:"reference_number"`
+	SrDate                 string                       `json:"sr_date"`
+	CustomerName           string                       `json:"customer_name"`
+	ShippingModeId         *uint                        `json:"shipping_mode_id"`
+	ShippingDetails        map[string]interface{}       `json:"shipping_details"`
+	ChannelName            string                       `json:"channel_name"`
+	Amount                 float32                      `json:"amount"`
+	ReasonId               *uint                        `json:"reason_id"`
+	ShippingCarrierId      *uint                        `json:"shipping_carrier_id"`
+	StatusId               uint                         `json:"status_id"`
+	StatusHistory          map[string]interface{}       `json:"status_history"`
+	CreditIssuedId         *uint                        `json:"credit_issued_id"`
+	CurrencyId             *uint                        `json:"currency_id"`
+	ExpectedDeliveyDate    datatypes.Date               `json:"expected_delivery_date"`
 	PickupDateAndTime      orders.PickupDateAndTime     `json:"pickup_date_and_time"`
 	CustomerPickupAddress  map[string]interface{}       `json:"customer_pickup_address"`
 	CustomerBillingAddress map[string]interface{}       `json:"customer_billing_address"`
 	AdditionalInformation  orders.AdditionalInformation `json:"additional_information"`
-	SalesReturnslines      []SalesReturnsLines          `json:"sales_returns_lines"`
+	SalesReturnLines       []SalesReturnLines           `json:"sales_return_lines"`
 	SrPaymentDetails       SrPaymentDetails             `json:"sr_payment_details"`
 	SourceDocuments        map[string]interface{}       `json:"source_documents"`
 	SourceDocumentTypeId   *uint                        `json:"source_document_type_id"`
+	OrderId                *uint                        `json:"order_id"`
+	Order                  *orders.SalesOrders          `json:"order" gorm:"foreignKey:OrderId;references:ID"`
+	OrderDate              time.Time                    `json:"order_date" gorm:"type:time"`
 }
 
-type SalesReturnsLines struct {
+type SalesReturnLines struct {
 	model_core.Model
 	SrId              uint    `json:"sr_id"`
 	ProductId         uint    `json:"product_id"`
@@ -94,7 +97,7 @@ type SalesReturnsLines struct {
 	InventoryId       uint64  `json:"inventory_id"`
 	UomId             uint    `json:"uom_id"`
 	QuantitySold      int     `json:"quantity_sold"`
-	QuantityReturned  int     `json:"quantity_returned"`
+	QuantityReturned  int64   `json:"quantity_returned"`
 	ReturnTypeId      uint    `json:"return_type_id"`
 	SerialNumber      string  `json:"serial_number"`
 	Rate              int     `json:"rate"`

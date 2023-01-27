@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	inventory_orders_base "fermion/backend_core/controllers/inventory_orders/base"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -33,10 +36,17 @@ type handler struct {
 	base_service inventory_orders_base.ServiceBase
 }
 
+var InventoryAdjustmentsHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if InventoryAdjustmentsHandler != nil {
+		return InventoryAdjustmentsHandler
+	}
 	service := NewService()
 	base_service := inventory_orders_base.NewServiceBase()
-	return &handler{service, base_service}
+	InventoryAdjustmentsHandler = &handler{service, base_service}
+	return InventoryAdjustmentsHandler
 }
 
 // FavouriteInventoryAdjustmentView godoc
@@ -86,19 +96,37 @@ func (h *handler) FavouriteInvAdjView(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/create [post]
-func (h *handler) CreateInvAdj(c echo.Context) (err error) {
-	data := c.Get("inventory_adjustments").(*InventoryAdjustmentsRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	t := uint(user_id)
-	data.CreatedByID = &t
-	id, err := h.service.CreateInvAdj(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-
+func (h *handler) CreateInvAdjEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("inventory_adjustments"),
 	}
-	return res.RespSuccess(c, "Inventory Adjustment created successfully", map[string]interface{}{"created_id": id})
+	eda.Produce(eda.CREATE_INVENTORY_ADJUSTMENTS, request_payload)
+	return res.RespSuccess(c, "Inventory adjustments creation inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateInvAdj(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	createPayload := new(inventory_orders.InventoryAdjustments)
+	helpers.JsonMarshaller(data, createPayload)
+	err := h.service.CreateInvAdj(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
+
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_INVENTORY_ADJUSTMENTS_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateInvAdjInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_INVENTORY_ADJUSTMENTS_ACK, responseMessage)
 }
 
 // BulkCreateInventoryAdjustments godoc
@@ -116,19 +144,20 @@ func (h *handler) CreateInvAdj(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/inventory_adjustments/bulk_create [post]
 func (h *handler) BulkCreateInvAdj(c echo.Context) (err error) {
-	data := new([]InventoryAdjustmentsRequest)
+	data := new([]inventory_orders.InventoryAdjustments)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	t := helpers.ConvertStringToUint(token_id)
+	var metaData core.MetaData
+	// access_template_id := c.Get("AccessTemplateId").(string)
+	// t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
-		(*data)[i].CreatedByID = t
+		(*data)[i].CreatedByID = &metaData.TokenUserId
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateInvAdj(data, token_id, access_template_id)
+	err = h.service.BulkCreateInvAdj(metaData, data)
 	if err != nil {
 		return res.RespError(c, err)
 	}
+	UpdateInvAdjInCache(metaData)
 	return res.RespSuccess(c, "Inventory Adjustments multiple records created successfully", data)
 }
 
@@ -147,18 +176,44 @@ func (h *handler) BulkCreateInvAdj(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/{id}/edit [put]
-func (h *handler) UpdateInvAdj(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("inventory_adjustments").(*InventoryAdjustmentsRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateInvAdj(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdateInvAdjEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         invAdjId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "InventoryAdjustment updated successfully", map[string]interface{}{"updated_id": id})
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("inventory_adjustments"),
+	}
+	eda.Produce(eda.UPDATE_INVENTORY_ADJUSTMENTS, request_payload)
+	return res.RespSuccess(c, "Inventory Adjustments Update inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateInvAdj(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(inventory_orders.InventoryAdjustments)
+	helpers.JsonMarshaller(data, updatePayLoad)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	updatePayLoad.UpdatedByID = &edaMetaData.TokenUserId
+	err := h.service.UpdateInvAdj(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_INVENTORY_ADJUSTMENTS_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateInvAdjInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_INVENTORY_ADJUSTMENTS_ACK, responseMessage)
 }
 
 // GetInventoryAdjustment godoc
@@ -176,15 +231,19 @@ func (h *handler) UpdateInvAdj(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/{id} [get]
 func (h *handler) GetInvAdj(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetInvAdj(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": invAdjId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetInvAdj(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Inventory Adjustment fetched successfully", result)
+	var response InvAdjGet
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Inventory Adjustments Details Retrieved successfully", response)
 }
 
 // GetAllInventoryAdjustments godoc
@@ -205,16 +264,29 @@ func (h *handler) GetInvAdj(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments [get]
 func (h *handler) GetAllInvAdj(c echo.Context) (err error) {
-	//per_page, page_no, sort
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllInvAdj(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []InvAdjGetAll
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetInvAdjFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllInvAdj(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "InvAdj Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Inventory Adjustments list Retrieved Successfully", response, p)
 }
 
 // DeleteInventoryAdjustment godoc
@@ -232,16 +304,20 @@ func (h *handler) GetAllInvAdj(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/{id}/delete [delete]
 func (h *handler) DeleteInvAdj(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteInvAdj(uint(id), uint(user_id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         invAdjId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Inventory Adjustment deleted successfully", map[string]interface{}{"deleted_id": id})
+	err = h.service.DeleteInvAdj(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// cache implementation
+	UpdateInvAdjInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", invAdjId)
 }
 
 // DeleteInventoryAdjustmentLines godoc
@@ -260,21 +336,23 @@ func (h *handler) DeleteInvAdj(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/{id}/delete_products [delete]
 func (h *handler) DeleteInvAdjLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
+	metaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
 	product_id := c.QueryParam("product_id")
 	prod_id, _ := strconv.Atoi(product_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	query := map[string]interface{}{
-		"inv_adj_id": uint(id),
+	metaData.Query = map[string]interface{}{
+		"id":         invAdjId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+		"inv_adj_id": invAdjId,
 		"product_id": uint(prod_id),
 	}
-	err = h.service.DeleteInvAdjLines(query, token_id, access_template_id)
+	err = h.service.DeleteInvAdjLines(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "Inventory Adjustment Line Items successfully deleted", query)
+	UpdateInvAdjInCache(metaData)
+	return res.RespSuccess(c, "Inventory Adjustment Line Items successfully deleted", metaData.Query)
 }
 
 // SendMailInvAdj godoc
@@ -337,20 +415,25 @@ func (h *handler) DownloadPdfInvAdj(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/inventory_adjustments/{id}/favourite [post]
 func (h *handler) FavouriteInvAdj(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": invAdjId,
 	}
-	fmt.Println("handler ------------------------ -1", query)
+	_, err = h.service.GetInvAdj(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+	query := map[string]interface{}{
+		"ID":      invAdjId,
+		"user_id": metaData.TokenUserId,
+	}
+
 	err = h.base_service.FavouriteInvAdj(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Inventory Adjustment is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Inventory Adjustments is Marked as Favourite", map[string]string{"credinote_id": invAdjId})
 }
 
 // UnFavouriteInvAdj godoc
@@ -368,19 +451,19 @@ func (h *handler) FavouriteInvAdj(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/inventory_adjustments/{id}/unfavourite [post]
 func (h *handler) UnFavouriteInvAdj(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	invAdjId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      invAdjId,
+		"user_id": metaData.TokenUserId,
 	}
+
 	err = h.base_service.UnFavouriteInvAdj(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Inventory Adjustment is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Credit Note is Marked as UnFavourite", map[string]string{"invadj_id": invAdjId})
 }
 
 // GetAllInvAdjDropDown godoc
@@ -401,13 +484,25 @@ func (h *handler) UnFavouriteInvAdj(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/inventory_adjustments/dropdown [get]
 func (h *handler) GetAllInvAdjDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllInvAdj(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []InvAdjGetAll
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetInvAdjFromCache(tokenUserId)
+	}
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetAllInvAdj(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "InvAdj Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "inventory adjustments dropdown list Retrieved Successfully", response, p)
 }

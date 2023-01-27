@@ -1,5 +1,5 @@
-
-<!--Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+<!--/*
+Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
 All rights reserved.
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License v3.0 as published by
@@ -10,7 +10,9 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
-along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.-->
+along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+*/-->
+
 ## Models Go
 
 Models are normal structs with basic Go types, pointers/alias of them or custom types implementing Scanner and Valuer interfaces. For Example: type User struct { ID uint.

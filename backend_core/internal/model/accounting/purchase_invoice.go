@@ -44,8 +44,8 @@ type PurchaseInvoice struct {
 	LinkSourceDocumentType *uint                        `json:"link_source_document_type" gorm:"type:integer"`
 	Source_document        model_core.Lookupcode        `json:"link_source_document_id" gorm:"foreignKey:LinkSourceDocumentType; references:ID"`
 	LinkSourceDocument     datatypes.JSON               `json:"link_source_document" gorm:"type:json"`
-	CurrencyId             uint                         `json:"currency_id" gorm:"type:int"`
-	Currency               model_core.Currency          `json:"currency" gorm:"foreignkey:CurrencyId; references:ID"`
+	CurrencyId             *uint                        `json:"currency_id" gorm:"type:int"`
+	Currency               *model_core.Currency         `json:"currency" gorm:"foreignkey:CurrencyId; references:ID"`
 	DeliveryAddress        datatypes.JSON               `json:"delivery_address" gorm:"type:JSON; default:'[]'"`
 	AdditionalInformation  orders.AdditionalInformation `json:"additional_information" gorm:"embedded"`
 	PaymentDetails         PiPaymentDetails             `json:"payment_details" gorm:"embedded"`
@@ -55,25 +55,25 @@ type PurchaseInvoice struct {
 
 type PurchaseInvoiceLines struct {
 	model_core.Model
-	PurchaseInvoiceId uint                                  `json:"purchase_invoice_id" gorm:"type:int"`
-	ProductId         uint                                  `json:"product_id" gorm:"type:int"`
-	Product           mdm.ProductVariant                    `json:"product_details" gorm:"foreignkey:ProductId; references:ID"`
-	ProductTemplateId uint                                  `json:"product_template_id" gorm:"type:int"`
-	ProductTemplate   mdm.ProductTemplate                   `json:"product_template" gorm:"foreignkey:ProductTemplateId; references:ID"`
-	WarehouseId       uint                                  `json:"warehouse_id" gorm:"type:int"`
-	Warehouse         shared_pricing_and_location.Locations `json:"warehouse" gorm:"foreignkey:WarehouseId; references:ID"`
-	InventoryId       uint                                  `json:"inventory_id" gorm:"type:int"`
-	Inventory         mdm.CentralizedBasicInventory         `json:"inventory" gorm:"foreignkey:InventoryId; references:ID"`
-	UomId             uint                                  `json:"uom_id" gorm:"type:int"`
-	Uom               mdm.Uom                               `json:"uom" gorm:"foreignkey:UomId; references:ID"`
-	PaymentTermsId    uint                                  `json:"payment_terms_id" gorm:"type:int"`
-	PaymentTerms      model_core.Lookupcode                 `json:"payment_terms" gorm:"foreignkey:PaymentTermsId; references:ID"`
-	SerialNumber      string                                `json:"serial_number"  gorm:"type:text"`
-	Quantity          int                                   `json:"quantity" gorm:"type:int"`
-	Price             float32                               `json:"price" gorm:"type:float"`
-	Discount          float32                               `json:"discount" gorm:"type:float"`
-	Tax               float32                               `json:"tax" gorm:"type:float"`
-	Amount            float32                               `json:"amount" gorm:"type:float"`
+	PurchaseInvoiceId uint                                   `json:"purchase_invoice_id" gorm:"type:int"`
+	ProductId         uint                                   `json:"product_id" gorm:"type:int"`
+	Product           *mdm.ProductVariant                    `json:"product_details" gorm:"foreignkey:ProductId; references:ID"`
+	ProductTemplateId uint                                   `json:"product_template_id" gorm:"type:int"`
+	ProductTemplate   *mdm.ProductTemplate                   `json:"product_template" gorm:"foreignkey:ProductTemplateId; references:ID"`
+	WarehouseId       uint                                   `json:"warehouse_id" gorm:"type:int"`
+	Warehouse         *shared_pricing_and_location.Locations `json:"warehouse" gorm:"foreignkey:WarehouseId; references:ID"`
+	InventoryId       uint                                   `json:"inventory_id" gorm:"type:int"`
+	Inventory         *mdm.CentralizedBasicInventory         `json:"inventory" gorm:"foreignkey:InventoryId; references:ID"`
+	UomId             uint                                   `json:"uom_id" gorm:"type:int"`
+	Uom               mdm.Uom                                `json:"uom" gorm:"foreignkey:UomId; references:ID"`
+	PaymentTermsId    uint                                   `json:"payment_terms_id" gorm:"type:int"`
+	PaymentTerms      model_core.Lookupcode                  `json:"payment_terms" gorm:"foreignkey:PaymentTermsId; references:ID"`
+	SerialNumber      string                                 `json:"serial_number"  gorm:"type:text"`
+	Quantity          int                                    `json:"quantity" gorm:"type:int"`
+	Price             float32                                `json:"price" gorm:"type:float"`
+	Discount          float32                                `json:"discount" gorm:"type:float"`
+	Tax               float32                                `json:"tax" gorm:"type:float"`
+	Amount            float32                                `json:"amount" gorm:"type:float"`
 }
 type PiPaymentDetails struct {
 	AvailableVendorCredits float32 `json:"available_vendor_credits" gorm:"type:float"`

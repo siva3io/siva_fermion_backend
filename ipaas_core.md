@@ -629,7 +629,9 @@ Mapper is a Go package that allows for mapping multiple prepared SQL statements 
     - A field mapping describes how a persistent field maps to the database
     - The following table shows the sample mapper fields
 
-- **field_sku_code**
+- **mapper_object_description**
+
+-**mapper_object_description**
 
  | fields | Datatype | Sample Values |
 | ------------- | ------------- | ------------- |
@@ -637,178 +639,309 @@ Mapper is a Go package that allows for mapping multiple prepared SQL statements 
 | scope | *str* | local |
 | input | *str* | sku |
 | input_type | *str* | keyvalue |
+|fields |*[]str*|[{}]|
 | output | *str* | sku_code |
 | output_type | *str* | keyvalue |
-| default_value | *str* | "sku-852052" |
+| default_value | *any* | "sku-852052" |
 | execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
+| helper_function | *list(obj)* | []|
 
-- **field_product_name**
+****Field Description****
 
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_product_name |
-| scope | *str* | local |
-| input | *str* | name |
-| input_type | *str* | keyvalue |
-| output | *str* | product_name |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "shirt" |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
+- **Id**  
+   -**data_type**   : (*str*) 
 
-- **field_package_height**
+   -**is_optional** : false
+        
 
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_package_height |
-| scope | *str* | local |
-| input | *str* | height |
-| input_type | *str* | keyvalue |
-| output | *str* | package_height |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "5.6" |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
+   -**description** 
+               - It uniquely identifies the fields in mapper.
 
-- **field_package_length**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_package_length |
-| scope | *str* | local |
-| input | *str* | length |
-| input_type | *str* | keyvalue |
-| output | *str* | package_length |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "10" |
-| fields  | *list(obj)* | [{"fields":"values"}] |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **field_package_width**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_package_width |
-| scope | *str* | local |
-| input | *str* | width |
-| input_type | *str* | keyvalue |
-| output | *str* | package_width |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "10" |
-| fields  | *list(obj)* | [{"fields":"values"}] |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **field_package_weight**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_package_weight |
-| scope | *str* | local |
-| input | *str* | weight |
-| input_type | *str* | keyvalue |
-| output | *str* | package_weight |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "10" |
-| fields  | *list(obj)* | [{"fields":"values"}] |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **obj_package_dimensions**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | obj_package_dimensions |
-| scope | *str* | local |
-| input | *str* | dimensions |
-| input_type | *str* | object |
-| output | *str* | package_dimensions |
-| output_type | *str* | object |
-| default_value | *str* | "10" |
-| fields  | *list(obj)* | field_package_height", "field_package_length","field_package_width", "field_package_weight |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **arr_image_options**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | arr_image_options |
-| scope | *str* | local |
-| input | *str* | images |
-| input_type | *str* | arr |
-| output | *str* | image_options |
-| output_type | *str* | arr |
-| default_value | *str* | "10" |
-| fields  | *list(obj)* | obj_image_option |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **obj_image_option**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | obj_image_option |
-| scope | *str* | local |
-| input | *str* | images |
-| input_type | *str* | obj |
-| output | *str* | image_options |
-| output_type | *str* | obj |
-| default_value | *str* | "asdfghjk.jpg" |
-| fields  | *list(obj)* | field_image_link |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **field_image_link**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | field_image_link |
-| scope | *str* | local |
-| input | *str* | src |
-| input_type | *str* | keyvalue |
-| output | *str* | link |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "asdfghjk.jpg" |
-| fields  | *list(obj)* | field_image_link |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **obj_description**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | obj_description |
-| scope | *str* | local |
-| input | *str* | description |
-| input_type | *str* | keyvalue |
-| output | *str* | description |
-| output_type | *str* | obj |
-| default_value | *str* | "" |
-| fields  | *list(obj)* | obj_description_data |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
-
-- **obj_description_data**
-
- | fields | Datatype | Sample Values |
-| ------------- | ------------- | ------------- |
-| id | *str* | obj_description_data |
-| scope | *str* | local |
-| input | *str* | description |
-| input_type | *str* | keyvalue |
-| output | *str* | data |
-| output_type | *str* | keyvalue |
-| default_value | *str* | "" |
-| fields  | *list(obj)* | obj_description_data |
-| execution_type | *str* | "nested" |
-| helper_function | *list(obj)* | [] |
+   -**possible_values** 
 
 
+               - If the specified value is an object,it commences with a prefix 'obj_'
+                 eg: obj_product
+               - If the specified value is an array,it commences with a prefix 'arr_'
+                 eg: arr_varaint
+               - If the value is a keyvalue,no prefix is required.
+
+- **Scope**
+
+    -**data_type**   : (*str*)
+
+    -**is_optional** : false
+
+    -**description**:
+                - It defines the scope of the variable whether need to take from global or local object.
+        
+    -**possible values**:
+
+        -global : 
+            It takes the outer most block's matching key name as its input .
+                
+        -local:
+            It takes current block's matching key name as its input.
+ 
+- **Input**
+
+    -**data_type**  : (*str*)
+
+    -**is_optional**: false
+
+    -**description** : 
+
+                - It defines the value of the input key which need to map.
+                - If any particular field is not needed to be mentioned then keep it as "" .
+  
+ - **Input_type** 
+
+    -**data_type**  : (*str*)
+
+    -**is_optional**: false
+
+    -**description**: 
+                 - It defines the field type of the input key.
+    
+    -**possible values**:
+                 array, keyvalue, string
+
+ - **Output**
+
+    -**data_type**  : (*str*)
+
+    -**is_optional**: false
+
+    -**description**:      
+                 - It defines the way of the input need to store in which output key.
+                  It defines in which output key the input value need to be stored
+    
+ - **Output type**
+
+     -**data_type**  : (*str*)
+
+     -**is_optional**: false
+
+    -**description**:   - It defines the field type of the output key
+
+     -**possible values**:
+                 array, keyvalue, string
+
+  - **Default value**
+
+    -**data_type**  : (any)
+
+    -**is_optional**: false
+
+    -**description**:  
+                    - In mapper output there should be particular field.
+                     But if the field is not present in input, or need static output then we need to give the default value. 
+                    Otherwise keep it as false(bool).
+
+  - **Executiontype**:
+
+    -**data_type**  :(str)
+
+    -**is_optional**: false
+
+    -**description**:
+                    - It defines whether the field need to execute globally or not.
+                     If type is nested need to execute either inside the object or array wherever it not present globally.
+
+  - **Helper function**:
+
+     -**data_type** :list
+                    - The data type is list of keyvalue pair.
+
+    -**is_optional**: false
+
+    -**description**: 
+                    - It helps to convert the input to expected output.
+
+                   eg: Input is String type need the output type as float then helper function which takes the input as String and give output as float is used.
+
+                  - **StringtoFloat** :
+                   parms: String and other optional params of type interface.
+                    - interface: value of interface type can hold any value that implements those methods.
+                   return type: It returns float32 if the function doesn't have any error or else returns error.
+                   description: It is an array of key value pair 
+                     -key value pair is a struct with the following values keys, value  params ,name ,type which are given below.
+
+                   sample function-1:
+
+                  "helper_function": [
+                  {
+                    "name": "StringtoFloat",
+                    "params": [
+                        {
+                            "key": "mrp",
+                            "type": "variable",
+                            "value": "mrp"
+                        }
+                    ]
+                 }
+                 ]
+
+                It contains name,params,key, type, value
+                name: The name of the function
+                Params : key, type and value
+                key: Name of the entity which stores the value 
+                type: It define the type of the variable It is described below
+                   variable: It gets the value of the variable defined
+                   static: It returs the exact value
+                value:  It holds the value of the data
+     
+          sample function-2:
+    
+                -**FloattoString**:
+                 parmas: string  and other optional params of type interface
+                 return type: If no error it returns string or else returns error
+                 description: It is an array of key value pair 
+              
+                [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "purchase_order_number",
+                            "type": "variable",
+                            "value": "purchase_order_number"
+                        }
+                    ]
+                }
+              ]
+
+          sample function-3:
+
+                 -**FloattoInt**:
+                 Params:string and other optional params of type interface
+                 return type: If no error it returns int or else returns error
+
+          sample function-4:
+
+                -**ExponentialTostring**:
+                parmas: float64 and other optional params
+                return : If no error it returns string or else returns error
+
+               [{"name": "ExponentialToString",
+                        "params": [
+                            {
+                                "key": "order_id",
+                                "type": "variable",
+                                "value": "ParseJsonPathFromObject"
+                            }
+                        ]
+                }]
+         
+          sample function-5:
+           
+                -**InterfaceToXml**: 
+                params: string, interface{} and other optional params of type interface
+                return: If no error returns string else returns error
+            
+                [{"name": "InterfaceToXml",
+                        "params": [
+                            {
+                                "key": "root",
+                                "type": "static",
+                                "value": ""
+                            }
+                        ]
+                }] 
+
+          sample function-6:  
+
+             -**XmltoInterface8**:
+             params: string,other optional params of type interface
+             return: If no error returns map[string]interface{} else returns error
+
+             [{"name": "XmlToInterface",
+                        "params": [
+                            {
+                                "key": "data",
+                                "type": "variable",
+                                "value": "AesDecrypt"
+                            }
+                        ]
+            ]}
+
+            sample function-7:
+
+            -**ExecuteGetApiCall**:
+             params: taskObject , featureSession variables
+               -taskObject: taskobject contains endpoints and query params
+               -featureSession variables: It holds the data for the particular session.
+             return : If no error returns interface{} else returns error
+
+            [{"name": "ParseJsonPathFromObject",
+                    "params": [
+                        {
+                            "key": "object",
+                            "type": "variable",
+                            "value": "ExecuteGetApiCall"
+                        },
+                        {
+                            "key": "path",
+                            "type": "static",
+                            "value": "data"
+                        }
+                    ]
+            }]
+
+           sample function-8
+
+            -**UnixMilliToDateConversion**:
+            Params: interface and optional params
+            return: If no error returns time else returns error
+            Description:
+              The unix time stamp is a way to track time as a running total of seconds. This count starts at the Unix Epoch on January 1st, 1970 at UTC. This function converts Unix seconds to date.
+
+           sample function-9
+            
+             -**GetDateTime**:
+            Params: bool,string, float and other optional params
+                  bool: eg: isutc
+                    Coordinated Universal Time (abbreviated as UTC, and therefore often spelled out as Universal Time Coordinated and sometimes as Universal Coordinated Time) is the standard time common to every place in the world.
+                  string: eg:format 
+                  float : eg:delay
+                  optional params can be interface.
+            return:If no error returns time in string format.
 
 
 
+            sample function-10
+
+            -**CurrentTimeStamp**:
+            Params: bool, optional parms
+                    bool: isMilli
+                    optional params can be an interface.
+            return: It returns current time stamp in string format.
 
 
+            sample function-11
+
+            -**SleepExecution**:
+             params: bool, optional parms
+                     bool: isMilli
+                     optional params can be an interface.
+             Description: We use this function to pause the execution of a current program, delay code execution, and wait for a specified period of time .
+
+
+             sample function-12
+
+             -**FormatDateTime**
+             params: input : string
+                     inputFormat: string
+                     outputFormat: string
+                     optional params can be an interface.
+            Description: It formats the date and time from one format to another format as specified.
+         
+
+
+          
+        
+     
+
+  
+         
+          

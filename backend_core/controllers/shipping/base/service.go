@@ -38,9 +38,16 @@ type serviceBase struct {
 	shippingRepository shipping_repo.ShippingBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	shippingRepository := shipping_repo.NewShippingBase()
-	return &serviceBase{shippingRepository}
+	newServiceObj = &serviceBase{shippingRepository}
+	return newServiceObj
 }
 
 func (s *serviceBase) UnFavouriteShippingOrder(q map[string]interface{}) error {

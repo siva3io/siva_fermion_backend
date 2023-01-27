@@ -49,4 +49,7 @@ var MdmTables = []interface{}{
 	&CentralizedInventoryTransactions{},
 
 	&UserMdmFav{},
+
+	//----hsn-----
+	&HSNCodesData{},
 }

@@ -3,6 +3,8 @@ package util
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
+	"regexp"
 	"strings"
 
 	// "os/exec"
@@ -34,6 +36,7 @@ type SqlModel struct {
 	// defining struct variables
 	ModelName string
 	Link      string
+	Format    bool
 }
 
 func SeedMetaTable(db *gorm.DB, models *string) bool {
@@ -107,6 +110,10 @@ func SeedMasterData(db *gorm.DB) bool {
 				"Link":"core_users.sql"
 			},
 			{
+				"ModelName": "ondc_details",
+				"Link":"ondc_details.sql"
+			},
+			{
 				"ModelName": "companies",
 				"Link":"companies.sql"
 			},
@@ -127,6 +134,10 @@ func SeedMasterData(db *gorm.DB) bool {
 				"Link":"app.sql"
 			},
 			{
+				"ModelName": "shipping_partners",
+				"Link":"shipping_partners.sql"
+			},
+			{
 				"ModelName": "app_categories",
 				"Link":"app_categories.sql"
 			},
@@ -140,7 +151,8 @@ func SeedMasterData(db *gorm.DB) bool {
 			},
 			{
 				"ModelName": "core_app_modules",
-				"Link":"core_app_modules.sql"
+				"Link":"core_app_modules.sql",
+				"Format": true
 			},
 			{
 				"ModelName": "access_templates",
@@ -153,6 +165,14 @@ func SeedMasterData(db *gorm.DB) bool {
 			{
 				"ModelName": "user_template_mapper",
 				"Link":"user_template_mapper.sql"
+			},
+			{
+				"ModelName": "omnichannel_fields",
+				"Link":"omnichannel_fields.sql"
+			},
+			{
+				"ModelName": "hsn_codes_data",
+				"Link":"hsn_codes_data.sql"
 			}
 		]
 	`)
@@ -165,7 +185,7 @@ func SeedMasterData(db *gorm.DB) bool {
 		// print error
 		fmt.Println(err)
 	}
-	for i := range sqlModel {
+	for i, model := range sqlModel {
 		fmt.Println("seeding " + sqlModel[i].ModelName)
 		path := filepath.Join("./backend_core/internal/model/data", sqlModel[i].Link)
 		c, ioErr := ioutil.ReadFile(path)
@@ -174,6 +194,17 @@ func SeedMasterData(db *gorm.DB) bool {
 			fmt.Println(ioErr)
 		}
 		sql := string(c)
+
+		if model.Format {
+			regex := regexp.MustCompile(`\$\{(.*?)\}`)
+			keys := regex.FindAllStringSubmatch(sql, -1)
+
+			for _, key := range keys {
+				value := os.Getenv(key[1])
+				sql = strings.Replace(sql, key[0], value, -1)
+			}
+		}
+
 		db.Exec(sql)
 		fmt.Println("seeded " + sqlModel[i].ModelName)
 	}
@@ -209,6 +240,12 @@ func SeedTestData(db *gorm.DB) bool {
 			},
 			{
 				"ModelName": "shipping"
+			},
+			{
+				"ModelName": "rating"
+			},
+			{
+				"ModelName": "offers"
 			}
 		]
 	`)

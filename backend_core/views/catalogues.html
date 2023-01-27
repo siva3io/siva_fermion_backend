@@ -1,19 +1,18 @@
+
 {{define "catalogues.html"}}
-<!--
- Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
- All rights reserved.
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU Lesser General Public License v3.0 as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU Lesser General Public License v3.0 for more details.
- You should have received a copy of the GNU Lesser General Public License v3.0
- along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
--->
 <!DOCTYPE html>
+<!--Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+All rights reserved.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License v3.0 as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License v3.0 for more details.
+You should have received a copy of the GNU Lesser General Public License v3.0
+along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.-->
 <html>
 <head>
     <title>Eunimart | {{.name}}</title>
@@ -84,7 +83,7 @@
 
 <body>
     <form id="catalogueForm" class="form-signin" method="POST"
-        action="/api/v1/ai_data_sync/template_data_sync?ext_category_id={{.category_id}}&ext_channel_id={{.marketplace_id}}&variant_id={{.variant_id}}&user_data={{.auth_token}}">
+        action="/integrations/ai_data_sync/template_data_sync?ext_category_id={{.category_id}}&ext_channel_id={{.channel_id}}&variant_id={{.variant_id}}&company_id={{.company_id}}">
         <div class="grid-container">
             {{ range $i, $e := .request_obj }}
             <div class="grid-item">

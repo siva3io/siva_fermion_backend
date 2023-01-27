@@ -48,9 +48,16 @@ type webstore struct {
 	db *gorm.DB
 }
 
+var webstoreRepository *webstore //singleton object
+
+// singleton function
 func NewWebstore() *webstore {
+	if webstoreRepository != nil {
+		return webstoreRepository
+	}
 	db := db.DbManager()
-	return &webstore{db}
+	webstoreRepository = &webstore{db}
+	return webstoreRepository
 }
 
 func (r *webstore) CreateWebstore(data *omnichannel.User_Webstore_Link) error {

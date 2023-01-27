@@ -40,9 +40,16 @@ type Customers struct {
 	db *gorm.DB
 }
 
+var CustomersRepository *Customers //singleton object
+
+// singleton function
 func NewCustomer() *Customers {
+	if CustomersRepository != nil {
+		return CustomersRepository
+	}
 	db := db.DbManager()
-	return &Customers{db}
+	CustomersRepository = &Customers{db}
+	return CustomersRepository
 
 }
 

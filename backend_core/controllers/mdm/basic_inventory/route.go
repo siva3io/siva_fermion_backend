@@ -21,23 +21,22 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/centralized/create", h.CreateCentrailizedInventory, cmiddleware.Authorization, BasicInventoryCentralCreateValidate)
-	g.POST("/centralized/:id/update", h.UpdateCentrailizedInventory, cmiddleware.Authorization, BasicInventoryCentralUpdateValidate)
+	g.POST("/centralized/create", h.CreateCentrailizedInventoryEvent, cmiddleware.Authorization, BasicInventoryCentralCreateValidate)
+	g.POST("/centralized/:id/update", h.UpdateCentrailizedInventoryEvent, cmiddleware.Authorization, BasicInventoryCentralUpdateValidate)
 	g.DELETE("/centralized/:id/delete", h.DeleteCentrailizedInventory, cmiddleware.Authorization)
 	g.GET("/centralized/:id", h.GetCentrailizedInventory, cmiddleware.Authorization)
 	g.GET("/centralized", h.GetCentrailizedInventoryList, cmiddleware.Authorization)
 	g.GET("/centralized/dropdown", h.GetCentrailizedInventoryListDropdown, cmiddleware.Authorization)
-	g.GET("/centralized/search", h.SearchCentrailizedInventory, cmiddleware.Authorization)
 
-	g.POST("/decentralized/create", h.CreateDecentralizedInventory, cmiddleware.Authorization, BasicInventoryDeCentralCreateValidate)
-	g.POST("/decentralized/:id/update", h.UpdateDecentralizedInventory, cmiddleware.Authorization, BasicInventoryDeCentralUpdateValidate)
+	g.POST("/decentralized/create", h.CreateDecentralizedInventoryEvent, cmiddleware.Authorization, BasicInventoryDeCentralCreateValidate)
+	g.POST("/decentralized/:id/update", h.UpdateDecentralizedInventoryEvent, cmiddleware.Authorization, BasicInventoryDeCentralUpdateValidate)
 	g.DELETE("/decentralized/:id/delete", h.DeleteDecentralizedInventory, cmiddleware.Authorization)
 	g.GET("/decentralized/:id", h.GetDecentralizedInventory, cmiddleware.Authorization)
 	g.GET("/decentralized", h.GetDecentralizedInventoryList, cmiddleware.Authorization)
 	g.GET("/decentralized/dropdown", h.GetDecentralizedInventoryListDropdown, cmiddleware.Authorization)
-	g.GET("/decentralized/search", h.SearchDecentralizedInventory, cmiddleware.Authorization)
+
 	//-------------Channel API's----------------------------------------------------
-	g.POST("/channels/upsert", h.DeCentralisedInventoryUpsert, cmiddleware.Authorization)
+	g.POST("/channels/upsert", h.DeCentralisedInventoryUpsertEvent, cmiddleware.Authorization)
 	//-------------Inventory Transaction Log API's----------------------------------------------------
 	g.POST("/logs/create", h.InventoryTransactionCreate, cmiddleware.Authorization)
 }

@@ -107,14 +107,33 @@ type Products interface {
 	//-----------------Product Pricing Details -------------------------------------------------------------------------------------------------------------
 	UpdateProductPricingDetails(data *mdm.ProductPricingDetails, query map[string]interface{}) error
 	CreateProductPricingDetails(data *mdm.ProductPricingDetails) error
+
+	GetAllProducts(query map[string]interface{}, search_type string) ([]mdm.ProductVariant, error)
+
+	// -----------------------------hsn----------------------------------
+
+	SaveHsn(data mdm.HSNCodesData) error
+	FindOneHsn(query map[string]interface{}) (mdm.HSNCodesData, error)
+	FindAllHsn(page *pagination.Paginatevalue) ([]mdm.HSNCodesData, error)
+
+	UpdateHsn(query map[string]interface{}, data mdm.HSNCodesData) error
+
+	DeleteHsn(query map[string]interface{}) error
 }
 type products struct {
 	db *gorm.DB
 }
 
+var productsRepository *products //singleton object
+
+// singleton function
 func NewProducts() *products {
+	if productsRepository != nil {
+		return productsRepository
+	}
 	db := db.DbManager()
-	return &products{db}
+	productsRepository = &products{db}
+	return productsRepository
 }
 
 // -------------------------Product Brand--------------------------------------------------------------------------------------------------
@@ -461,7 +480,24 @@ func (r *products) FindVariant(query map[string]interface{}) (mdm.ProductVariant
 }
 func (r *products) GetAllVariant(p *pagination.Paginatevalue) ([]mdm.ProductVariant, error) {
 	var result []mdm.ProductVariant
-	err := r.db.Model(&mdm.ProductVariant{}).Preload(clause.Associations + "." + clause.Associations).Scopes(helpers.Paginate(&mdm.ProductVariant{}, p, r.db)).Find(&result).Error
+	err := r.db.Model(&mdm.ProductVariant{}).Preload(clause.Associations + "." + clause.Associations).Preload("CreatedBy.Company").Scopes(helpers.Paginate(&mdm.ProductVariant{}, p, r.db)).Find(&result).Error
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (r *products) GetAllProducts(query map[string]interface{}, search_type string) ([]mdm.ProductVariant, error) {
+	var result []mdm.ProductVariant
+	var err error
+	if search_type == "product_name" {
+		err = r.db.Model(&mdm.ProductVariant{}).Find(&result, "product_name ILIKE ? ", "%"+query["name"].(string)+"%").Error
+	} else if search_type == "price" {
+		err = r.db.Model(&mdm.ProductVariant{}).Where("sales_price BETWEEN ? AND ?", query["minimum_value"], query["maximum_value"]).Find(&result).Error
+	} else if search_type == "sku_id" {
+		err = r.db.Model(&mdm.ProductVariant{}).Find(&result, "sku_id ILIKE ? ", "%"+query["sku_id"].(string)+"%").Error
+	}
+	// .Find(&result, "sales_price BETWEEN ? AND ?", "50", "100").Error
 	if err != nil {
 		return nil, err
 	}
@@ -595,6 +631,66 @@ func (r *products) CreateProductPricingDetails(data *mdm.ProductPricingDetails) 
 }
 func (r *products) UpdateProductPricingDetails(data *mdm.ProductPricingDetails, query map[string]interface{}) error {
 	err := r.db.Model(&mdm.ProductPricingDetails{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
+}
+
+//------------hsn-------------
+
+func (r *products) SaveHsn(data mdm.HSNCodesData) error {
+	fmt.Println(data)
+	err := r.db.Model(&mdm.HSNCodesData{}).Create(&data).Error
+	if err != nil {
+		fmt.Println("------------error---------------", err)
+		return nil
+	}
+	return nil
+}
+
+func (r *products) FindOneHsn(query map[string]interface{}) (mdm.HSNCodesData, error) {
+
+	var data mdm.HSNCodesData
+	err := r.db.Model(&mdm.HSNCodesData{}).Preload(clause.Associations).Where(query).First(&data)
+
+	if err.RowsAffected == 0 {
+		return data, errors.New("record not found")
+	}
+	if err.Error != nil {
+		return data, err.Error
+	}
+	return data, nil
+}
+
+func (r *products) FindAllHsn(page *pagination.Paginatevalue) ([]mdm.HSNCodesData, error) {
+
+	var data []mdm.HSNCodesData
+	err := r.db.Model(&mdm.HSNCodesData{}).Preload(clause.Associations).Scopes(helpers.Paginate(&mdm.HSNCodesData{}, page, r.db)).Find(&data)
+	if err.Error != nil {
+		return nil, err.Error
+	}
+	return data, nil
+}
+
+func (r *products) UpdateHsn(query map[string]interface{}, data mdm.HSNCodesData) error {
+
+	err := r.db.Model(&mdm.HSNCodesData{}).Where(query).Updates(&data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
+}
+
+func (r *products) DeleteHsn(query map[string]interface{}) error {
+
+	err := r.db.Model(&mdm.HSNCodesData{}).Where(query).Delete(&mdm.HSNCodesData{})
 	if err.RowsAffected == 0 {
 		return errors.New("record not found")
 	}

@@ -29,6 +29,7 @@ type CoreAppModule struct {
 	ParentModuleId *uint  `json:"parent_module_id"`
 	ParentModule   *CoreAppModule
 	ItemSequence   *uint `json:"item_sequence"`
+	ExternalId     *uint `json:"external_id"`
 }
 type AccessModuleAction struct {
 	AccessTemplateId uint `json:"access_template_id"`

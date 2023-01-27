@@ -1260,6 +1260,8 @@ definitions:
         type: string
       commited_stock:
         type: integer
+      company_id:
+        type: integer
       is_active:
         type: boolean
       is_enabled:
@@ -1419,7 +1421,9 @@ definitions:
   contacts.PartnerResponseDTO:
     properties:
       additional_information:
-        $ref: '#/definitions/contacts.AdditionalInformation'
+        items:
+          type: integer
+        type: array
       address_details:
         items:
           $ref: '#/definitions/contacts.AddressDetailsDTO'
@@ -1442,7 +1446,9 @@ definitions:
       id:
         type: integer
       image_options:
-        $ref: '#/definitions/contacts.ImageOptionsDTO'
+        items:
+          type: integer
+        type: array
       is_active:
         type: boolean
       is_allowed_login:
@@ -1550,6 +1556,10 @@ definitions:
         items:
           type: integer
         type: array
+      business_type:
+        $ref: '#/definitions/core.Lookupcode'
+      business_type_id:
+        type: integer
       child_ids:
         items:
           type: integer
@@ -2397,6 +2407,8 @@ definitions:
     properties:
       adjustments:
         type: number
+      app_id:
+        type: integer
       attachments:
         items:
           type: integer
@@ -2404,8 +2416,12 @@ definitions:
       billing_address_id:
         additionalProperties: true
         type: object
+      company_id:
+        type: integer
       created_by:
         type: integer
+      created_date:
+        type: string
       credit_note_id:
         type: string
       credit_note_line_items:
@@ -2424,8 +2440,14 @@ definitions:
         type: boolean
       generate_reference_id:
         type: boolean
+      id:
+        type: integer
       internal_notes:
         type: string
+      is_active:
+        type: boolean
+      is_enabled:
+        type: boolean
       purchase_invoice_id:
         type: integer
       reason_id:
@@ -2452,13 +2474,21 @@ definitions:
         type: string
       total_amount:
         type: number
+      updated_by:
+        type: integer
+      updated_date:
+        type: string
     type: object
   creditnote.CreditNoteLineItems:
     properties:
       amount:
         type: number
+      credit_note_id:
+        type: integer
       discount:
         type: number
+      id:
+        type: integer
       price:
         type: number
       product_template_id:
@@ -2999,6 +3029,8 @@ definitions:
         type: boolean
       generate_reference_id:
         type: boolean
+      id:
+        type: integer
       internal_notes:
         type: string
       purchase_invoice_id:
@@ -3024,6 +3056,8 @@ definitions:
         type: string
       total_amount:
         type: number
+      updated_by:
+        type: integer
       vendor_id:
         type: integer
     type: object
@@ -3031,8 +3065,12 @@ definitions:
     properties:
       amount:
         type: number
+      debit_note_id:
+        type: integer
       discount:
         type: number
+      id:
+        type: integer
       price:
         type: number
       product_template_id:
@@ -3045,6 +3083,16 @@ definitions:
         type: number
       uom_id:
         type: integer
+    type: object
+  delivery_orders.AdditionalInformation:
+    properties:
+      attachments:
+        additionalProperties: true
+        type: object
+      notes:
+        type: string
+      terms_and_condtion:
+        type: string
     type: object
   delivery_orders.Additionalinformation:
     properties:
@@ -3124,6 +3172,8 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
+      is_shipping:
+        type: boolean
       payment_details:
         $ref: '#/definitions/orders.Payment_details'
       payment_type:
@@ -3136,13 +3186,13 @@ definitions:
         $ref: '#/definitions/core.Lookupcode'
       shipping_carrier_id:
         type: integer
-      shipping_details:
-        items:
-          type: integer
-        type: array
       shipping_mode:
         $ref: '#/definitions/core.Lookupcode'
       shipping_mode_id:
+        type: integer
+      shipping_order:
+        $ref: '#/definitions/core.Lookupcode'
+      shipping_order_id:
         type: integer
       status:
         $ref: '#/definitions/core.Lookupcode'
@@ -3164,47 +3214,6 @@ definitions:
         $ref: '#/definitions/shared_pricing_and_location.Locations'
       warehouse_id:
         type: integer
-    type: object
-  delivery_orders.DOGetAll:
-    properties:
-      additional_information:
-        $ref: '#/definitions/delivery_orders.Additionalinformation'
-      app_id:
-        type: integer
-      billing_address:
-        additionalProperties: true
-        type: object
-      channel_name:
-        type: string
-      contact_id:
-        type: integer
-      customer_name:
-        type: string
-      delivery_address:
-        additionalProperties: true
-        type: object
-      delivery_order_details:
-        $ref: '#/definitions/orders.DeliveryOrdersDetails'
-      is_credit_used:
-        type: boolean
-      payment_details:
-        $ref: '#/definitions/orders.Payment_details'
-      payment_type:
-        type: string
-      pickup_date_and_time:
-        $ref: '#/definitions/delivery_orders.DO_PickupDateAndTime'
-      shipping_details:
-        additionalProperties: true
-        type: object
-      source_warehouse:
-        type: integer
-      status:
-        type: string
-      status_history:
-        additionalProperties: true
-        type: object
-      tracking_number:
-        type: string
     type: object
   delivery_orders.DeliveryOrderCreateResponse:
     properties:
@@ -3230,7 +3239,7 @@ definitions:
         properties:
           data:
             items:
-              $ref: '#/definitions/delivery_orders.DOGetAll'
+              $ref: '#/definitions/delivery_orders.DeliveryOrderResponse'
             type: array
           meta:
             $ref: '#/definitions/response.MetaResponse'
@@ -3268,16 +3277,28 @@ definitions:
         type: integer
       deletedBy:
         $ref: '#/definitions/core.CoreUsers'
+      description:
+        type: string
       discount_value:
         type: number
       do_id:
         type: integer
       id:
         type: integer
+      inventory_id:
+        type: integer
       is_active:
         type: boolean
       is_enabled:
         type: boolean
+      location:
+        type: string
+      payment_terms:
+        $ref: '#/definitions/core.Lookupcode'
+      payment_terms_id:
+        type: integer
+      price:
+        type: integer
       product_id:
         type: integer
       product_template_id:
@@ -3309,6 +3330,57 @@ definitions:
           meta:
             $ref: '#/definitions/response.MetaResponse'
         type: object
+    type: object
+  delivery_orders.DeliveryOrderLinesResponse:
+    properties:
+      amount:
+        type: number
+      available_credit:
+        type: integer
+      created_by:
+        type: integer
+      description:
+        type: string
+      discount_value:
+        type: number
+      do_id:
+        type: integer
+      id:
+        type: integer
+      inventory_id:
+        type: integer
+      location:
+        type: string
+      payment_terms:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      payment_terms_id:
+        type: integer
+      price:
+        type: integer
+      product_details:
+        $ref: '#/definitions/products.VariantResponseDTO'
+      product_id:
+        type: integer
+      product_template:
+        $ref: '#/definitions/products.TemplateReponseDTO'
+      product_template_id:
+        type: integer
+      quantity:
+        type: integer
+      rate:
+        type: number
+      serial_no:
+        type: string
+      tax:
+        type: number
+      uom_details:
+        $ref: '#/definitions/uom.UomResponseDTO'
+      uom_id:
+        type: integer
+      updated_by:
+        type: integer
+      warehouse:
+        type: string
     type: object
   delivery_orders.DeliveryOrderRequest:
     properties:
@@ -3356,6 +3428,8 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
+      is_shipping:
+        type: boolean
       payment_details:
         $ref: '#/definitions/delivery_orders.Payment_details'
       payment_type_id:
@@ -3365,9 +3439,10 @@ definitions:
       shipping_carrier_id:
         type: integer
       shipping_details:
-        additionalProperties: true
-        type: object
+        $ref: '#/definitions/shipping_orders.ShippingOrderRequest'
       shipping_mode_id:
+        type: integer
+      shipping_order_id:
         type: integer
       status_history:
         additionalProperties: true
@@ -3385,6 +3460,76 @@ definitions:
       warehouse_id:
         type: integer
     type: object
+  delivery_orders.DeliveryOrderResponse:
+    properties:
+      additional_information:
+        $ref: '#/definitions/delivery_orders.AdditionalInformation'
+      app_id:
+        type: integer
+      billing_address_details:
+        additionalProperties: true
+        type: object
+      channel_name:
+        type: string
+      contact_details:
+        $ref: '#/definitions/contacts.PartnerResponseDTO'
+      contact_id:
+        type: integer
+      created_by:
+        type: integer
+      customer_name:
+        type: string
+      delivery_address_details:
+        additionalProperties: true
+        type: object
+      delivery_order_details:
+        $ref: '#/definitions/delivery_orders.DeliveryOrdersDetail'
+      delivery_order_lines:
+        items:
+          $ref: '#/definitions/delivery_orders.DeliveryOrderLinesResponse'
+        type: array
+      id:
+        type: integer
+      is_credit_used:
+        type: boolean
+      is_shipping:
+        type: boolean
+      payment_details:
+        $ref: '#/definitions/delivery_orders.PaymentDetails'
+      payment_type:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      payment_type_id:
+        type: integer
+      pickup_date_and_time:
+        $ref: '#/definitions/delivery_orders.DO_PickupDateAndTime'
+      shipping_carrier:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      shipping_carrier_id:
+        type: integer
+      shipping_mode:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      shipping_mode_id:
+        type: integer
+      shipping_order:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      shipping_order_id:
+        type: integer
+      status:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      status_history:
+        additionalProperties: true
+        type: object
+      status_id:
+        type: integer
+      tracking_number:
+        type: string
+      updated_by:
+        type: integer
+      warehouse:
+        $ref: '#/definitions/locations.LocationResponseDTO'
+      warehouse_id:
+        type: integer
+    type: object
   delivery_orders.DeliveryOrderUpdateResponse:
     properties:
       body:
@@ -3392,6 +3537,38 @@ definitions:
           data: {}
           meta:
             $ref: '#/definitions/response.MetaResponse'
+        type: object
+    type: object
+  delivery_orders.DeliveryOrdersDetail:
+    properties:
+      currency_details:
+        $ref: '#/definitions/cores.CurrencyDTO'
+      delivery_order_date:
+        type: string
+      delivery_order_number:
+        type: string
+      do_currency:
+        type: integer
+      expected_shipping_date:
+        type: string
+      payment_due_date:
+        type: string
+      payment_term:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      payment_term_id:
+        type: integer
+      price_list_id:
+        type: integer
+      pricing_details:
+        $ref: '#/definitions/shared_pricing_and_location.Pricing'
+      reference_id:
+        type: string
+      source_document:
+        $ref: '#/definitions/cores.LookupCodesDTO'
+      source_document_id:
+        type: integer
+      source_documents:
+        additionalProperties: true
         type: object
     type: object
   delivery_orders.DeliveryOrdersDetails:
@@ -3428,6 +3605,25 @@ definitions:
         type: number
       currency_id:
         type: integer
+      shipping_charge:
+        type: number
+      sub_total:
+        type: number
+      tax:
+        type: number
+      total_amount:
+        type: number
+      vender_credits:
+        type: number
+    type: object
+  delivery_orders.PaymentDetails:
+    properties:
+      adjustment_amount:
+        type: number
+      currency_id:
+        type: integer
+      currency_info:
+        $ref: '#/definitions/cores.CurrencyDTO'
       shipping_charge:
         type: number
       sub_total:
@@ -4312,6 +4508,8 @@ definitions:
         type: integer
       stock_in_hand:
         type: integer
+      unit_price:
+        type: integer
       updated_by:
         type: integer
       updated_date:
@@ -4616,6 +4814,8 @@ definitions:
         type: integer
       stock_in_hand:
         type: integer
+      unit_price:
+        type: integer
       updated_by:
         type: integer
       updated_date:
@@ -4714,6 +4914,8 @@ definitions:
         type: string
       createdBy:
         $ref: '#/definitions/core.CoreUsers'
+      customer_name:
+        type: string
       deleted_by:
         type: integer
       deletedBy:
@@ -6297,6 +6499,108 @@ definitions:
       updatedBy:
         $ref: '#/definitions/core.CoreUsers'
     type: object
+  omnichannel_fields.GetAllOmnichannelFieldsResponse:
+    properties:
+      body:
+        properties:
+          data:
+            items:
+              $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+            type: array
+          meta:
+            $ref: '#/definitions/response.MetaResponse'
+        type: object
+    type: object
+  omnichannel_fields.OmnichannelFieldDeleteResponse:
+    properties:
+      body:
+        properties:
+          data:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+          meta:
+            $ref: '#/definitions/response.MetaResponse'
+        type: object
+    type: object
+  omnichannel_fields.OmnichannelFieldRequestDto:
+    properties:
+      allowed_values:
+        items:
+          type: string
+        type: array
+      app_id:
+        type: integer
+      channel_function_id:
+        type: integer
+      channel_type_id:
+        type: integer
+      data_source:
+        type: string
+      data_source_params:
+        items:
+          type: integer
+        type: array
+      data_type:
+        type: string
+      display_name:
+        type: string
+      field_sequence:
+        type: integer
+      is_mandatory:
+        type: boolean
+      name:
+        type: string
+      placeholder:
+        type: string
+      section_name:
+        type: string
+      section_sequence:
+        type: integer
+      type:
+        type: string
+    type: object
+  omnichannel_fields.OmnichannelFieldResponseDto:
+    properties:
+      allowed_values:
+        items:
+          type: string
+        type: array
+      app_id:
+        type: integer
+      channel_function:
+        $ref: '#/definitions/cores.LookupCodeDTO'
+      channel_function_id:
+        type: integer
+      channel_type:
+        $ref: '#/definitions/cores.LookupCodeDTO'
+      channel_type_id:
+        type: integer
+      data_source:
+        type: string
+      data_source_params:
+        items:
+          type: integer
+        type: array
+      data_type:
+        type: string
+      display_name:
+        type: string
+      field_sequence:
+        type: integer
+      id:
+        type: integer
+      is_mandatory:
+        type: boolean
+      name:
+        type: string
+      placeholder:
+        type: string
+      section_name:
+        type: string
+      section_sequence:
+        type: integer
+      type:
+        type: string
+    type: object
   orders.AdditionalInformation:
     properties:
       attachments:
@@ -6350,16 +6654,28 @@ definitions:
         type: integer
       deletedBy:
         $ref: '#/definitions/core.CoreUsers'
+      description:
+        type: string
       discount_value:
         type: number
       do_id:
         type: integer
       id:
         type: integer
+      inventory_id:
+        type: integer
       is_active:
         type: boolean
       is_enabled:
         type: boolean
+      location:
+        type: string
+      payment_terms:
+        $ref: '#/definitions/core.Lookupcode'
+      payment_terms_id:
+        type: integer
+      price:
+        type: integer
       product_details:
         $ref: '#/definitions/mdm.ProductVariant'
       product_id:
@@ -6439,6 +6755,8 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
+      is_shipping:
+        type: boolean
       payment_details:
         $ref: '#/definitions/orders.Payment_details'
       payment_type:
@@ -6451,13 +6769,13 @@ definitions:
         $ref: '#/definitions/core.Lookupcode'
       shipping_carrier_id:
         type: integer
-      shipping_details:
-        items:
-          type: integer
-        type: array
       shipping_mode:
         $ref: '#/definitions/core.Lookupcode'
       shipping_mode_id:
+        type: integer
+      shipping_order:
+        $ref: '#/definitions/core.Lookupcode'
+      shipping_order_id:
         type: integer
       status:
         $ref: '#/definitions/core.Lookupcode'
@@ -6824,6 +7142,8 @@ definitions:
         type: integer
       deletedBy:
         $ref: '#/definitions/core.CoreUsers'
+      description:
+        type: string
       discount:
         type: number
       external_details:
@@ -6840,6 +7160,8 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
+      location:
+        type: string
       payment_term_id:
         type: integer
       payment_terms:
@@ -7126,6 +7448,8 @@ definitions:
         type: string
       createdBy:
         $ref: '#/definitions/core.CoreUsers'
+      customer_name:
+        type: string
       deleted_by:
         type: integer
       deletedBy:
@@ -7840,8 +8164,6 @@ definitions:
         type: array
       sales_price:
         type: number
-      selling_price:
-        type: number
       shipping:
         type: boolean
       status:
@@ -7849,6 +8171,7 @@ definitions:
       status_id:
         type: integer
       tax:
+        description: SellingPrice   float64                   `json:"selling_price"`
         type: boolean
       tax_options:
         type: number
@@ -7904,6 +8227,8 @@ definitions:
     type: object
   products.CategoryResponseDTO:
     properties:
+      external_id:
+        type: integer
       id:
         type: integer
       name:
@@ -8418,6 +8743,8 @@ definitions:
         $ref: '#/definitions/cores.LookupCodesDTO'
       product_condition_id:
         type: integer
+      product_name:
+        type: string
       product_pricing_details:
         $ref: '#/definitions/products.PricingDetailsResponseDTO'
       product_procurement_treatment_ids:
@@ -9232,37 +9559,31 @@ definitions:
         $ref: '#/definitions/purchase_orders.AdditionalInformation'
       amount:
         type: number
-      app:
-        $ref: '#/definitions/core.InstalledApps'
-      app_id:
-        type: integer
       billed_id:
         type: integer
       billing_address:
         additionalProperties: true
         type: object
-      company_id:
-        type: integer
       created_by:
         type: integer
       created_date:
         type: string
-      createdBy:
-        $ref: '#/definitions/core.CoreUsers'
       currency_id:
         type: integer
       date_and_time:
         type: string
-      deleted_by:
-        type: integer
-      deletedBy:
-        $ref: '#/definitions/core.CoreUsers'
       delivery_address:
         additionalProperties: true
         type: object
+      delivery_to_id:
+        type: integer
       expected_delivery_date:
         description: delivery date
         type: string
+      generate_purchase_order_number:
+        type: boolean
+      generate_reference_id:
+        type: boolean
       id:
         type: integer
       is_active:
@@ -9281,6 +9602,8 @@ definitions:
         items:
           $ref: '#/definitions/purchase_orders.PurchaseOrderLines'
         type: array
+      purchase_order_number:
+        type: string
       reference_number:
         type: string
       source_document_type_id:
@@ -9295,12 +9618,8 @@ definitions:
         type: array
       status_id:
         type: integer
-      updated_by:
-        type: integer
       updated_date:
         type: string
-      updatedBy:
-        $ref: '#/definitions/core.CoreUsers'
       vendor_details:
         additionalProperties: true
         type: object
@@ -10762,6 +11081,8 @@ definitions:
         type: integer
       deletedBy:
         $ref: '#/definitions/core.CoreUsers'
+      description:
+        type: string
       discount:
         type: number
       id:
@@ -10772,6 +11093,10 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
+      location:
+        type: string
+      payment_terms:
+        $ref: '#/definitions/core.Lookupcode'
       payment_terms_id:
         type: integer
       price:
@@ -11519,10 +11844,8 @@ definitions:
         type: boolean
       is_enabled:
         type: boolean
-      link_source_document:
-        items:
-          type: integer
-        type: array
+      is_shipping:
+        type: boolean
       no_of_items:
         type: integer
       order_lines:
@@ -11558,14 +11881,16 @@ definitions:
         type: integer
       scraping_status:
         type: string
-      shipping_details:
+      shipping_order_id:
+        type: integer
+      source_document:
+        $ref: '#/definitions/core.Lookupcode'
+      source_document_type_id:
+        type: integer
+      source_documents:
         items:
           type: integer
         type: array
-      source_document:
-        $ref: '#/definitions/core.Lookupcode'
-      source_document_id:
-        type: integer
       status:
         $ref: '#/definitions/core.Lookupcode'
       status_history:
@@ -11582,33 +11907,6 @@ definitions:
         type: string
       updatedBy:
         $ref: '#/definitions/core.CoreUsers'
-    type: object
-  scrap_orders.SOGetAll:
-    properties:
-      grn_status:
-        type: boolean
-      no_of_items:
-        type: integer
-      pickup_date_time:
-        $ref: '#/definitions/scrap_orders.SO_PickupDateAndTime'
-      schedule_scrap_date:
-        type: string
-      scrap_location_id:
-        type: integer
-      scrap_order_no:
-        type: string
-      scrap_reason:
-        type: string
-      scrap_source_location_id:
-        type: integer
-      scraping_status:
-        type: string
-      shipping_details:
-        additionalProperties: true
-        description: ScrapLocationDetails orders.ScrapLocationDetails `json:"scrap_location_details"`
-        type: object
-      total_quantity:
-        type: integer
     type: object
   scrap_orders.ScrapOrderCreateResponse:
     properties:
@@ -11634,7 +11932,7 @@ definitions:
         properties:
           data:
             items:
-              $ref: '#/definitions/scrap_orders.SOGetAll'
+              $ref: '#/definitions/scrap_orders.ScrapOrdersResponseDTO'
             type: array
           meta:
             $ref: '#/definitions/response.MetaResponse'
@@ -11652,6 +11950,8 @@ definitions:
     type: object
   scrap_orders.ScrapOrderLines:
     properties:
+      id:
+        type: integer
       inventory_id:
         type: integer
       lot_number:
@@ -11667,14 +11967,28 @@ definitions:
       uom_id:
         type: integer
     type: object
-  scrap_orders.ScrapOrderLinesDeleteResponse:
+  scrap_orders.ScrapOrderLinesResponseDTO:
     properties:
-      body:
-        properties:
-          data: {}
-          meta:
-            $ref: '#/definitions/response.MetaResponse'
-        type: object
+      id:
+        type: integer
+      inventory_id:
+        type: integer
+      lot_number:
+        type: integer
+      price:
+        type: number
+      product_Details:
+        $ref: '#/definitions/products.VariantResponseDTO'
+      product_id:
+        type: integer
+      scrap_id:
+        type: integer
+      scrap_item_quantity:
+        type: integer
+      uom:
+        $ref: '#/definitions/uom.UomResponseDTO'
+      uom_id:
+        type: integer
     type: object
   scrap_orders.ScrapOrderUpdateResponse:
     properties:
@@ -11687,37 +12001,20 @@ definitions:
     type: object
   scrap_orders.ScrapOrders:
     properties:
-      app:
-        $ref: '#/definitions/core.InstalledApps'
-      app_id:
-        type: integer
       auto_create_scrap_number:
         type: boolean
       auto_generate_reference_number:
         type: boolean
-      company_id:
-        type: integer
       created_by:
         type: integer
-      created_date:
-        type: string
-      createdBy:
-        $ref: '#/definitions/core.CoreUsers'
       deleted_by:
         type: integer
-      deletedBy:
-        $ref: '#/definitions/core.CoreUsers'
       grn_status:
         type: boolean
       id:
         type: integer
-      is_active:
+      is_shipping:
         type: boolean
-      is_enabled:
-        type: boolean
-      link_source_document:
-        additionalProperties: true
-        type: object
       no_of_items:
         type: integer
       order_lines:
@@ -11744,10 +12041,14 @@ definitions:
       scraping_status:
         type: string
       shipping_details:
+        $ref: '#/definitions/shipping_orders.ShippingOrderRequest'
+      shipping_order_id:
+        type: integer
+      source_document_type_id:
+        type: integer
+      source_documents:
         additionalProperties: true
         type: object
-      source_document_id:
-        type: integer
       status_history:
         additionalProperties: true
         type: object
@@ -11757,10 +12058,76 @@ definitions:
         type: integer
       updated_by:
         type: integer
+    type: object
+  scrap_orders.ScrapOrdersResponseDTO:
+    properties:
+      app_id:
+        type: integer
+      company_id:
+        type: integer
+      created_date:
+        type: string
+      grn_status:
+        type: boolean
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      is_enabled:
+        type: boolean
+      is_shipping:
+        type: boolean
+      no_of_items:
+        type: integer
+      order_lines:
+        items:
+          $ref: '#/definitions/scrap_orders.ScrapOrderLinesResponseDTO'
+        type: array
+      pickup_date_time:
+        $ref: '#/definitions/scrap_orders.SO_PickupDateAndTime'
+      reference_id:
+        type: string
+      schedule_scrap_date:
+        type: string
+      scrap_location:
+        $ref: '#/definitions/locations.LocationResponseDTO'
+      scrap_location_details:
+        additionalProperties: true
+        type: object
+      scrap_location_id:
+        type: integer
+      scrap_order_no:
+        type: string
+      scrap_reason:
+        $ref: '#/definitions/cores.LookupCodeDTO'
+      scrap_reason_id:
+        type: integer
+      scrap_source_location:
+        $ref: '#/definitions/locations.LocationResponseDTO'
+      scrap_source_location_id:
+        type: integer
+      scraping_status:
+        type: string
+      shipping_order_id:
+        type: integer
+      source_document:
+        $ref: '#/definitions/cores.LookupCodeDTO'
+      source_document_type_id:
+        type: integer
+      source_documents:
+        additionalProperties: true
+        type: object
+      status:
+        $ref: '#/definitions/cores.LookupCodeDTO'
+      status_history:
+        additionalProperties: true
+        type: object
+      status_id:
+        type: integer
+      total_quantity:
+        type: integer
       updated_date:
         type: string
-      updatedBy:
-        $ref: '#/definitions/core.CoreUsers'
     type: object
   shared_pricing_and_location.ContractDetails:
     properties:
@@ -11935,6 +12302,8 @@ definitions:
         type: string
       minimum_order_quantity:
         type: integer
+      mrp:
+        type: number
       ppl_id:
         type: integer
       price:
@@ -13007,10 +13376,6 @@ definitions:
     type: object
   shipping_orders.ShippingOrderRequest:
     properties:
-      app:
-        $ref: '#/definitions/core.InstalledApps'
-      app_id:
-        type: integer
       awb_number:
         type: string
       billing_address:
@@ -13019,26 +13384,12 @@ definitions:
         $ref: '#/definitions/shipping_orders.BillingDetails'
       channel_id:
         type: integer
-      cod_amount_received:
-        type: number
-      cod_date_and_time_of_receiving:
-        type: string
       cod_due_amount:
         type: number
       cod_status:
         type: string
-      company_id:
-        type: integer
       created_by:
         type: integer
-      created_date:
-        type: string
-      createdBy:
-        $ref: '#/definitions/core.CoreUsers'
-      deleted_by:
-        type: integer
-      deletedBy:
-        $ref: '#/definitions/core.CoreUsers'
       destination_country_id:
         type: integer
       destination_zipcode:
@@ -13049,11 +13400,7 @@ definitions:
         type: string
       id:
         type: integer
-      is_active:
-        type: boolean
       is_cod:
-        type: boolean
-      is_enabled:
         type: boolean
       is_marketplace_order:
         type: boolean
@@ -13124,10 +13471,6 @@ definitions:
         type: integer
       updated_by:
         type: integer
-      updated_date:
-        type: string
-      updatedBy:
-        $ref: '#/definitions/core.CoreUsers'
     type: object
   shipping_orders.UpdateShippingOrder:
     properties:
@@ -15076,6 +15419,59 @@ paths:
       summary: do a CreateAsn
       tags:
       - Asn
+  /api/v1/asn/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: get all GetAllAsnDropdown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/asn.AsnGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get all GetAllAsnDropdown with MiscOptions of Pagination, Search, Filter
+        and Sort
+      tags:
+      - Asn
   /api/v1/asn/favourite_list:
     get:
       consumes:
@@ -15345,6 +15741,57 @@ paths:
       summary: Create Centralized Inventory
       tags:
       - Basic_Inventory
+  /api/v1/basic_inventory/centralized/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: CentralizedInventoryList
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/basic_inventory.CentralizedListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: CentralizedInventoryList
+      tags:
+      - Basic_Inventory
   /api/v1/basic_inventory/centralized/search:
     get:
       consumes:
@@ -15603,6 +16050,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateDecentralizedInventory
+      tags:
+      - Basic_Inventory
+  /api/v1/basic_inventory/decentralized/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: DecentralizedList
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/basic_inventory.DeentralizedListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: DecentralizedList
       tags:
       - Basic_Inventory
   /api/v1/basic_inventory/decentralized/search:
@@ -16273,6 +16771,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateContact
+      tags:
+      - Contacts
+  /api/v1/contacts/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all contacts
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/contacts.ContactListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all contacts
       tags:
       - Contacts
   /api/v1/contacts/favourite_list:
@@ -17308,6 +17857,51 @@ paths:
       summary: FavouriteCreditNote
       tags:
       - CreditNote
+  /api/v1/creditnote/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetCreditNoteTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetCreditNoteTab
+      tags:
+      - CreditNote
   /api/v1/creditnote/{id}/unfavourite:
     post:
       consumes:
@@ -17433,6 +18027,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateCreditNote
+      tags:
+      - CreditNote
+  /api/v1/creditnote/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all Credit note dropdown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/creditnote.CreditNoteDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Credit note dropdown
       tags:
       - CreditNote
   /api/v1/currency_and_exchange:
@@ -17646,6 +18291,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateExchangePair
+      tags:
+      - CurrencyExchange
+  /api/v1/currency_and_exchange/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all CurrencyExchangeDropDown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/currency_exchange.CurrencyExchangeDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all CurrencyExchangeDropDown
       tags:
       - CurrencyExchange
   /api/v1/cycle_count:
@@ -18154,6 +18850,59 @@ paths:
       summary: do a CreateCycleCount
       tags:
       - CycleCount
+  /api/v1/cycle_count/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all GetAllCycleCountDropDown with MiscOptions of Pagination,
+        Search, Filter and Sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/cycle_count.CycleCountGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all GetAllCycleCountDropDown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      tags:
+      - CycleCount
   /api/v1/cycle_count/favourite_list:
     get:
       consumes:
@@ -18462,6 +19211,51 @@ paths:
       summary: FavouriteDebitNote
       tags:
       - DebitNote
+  /api/v1/debitnote/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetDebitNoteTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetDebitNoteTab
+      tags:
+      - DebitNote
   /api/v1/debitnote/{id}/unfavourite:
     post:
       consumes:
@@ -18587,6 +19381,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateDebitNote
+      tags:
+      - DebitNote
+  /api/v1/debitnote/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get Debit note dropdown list
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/debitnote.DebitNoteDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get Debit note dropdown list
       tags:
       - DebitNote
   /api/v1/delivery_orders:
@@ -19093,6 +19938,57 @@ paths:
       summary: do a CreateDeliveryOrder
       tags:
       - DeliveryOrders
+  /api/v1/delivery_orders/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: a get AllDeliveryOrdersDropDown and filter it by search query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/delivery_orders.DeliveryOrderGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get AllDeliveryOrdersDropDown and filter it by search query
+      tags:
+      - DeliveryOrders
   /api/v1/grn:
     get:
       consumes:
@@ -19595,6 +20491,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateGRN
+      tags:
+      - GRN
+  /api/v1/grn/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get All GRN
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GetAllGRNResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetAllGRNDropDown
       tags:
       - GRN
   /api/v1/grn/favourite_list:
@@ -20118,6 +21065,59 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Create InternalTransfers
+      tags:
+      - InternalTransfers
+  /api/v1/internal_transfers/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all InternalTransfers DropDown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_transfers.GetAllInternalTransfersResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all InternalTransfers DropDown
       tags:
       - InternalTransfers
   /api/v1/internal_transfers/order_lines/{id}/delete:
@@ -20678,6 +21678,59 @@ paths:
       summary: do a CreateInventoryAdjustment
       tags:
       - Inventory Adjustments
+  /api/v1/inventory_adjustments/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: get all GetAllInvAdjDropDown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/inventory_adjustments.InvAdjGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get all GetAllInvAdjDropDown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      tags:
+      - Inventory Adjustments
   /api/v1/inventory_adjustments/favourite_list:
     get:
       consumes:
@@ -21025,6 +22078,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateLocation
+      tags:
+      - Locations
+  /api/v1/locations/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all Location  list
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/locations.LocationListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Location  list
       tags:
       - Locations
   /api/v1/locations/favourite_list:
@@ -21762,6 +22866,57 @@ paths:
       summary: do a LinkMarketplacedetails
       tags:
       - Marketplaces
+  /api/v1/marketplace/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: get AllMarketplaces dropdown list and filter it by search query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/marketplace.MarketplaceGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get AllMarketplaces dropdown list and filter it by search query
+      tags:
+      - Marketplaces
   /api/v1/marketplace/list:
     get:
       consumes:
@@ -21795,6 +22950,42 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: get all AllMarketplacesdetails and filter it by search query
+      tags:
+      - Marketplaces
+  /api/v1/marketplace/list/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: get AllMarketplacesdetails dropdown list and filter it by search
+        query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/marketplace.MarketplacedetailGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get AllMarketplacesdetails dropdown list and filter it by search query
       tags:
       - Marketplaces
   /api/v1/marketplace/register:
@@ -22025,6 +23216,220 @@ paths:
       summary: Get all CoreModule
       tags:
       - Access_Management
+  /api/v1/omnichannel_fields:
+    get:
+      consumes:
+      - application/json
+      description: View AppFields
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: app_id
+        in: query
+        name: app_id
+        type: string
+      - description: channel_type_id
+        in: query
+        name: channel_type_id
+        type: string
+      - description: channel_function_id
+        in: query
+        name: channel_function_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: View AppFields
+      tags:
+      - OmnichannelFields
+  /api/v1/omnichannel_fields/{id}:
+    get:
+      consumes:
+      - application/json
+      description: View OmnichannelFields
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: so_id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: View OmnichannelFields
+      tags:
+      - OmnichannelFields
+  /api/v1/omnichannel_fields/{id}/delete:
+    delete:
+      consumes:
+      - application/json
+      description: Delete OmnichannelFields
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: field_id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldDeleteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete OmnichannelFields
+      tags:
+      - OmnichannelFields
+  /api/v1/omnichannel_fields/{id}/update:
+    post:
+      consumes:
+      - application/json
+      description: Update OmnichannelFields
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: so_id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: OmnichannelField Request Body
+        in: body
+        name: RequestBody
+        required: true
+        schema:
+          $ref: '#/definitions/omnichannel_fields.OmnichannelFieldRequestDto'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Update OmnichannelFields
+      tags:
+      - OmnichannelFields
+  /api/v1/omnichannel_fields/create:
+    post:
+      consumes:
+      - application/json
+      description: Create OmnichannelFields
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: OmnichannelField Request Body
+        in: body
+        name: RequestBody
+        required: true
+        schema:
+          $ref: '#/definitions/omnichannel_fields.OmnichannelFieldRequestDto'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/omnichannel_fields.OmnichannelFieldResponseDto'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Create OmnichannelFields
+      tags:
+      - OmnichannelFields
   /api/v1/payment_terms:
     get:
       consumes:
@@ -22241,6 +23646,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreatePaymentTerm
+      tags:
+      - PaymentTerms and Record Payments
+  /api/v1/payment_terms/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all Payment Terms dropdown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/payment_terms_and_record_payment.PaymentTermsDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all Payment Terms dropdown
       tags:
       - PaymentTerms and Record Payments
   /api/v1/pick_list:
@@ -22714,6 +24170,59 @@ paths:
       summary: do a CreatePicklist
       tags:
       - PickList
+  /api/v1/pick_list/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: get all GetAllPickListDropDown with MiscOptions of Pagination,
+        Search, Filter and Sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/pick_list.PicklistGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get all GetAllPickListDropDown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      tags:
+      - PickList
   /api/v1/pick_list/favourite_list:
     get:
       consumes:
@@ -23094,6 +24603,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Do Create Price List
+      tags:
+      - Pricing
+  /api/v1/pricing/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: a get all Price List and filter it by search query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/pricing.PricingListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get all Price List and filter it by search query
       tags:
       - Pricing
   /api/v1/pricing/favourite_list:
@@ -23587,6 +25147,59 @@ paths:
       summary: CreateProductBaseAttributes
       tags:
       - Products
+  /api/v1/products/base_attributes/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  ProductBaseAttributes
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.ProductBaseAttributesRequestAndResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductBaseAttributes
+      tags:
+      - Products
   /api/v1/products/base_attributes_values:
     get:
       consumes:
@@ -23767,6 +25380,59 @@ paths:
       summary: CreateProductBaseAttributesValues
       tags:
       - Products
+  /api/v1/products/base_attributes_values/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  ProductBaseAttributesValues
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.ProductBaseAttributesValuesRequestAndResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductBaseAttributesValues
+      tags:
+      - Products
   /api/v1/products/brand:
     get:
       consumes:
@@ -23945,6 +25611,59 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateProductBrand
+      tags:
+      - Products
+  /api/v1/products/brand/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: ProductBrand List
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.BrandRequestAndResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetProductBrand
       tags:
       - Products
   /api/v1/products/bulk_create:
@@ -24210,6 +25929,59 @@ paths:
       summary: do a CreateBundleDetails
       tags:
       - Products
+  /api/v1/products/bundle/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  Bundles
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.BudleResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: List of Bundles
+      tags:
+      - Products
   /api/v1/products/category:
     get:
       consumes:
@@ -24390,6 +26162,59 @@ paths:
       summary: CreateProductCategory
       tags:
       - Products
+  /api/v1/products/category/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  ProductCategories
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.CategoryAndSubcategoryRequestAndResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductCategory
+      tags:
+      - Products
   /api/v1/products/create:
     post:
       consumes:
@@ -24429,6 +26254,60 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: do a CreateProductDetails
+      tags:
+      - Products
+  /api/v1/products/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of All Products  with MISC OPTIONS of pagination, search,Filter
+        and sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.TemplateReponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProducts with MISC OPTIONS of pagination, search,Filter and sort
       tags:
       - Products
   /api/v1/products/favourite_list:
@@ -24664,6 +26543,59 @@ paths:
       summary: CreateProductSelectedAttributes
       tags:
       - Products
+  /api/v1/products/selected_attributes/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  ProductSelectedAttributes
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.ProductSelectedAttributesRequestAndREsponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductSelectedAttributes
+      tags:
+      - Products
   /api/v1/products/selected_attributes_values:
     get:
       consumes:
@@ -24842,6 +26774,59 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateProductSelectedAttributesValues
+      tags:
+      - Products
+  /api/v1/products/selected_attributes_values/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of  ProductSelectedAttributesValues
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.ProductSelectedAttributesValuesRequestAndResponseeDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductSelectedAttributesValues
       tags:
       - Products
   /api/v1/products/sku_code:
@@ -25059,6 +27044,51 @@ paths:
       summary: Download Productvariant
       tags:
       - Products
+  /api/v1/products/variant/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetProductVariantTabs
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetProductVariantTabs
+      tags:
+      - Products
   /api/v1/products/variant/{id}/qrcode:
     post:
       consumes:
@@ -25184,6 +27214,61 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateProductVariantDetails
+      tags:
+      - Products
+  /api/v1/products/variant/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: List of All ProductVariants  with MISC OPTIONS of pagination, search,Filter
+        and sort
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/products.VariantResponseDTO'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: ListProductVariants with MISC OPTIONS of pagination, search,Filter
+        and sort
       tags:
       - Products
   /api/v1/products/variant/variant_generation:
@@ -25679,6 +27764,59 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Create PurchaseInvoice
+      tags:
+      - PurchaseInvoice
+  /api/v1/purchase_invoice/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all PurchaseInvoice dropdown list
+      parameters:
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/purchase_invoice.GetAllPurchaseInvoiceResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all PurchaseInvoice dropdown list
       tags:
       - PurchaseInvoice
   /api/v1/purchase_invoice/invoice_lines/{id}/delete:
@@ -26273,6 +28411,59 @@ paths:
       summary: Create PurchaseOrders
       tags:
       - PurchaseOrders
+  /api/v1/purchase_orders/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all PurchaseOrders dropdown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/purchase_orders.GetAllPurchaseOrdersResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all PurchaseOrders dropdown
+      tags:
+      - PurchaseOrders
   /api/v1/purchase_orders/order_lines/{id}/delete:
     delete:
       consumes:
@@ -26573,6 +28764,51 @@ paths:
       summary: FavouritePurchaseReturns
       tags:
       - PurchaseReturns
+  /api/v1/purchase_returns/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetPurchaseReturnTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetPurchaseReturnTab
+      tags:
+      - PurchaseReturns
   /api/v1/purchase_returns/{id}/generatePdf:
     post:
       consumes:
@@ -26818,6 +29054,59 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Create PurchaseReturns
+      tags:
+      - PurchaseReturns
+  /api/v1/purchase_returns/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all PurchaseReturns list
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/purchase_returns.GetAllPurchaseReturnsResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all PurchaseReturns list
       tags:
       - PurchaseReturns
   /api/v1/purchase_returns/return_lines/{id}/delete:
@@ -27378,6 +29667,59 @@ paths:
       summary: Create Sales Invoice
       tags:
       - Sales Invoice
+  /api/v1/sales_invoice/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get All Sales Invoice dropdown with MiscOptions of Pagination,
+        Search, Filter and Sort
+      parameters:
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/sales_invoice.SalesInvoiceGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get All Sales Invoice dropdown with MiscOptions of Pagination, Search,
+        Filter and Sort
+      tags:
+      - Sales Invoice
   /api/v1/sales_orders:
     get:
       consumes:
@@ -27883,6 +30225,59 @@ paths:
       summary: Create SalesOrders
       tags:
       - SalesOrders
+  /api/v1/sales_orders/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all SalesOrders DropDown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/sales_orders.GetAllSalesOrdersResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all SalesOrders DropDown
+      tags:
+      - SalesOrders
   /api/v1/sales_orders/order_lines/{id}/delete:
     delete:
       consumes:
@@ -28183,6 +30578,51 @@ paths:
       summary: FavouriteSalesReturns
       tags:
       - SalesReturns
+  /api/v1/sales_returns/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetSalesReturnTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetSalesReturnTab
+      tags:
+      - SalesReturns
   /api/v1/sales_returns/{id}/generatePdf:
     post:
       consumes:
@@ -28430,6 +30870,59 @@ paths:
       summary: Create SalesReturns
       tags:
       - SalesReturns
+  /api/v1/sales_returns/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all SalesReturns dropdown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/sales_returns.GetAllSalesReturnsResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all SalesReturns dropdown
+      tags:
+      - SalesReturns
   /api/v1/sales_returns/return_lines/{id}/delete:
     delete:
       consumes:
@@ -28648,51 +31141,6 @@ paths:
       summary: Delete a ScrapOrder
       tags:
       - ScrapOrders
-  /api/v1/scrap_orders/{id}/delete_products:
-    delete:
-      consumes:
-      - application/json
-      description: Delete a ScrapOrderLine and provide the product_id as queryParam
-      parameters:
-      - description: Authorization
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      - description: id
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: product_id
-        in: query
-        name: product_id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/scrap_orders.ScrapOrderLinesDeleteResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: Delete a ScrapOrderLine and provide the product_id as queryParam
-      tags:
-      - ScrapOrders
   /api/v1/scrap_orders/{id}/download_pdf:
     post:
       consumes:
@@ -28771,6 +31219,51 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: FavouriteScrapOrders
+      tags:
+      - ScrapOrders
+  /api/v1/scrap_orders/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetScrapOrderTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetScrapOrderTab
       tags:
       - ScrapOrders
   /api/v1/scrap_orders/{id}/generate_pdf:
@@ -28939,6 +31432,9 @@ paths:
       summary: do a UpdateScrap
       tags:
       - ScrapOrders
+  /api/v1/scrap_orders/{line_id}/delete_product:
+    delete:
+      responses: {}
   /api/v1/scrap_orders/bulkcreate:
     post:
       consumes:
@@ -29019,6 +31515,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: do a CreateScrapOrder
+      tags:
+      - ScrapOrders
+  /api/v1/scrap_orders/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Find All ScrapOrders and filter it by search query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/scrap_orders.ScrapOrderGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Find All ScrapOrders and filter it by search query
       tags:
       - ScrapOrders
   /api/v1/shipping_orders:
@@ -29230,6 +31777,51 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: FavouriteShippingOrder
+      tags:
+      - ShippingOrder
+  /api/v1/shipping_orders/{id}/filter_module/{tab}:
+    get:
+      consumes:
+      - application/json
+      description: GetShippingOrderTab
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tab
+        in: path
+        name: tab
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.SuccessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetShippingOrderTab
       tags:
       - ShippingOrder
   /api/v1/shipping_orders/{id}/generate_pdf:
@@ -29478,6 +32070,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateShippingOrder
+      tags:
+      - ShippingOrder
+  /api/v1/shipping_orders/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get All ShippingOrdersDropDown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GetAllShippingOrdersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetAllShippingOrdersDropDown
       tags:
       - ShippingOrder
   /api/v1/shipping_orders/order_line/{id}/delete:
@@ -29784,6 +32427,57 @@ paths:
       summary: CreateNDR
       tags:
       - NDR
+  /api/v1/shipping_orders_ndr/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get NDR dropdown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GetAllNDRResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all NDR and filter it by search query
+      tags:
+      - NDR
   /api/v1/shipping_orders_ndr/ndr_lines/{id}/delete:
     delete:
       consumes:
@@ -30088,6 +32782,57 @@ paths:
       summary: CreateRTO
       tags:
       - RTO
+  /api/v1/shipping_orders_rto/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get DropDown RTO
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GetAllRTOResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetAllRTODropDown
+      tags:
+      - RTO
   /api/v1/shipping_orders_wd:
     get:
       consumes:
@@ -30345,6 +33090,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateWD
+      tags:
+      - WD
+  /api/v1/shipping_orders_wd/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get All WD
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/GetAllWDResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetAllWDDropDown
       tags:
       - WD
   /api/v1/shipping_partners:
@@ -30764,6 +33560,57 @@ paths:
       summary: GetShippingPartnerByName
       tags:
       - ShippingPartner
+  /api/v1/shipping_partners/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: GetAllUserShippingPartnerRegistrationDropDown
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      - description: Filters
+        in: query
+        name: filters
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/UserShippingPartnerRegistrationGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: GetAllUserShippingPartnerRegistrationDropDown
+      tags:
+      - UserShippingPartnerRegistrationDropDown
   /api/v1/shipping_partners/list:
     get:
       consumes:
@@ -31561,6 +34408,57 @@ paths:
       summary: CreateUomClass
       tags:
       - UOM
+  /api/v1/uom/class/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: UomClassList
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/uom.UomClassListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: UomClassList
+      tags:
+      - UOM
   /api/v1/uom/class/search:
     get:
       consumes:
@@ -31642,6 +34540,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateUom
+      tags:
+      - UOM
+  /api/v1/uom/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: UomList
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/uom.UomListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: UomList
       tags:
       - UOM
   /api/v1/uom/search:
@@ -31984,6 +34933,57 @@ paths:
       summary: CreateVendors
       tags:
       - Vendors
+  /api/v1/vendors/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all vendors
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/vendors.VendorsListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all vendors
+      tags:
+      - Vendors
   /api/v1/vendors/favourite_list:
     get:
       consumes:
@@ -32205,6 +35205,57 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: CreateVendorPriceList
+      tags:
+      - Vendors
+  /api/v1/vendors/pricelist/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: Get all vendors price list
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: '[[column_name,operator,value]]'
+        in: query
+        name: filters
+        type: string
+      - description: '[[column_name,asc or desc]]'
+        in: query
+        name: sort
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/vendors.VendorsListDTO'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get all vendors price list
       tags:
       - Vendors
   /api/v1/vendors/search:
@@ -33212,6 +36263,57 @@ paths:
       summary: do a CreateWebstore
       tags:
       - Webstores
+  /api/v1/webstores/dropdown:
+    get:
+      consumes:
+      - application/json
+      description: a get AllWebstores dropdown list and filter it by search query
+      parameters:
+      - description: Authorization
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: filters
+        in: query
+        name: filters
+        type: string
+      - description: per_page
+        in: query
+        name: per_page
+        type: integer
+      - description: page_no
+        in: query
+        name: page_no
+        type: integer
+      - description: sort
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/webstores.WebstoredetailGetAllResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/response.ErrorResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: get AllWebstores dropdown list and filter it by search query
+      tags:
+      - Webstores
   /auth/login:
     post:
       consumes:
@@ -33348,41 +36450,6 @@ paths:
       summary: VerifyOTP
       tags:
       - auth
-  /sample:
-    post:
-      consumes:
-      - application/json
-      description: Get samplle
-      parameters:
-      - description: Authorization
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/response.SuccessResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/response.ErrorResponse'
-      security:
-      - ApiKeyAuth: []
-      summary: get sample
-      tags:
-      - sample
 schemes:
 - https
 securityDefinitions:

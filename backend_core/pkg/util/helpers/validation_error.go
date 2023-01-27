@@ -66,3 +66,21 @@ func JsonMarshalErrorStructure(marshal_err error) map[string]interface{} {
 
 	return marshalErrMsg
 }
+
+func ValidationFieldStructure(validation_err error) []map[string]interface{} {
+
+	errs := strings.Split(validation_err.Error(), ";")
+
+	fmt.Println(errs)
+
+	var valErrMsg []map[string]interface{}
+
+	for _, v := range errs {
+		errMsg := map[string]interface{}{
+			"message": v,
+		}
+		valErrMsg = append([]map[string]interface{}{errMsg}, valErrMsg...)
+	}
+
+	return valErrMsg
+}

@@ -40,9 +40,16 @@ type Transactions struct {
 	db *gorm.DB
 }
 
+var TransactionsRepository *Transactions //singleton object
+
+// singleton function
 func NewTransaction() *Transactions {
+	if TransactionsRepository != nil {
+		return TransactionsRepository
+	}
 	db := db.DbManager()
-	return &Transactions{db}
+	TransactionsRepository = &Transactions{db}
+	return TransactionsRepository
 
 }
 

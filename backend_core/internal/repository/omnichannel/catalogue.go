@@ -26,11 +26,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type Catalogue interface {
 	//Catalogue template
 	CreateCatalogue(data *omnichannel.CatalogueTemplate) error
-	GetCatalogue(category int, marketplace int) (omnichannel.CatalogueTemplate, error)
+	GetCatalogue(query map[string]interface{}) (omnichannel.CatalogueTemplate, error)
 	UpdateCatalogue(query map[string]interface{}) error
 	//Cataloge data
 	CreateCatalogueData(data *omnichannel.CatalogueTemplateData) error
-	GetCatalogueData(category int, marketplace int, variant_id int) (omnichannel.CatalogueTemplateData, error)
+	GetCatalogueData(query map[string]interface{}) (omnichannel.CatalogueTemplateData, error)
 	UpdateCatalogueData(query map[string]interface{}) error
 }
 
@@ -38,9 +38,16 @@ type catalogue struct {
 	db *gorm.DB
 }
 
+var catalogueRepository *catalogue //singleton object
+
+// singleton function
 func NewCatalogue() *catalogue {
+	if catalogueRepository != nil {
+		return catalogueRepository
+	}
 	db := db.DbManager()
-	return &catalogue{db}
+	catalogueRepository = &catalogue{db}
+	return catalogueRepository
 
 }
 
@@ -65,18 +72,18 @@ func (r *catalogue) UpdateCatalogue(query map[string]interface{}) error {
 	return nil
 }
 
-func (r *catalogue) GetCatalogue(category int, marketplace int) (omnichannel.CatalogueTemplate, error) {
+func (r *catalogue) GetCatalogue(query map[string]interface{}) (omnichannel.CatalogueTemplate, error) {
 	var data omnichannel.CatalogueTemplate
-	res := r.db.Model(&omnichannel.CatalogueTemplate{}).Where("category_id", category).Where("channel_id", marketplace).First(&data)
+	res := r.db.Model(&omnichannel.CatalogueTemplate{}).Where(query).First(&data)
 	if res.Error != nil {
 		return data, res.Error
 	}
 	return data, nil
 }
 
-func (r *catalogue) GetCatalogueData(category int, marketplace int, variant_id int) (omnichannel.CatalogueTemplateData, error) {
+func (r *catalogue) GetCatalogueData(query map[string]interface{}) (omnichannel.CatalogueTemplateData, error) {
 	var data omnichannel.CatalogueTemplateData
-	res := r.db.Model(&omnichannel.CatalogueTemplateData{}).Where("category_id", category).Where("channel_id", marketplace).Where("variant_id", variant_id).First(&data)
+	res := r.db.Model(&omnichannel.CatalogueTemplateData{}).Where(query).First(&data)
 	if res.Error != nil {
 		return data, res.Error
 	}

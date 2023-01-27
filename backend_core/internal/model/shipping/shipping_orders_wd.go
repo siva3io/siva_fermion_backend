@@ -33,6 +33,7 @@ type WD struct {
 	FinalWeightType        mdm.Uom        `json:"final_weight_type" gorm:"foreignKey:FinalWeightTypeId; references:ID"`
 	InitialWeightTaken     float64        `gorm:"type:double precision" json:"initial_weight_taken"`
 	FinalWeightTaken       float64        `gorm:"type:double precision" json:"final_weight_taken"`
+	InitialAmount          float64        `gorm:"type:double precision" json:"initial_amount"`
 	FinalAmount            float64        `gorm:"type:double precision" json:"final_amount"`
 	DiscrepancyAmount      float64        `gorm:"type:double precision" json:"discrepancy_amount"`
 	WeightDiscrepancyProof datatypes.JSON `json:"Weight_discrepancy_proof" gorm:"type:json"`

@@ -102,10 +102,10 @@ type (
 		Inventory_Automation_Details   Inventory_Automation_Details   `gorm:"embedded"`
 	}
 	Channel_details struct {
-		Price_list_id *uint                               `json:"price_list_id" gorm:"type:integer"`
-		Price_list    shared_pricing_and_location.Pricing `json:"price_list" gorm:"foreignKey:Price_list_id; references:ID"`
-		Currency_id   *uint                               `json:"currency_id" gorm:"type:integer"`
-		Currency      model_core.Currency                 `json:"currency" gorm:"foreignKey:Currency_id; references:ID"`
+		Price_list_id *uint                                `json:"price_list_id" gorm:"type:integer"`
+		Price_list    *shared_pricing_and_location.Pricing `json:"price_list" gorm:"foreignKey:Price_list_id; references:ID"`
+		Currency_id   *uint                                `json:"currency_id" gorm:"type:integer"`
+		Currency      *model_core.Currency                 `json:"currency" gorm:"foreignKey:Currency_id; references:ID"`
 		// OrderTagIds   []*model.Lookupcode `json:"order_tag_ids" gorm:"many2many:retail_order_Tags;foreignKey:ID;references:ID"`
 		Order_tags_id *uint                 `json:"order_tags_id" gorm:"type:integer"`
 		Order_tags    model_core.Lookupcode `json:"order_tags" gorm:"foreignKey:Order_tags_id; references:ID"`
@@ -115,17 +115,17 @@ type (
 		Select_the_3pl_facility          datatypes.JSON `gorm:"type:varchar"`
 	}
 	Inventory_details struct {
-		Select_source_facility_id *uint                                 `json:"select_source_facility_id" gorm:"type:integer"`
-		Select_source_facility    shared_pricing_and_location.Locations `json:"select_source_facility" gorm:"foreignKey:Select_source_facility_id; references:ID"`
-		Type_of_source_id         *uint                                 `json:"type_of_source_id" gorm:"type:integer"`
-		Type_of_source            model_core.Lookupcode                 `json:"type_of_source" gorm:"foreignKey:Type_of_source_id; references:ID"`
-		Fixed_inventory           string                                `json:",omitempty" gorm:"type:varchar"`
-		Inventory_range           string                                `json:",omitempty" gorm:"type:varchar"`
+		Select_source_facility_id *uint                                  `json:"select_source_facility_id" gorm:"type:integer"`
+		Select_source_facility    *shared_pricing_and_location.Locations `json:"select_source_facility" gorm:"foreignKey:Select_source_facility_id; references:ID"`
+		Type_of_source_id         *uint                                  `json:"type_of_source_id" gorm:"type:integer"`
+		Type_of_source            model_core.Lookupcode                  `json:"type_of_source" gorm:"foreignKey:Type_of_source_id; references:ID"`
+		Fixed_inventory           string                                 `json:",omitempty" gorm:"type:varchar"`
+		Inventory_range           string                                 `json:",omitempty" gorm:"type:varchar"`
 	}
 	Order_details struct {
-		Assign_auto_fullfilment         *bool                                 `gorm:"type:boolean"`
-		Order_select_source_facility_id *uint                                 `json:"order_select_source_facility_id" gorm:"type:integer"`
-		Order_select_source_facility    shared_pricing_and_location.Locations `json:"order_select_source_facility" gorm:"foreignKey:Order_select_source_facility_id; references:ID"`
+		Assign_auto_fullfilment         *bool                                  `gorm:"type:boolean"`
+		Order_select_source_facility_id *uint                                  `json:"order_select_source_facility_id" gorm:"type:integer"`
+		Order_select_source_facility    *shared_pricing_and_location.Locations `json:"order_select_source_facility" gorm:"foreignKey:Order_select_source_facility_id; references:ID"`
 	}
 	Advanced_channel_configuration struct {
 		Prices_include_taxes_id      *uint                 `json:"prices_include_taxes_id" gorm:"type:integer"`

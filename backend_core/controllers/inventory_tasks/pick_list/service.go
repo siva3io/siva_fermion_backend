@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_tasks"
 	"fermion/backend_core/internal/model/pagination"
 	inventory_tasks_repo "fermion/backend_core/internal/repository/inventory_tasks"
@@ -28,13 +29,13 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreatePickList(data *PicklistRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreatePickList(data *[]PicklistRequest, token_id string, access_template_id string) error
-	UpdatePickList(id uint, data *PicklistRequest, token_id string, access_template_id string) error
-	GetPickList(id uint, token_id string, access_template_id string) (interface{}, error)
-	GetAllPickList(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_tasks.PickList, error)
-	DeletePickList(id uint, user_id uint, token_id string, access_template_id string) error
-	DeletePickListLines(query interface{}, token_id string, access_template_id string) error
+	CreatePickList(metaData core.MetaData, data *inventory_tasks.PickList) error
+	BulkCreatePickList(metaData core.MetaData, data *[]PicklistRequest) error
+	UpdatePickList(metaData core.MetaData, data *inventory_tasks.PickList) error
+	GetPickList(metaData core.MetaData) (interface{}, error)
+	GetAllPickList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	DeletePickList(metaData core.MetaData) error
+	DeletePickListLines(metaData core.MetaData) error
 
 	SendMailPickList(q *SendMailPickList) error
 }
@@ -43,46 +44,47 @@ type service struct {
 	picklistRepository inventory_tasks_repo.Picklist
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	PicklistRepository := inventory_tasks_repo.NewPicklist()
-	return &service{PicklistRepository}
+	newServiceObj = &service{PicklistRepository}
+	return newServiceObj
 }
 
-func (s *service) CreatePickList(data *PicklistRequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PICK_LIST", *token_user_id)
+func (s *service) CreatePickList(metaData core.MetaData, data *inventory_tasks.PickList) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create pick list at view level")
+		return fmt.Errorf("you dont have access for create pick list at view level")
 	}
 	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create pick list at data level")
-	}
-	var PickListData inventory_tasks.PickList
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &PickListData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		return fmt.Errorf("you dont have access for create pick list at data level")
 	}
 
-	if data.AutoCreatePicklistNumber {
-		PickListData.PickListNumber = helpers.GenerateSequence("PICKLIST", token_id, "pick_lists")
-	}
-	defaultStatus, err := helpers.GetLookupcodeId("PICK_LIST_STATUS", "IN_PROGRESS")
-	if err != nil {
-		return 0, err
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	data.PickListNumber = helpers.GenerateSequence("PICKLIST", fmt.Sprint(metaData.TokenUserId), "pick_lists")
+	defaultStatus, er := helpers.GetLookupcodeId("PICK_LIST_STATUS", "IN_PROGRESS")
+	if er != nil {
+		return er
 	}
 	data.StatusID = defaultStatus
 
-	id, err := s.picklistRepository.CreatePickList(&PickListData, token_id)
-	return id, err
+	err := s.picklistRepository.CreatePickList(data)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *service) BulkCreatePickList(data *[]PicklistRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PICK_LIST", *token_user_id)
+func (s *service) BulkCreatePickList(metaData core.MetaData, data *[]PicklistRequest) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create pick list at view level")
 	}
@@ -94,7 +96,7 @@ func (s *service) BulkCreatePickList(data *[]PicklistRequest, token_id string, a
 		v := map[string]interface{}{}
 		count := helpers.GetCount("SELECT COUNT(*) FROM pick_lists") + 1 + index
 		if value.AutoCreatePicklistNumber {
-			value.PickListNumber = "PICKLIST/" + token_id + "/000" + strconv.Itoa(count)
+			value.PickListNumber = "PICKLIST/" + fmt.Sprint(metaData.TokenUserId) + "/000" + strconv.Itoa(count)
 		}
 
 		val, err := json.Marshal(value)
@@ -118,50 +120,44 @@ func (s *service) BulkCreatePickList(data *[]PicklistRequest, token_id string, a
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 
-	err = s.picklistRepository.BulkCreatePickList(&PickListData, token_id)
+	err = s.picklistRepository.BulkCreatePickList(&PickListData)
 	return err
 }
 
-func (s *service) UpdatePickList(id uint, data *PicklistRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PICK_LIST", *token_user_id)
+func (s *service) UpdatePickList(metaData core.MetaData, data *inventory_tasks.PickList) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update pick list at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update pick list at data level")
 	}
-	var PickListData inventory_tasks.PickList
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &PickListData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	old_data, er := s.picklistRepository.GetPickList(id)
+	data.UpdatedByID = &metaData.TokenUserId
+
+	old_data, er := s.picklistRepository.GetPickList(metaData.Query)
 	if er != nil {
 		return er
 	}
 	old_status := old_data.StatusID
-	new_status := PickListData.StatusID
+	new_status := data.StatusID
 	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, PickListData.StatusID)
-		PickListData.StatusHistory = result
+		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusID)
+		data.StatusHistory = result
 	}
-	err = s.picklistRepository.UpdatePickList(id, &PickListData)
-	for _, order_line := range PickListData.PicklistLines {
+
+	err := s.picklistRepository.UpdatePickList(metaData.Query, data)
+	for _, order_line := range data.PicklistLines {
 		query := map[string]interface{}{
-			"pick_list_id": uint(id),
-			"product_id":   uint(order_line.ProductID),
+			"product_id":   order_line.ProductID,
+			"pick_list_id": metaData.Query["id"],
 		}
-		count, er := s.picklistRepository.UpdatePickListLines(query, order_line)
+		count, er := s.picklistRepository.UpdatePickListLines(query, &order_line)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			order_line.PickList_Id = id
-			e := s.picklistRepository.CreatePickListLines(order_line)
+			order_line.PickList_Id = uint(metaData.Query["id"].(float64))
+			e := s.picklistRepository.CreatePickListLines(&order_line)
 			if e != nil {
 				return e
 			}
@@ -170,23 +166,21 @@ func (s *service) UpdatePickList(id uint, data *PicklistRequest, token_id string
 	return err
 }
 
-func (s *service) GetPickList(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PICK_LIST", *token_user_id)
+func (s *service) GetPickList(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view pick list at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view pick list at data level")
 	}
-	result, er := s.picklistRepository.GetPickList(id)
+	result, er := s.picklistRepository.GetPickList(metaData.Query)
 	if er != nil {
 		return result, er
 	}
-	query := map[string]interface{}{
-		"pick_list_id": id,
-	}
-	result_order_lines, err := s.picklistRepository.GetPickListLines(query)
+
+	result_order_lines, err := s.picklistRepository.GetPickListLines(metaData.Query)
 	result.PicklistLines = result_order_lines
 	if err != nil {
 		return result, err
@@ -195,67 +189,64 @@ func (s *service) GetPickList(id uint, token_id string, access_template_id strin
 	return result, nil
 }
 
-func (s *service) GetAllPickList(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_tasks.PickList, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "PICK_LIST", *token_user_id)
+func (s *service) GetAllPickList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list pick list at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list pick list at data level")
 	}
-	result, err := s.picklistRepository.GetAllPickList(p)
+	result, err := s.picklistRepository.GetAllPickList(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) DeletePickList(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PICK_LIST", *token_user_id)
+func (s *service) DeletePickList(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete pick list at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete pick list at data level")
 	}
-	_, er := s.picklistRepository.GetPickList(id)
-	if er != nil {
-		return er
-	}
-	err := s.picklistRepository.DeletePickList(id, user_id)
+
+	err := s.picklistRepository.DeletePickList(metaData.Query)
 	if err != nil {
 		return err
 	}
-	query := map[string]interface{}{"pick_list_id": id}
-	err1 := s.picklistRepository.DeletePickListLines(query)
+	err1 := s.picklistRepository.DeletePickListLines(metaData.Query)
 	return err1
 }
 
-func (s *service) DeletePickListLines(query interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PICK_LIST", *token_user_id)
+func (s *service) DeletePickListLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "PICK_LIST", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete pick list at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete pick list at data level")
 	}
-	data, er := s.picklistRepository.GetPickListLines(query)
+	data, er := s.picklistRepository.GetPickListLines(metaData.Query)
 	if er != nil {
 		return er
 	}
 	if len(data) <= 0 {
 		return er
 	}
-	err := s.picklistRepository.DeletePickListLines(query)
+	err := s.picklistRepository.DeletePickListLines(metaData.Query)
 	return err
 }
 
 func (s *service) SendMailPickList(q *SendMailPickList) error {
-	id, _ := strconv.Atoi(q.ID)
-	result, er := s.picklistRepository.GetPickList(uint(id))
+	// id, _ := strconv.Atoi(q.ID)
+	var metaData core.MetaData
+	result, er := s.picklistRepository.GetPickList(metaData.Query)
 	if er != nil {
 		return er
 	}

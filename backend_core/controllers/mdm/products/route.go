@@ -23,16 +23,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 func (h *handler) Route(g *echo.Group) {
 
 	//---------------------Product Brands----------------------------------------------------------------------------------------
-	g.POST("/brand/create", h.CreateProductBrand, cmiddleware.Authorization, ProductBrandCreateValidate)
-	g.POST("/brand/:id/update", h.UpdateProductBrand, cmiddleware.Authorization, ProductBrandUpdateValidate)
+	g.POST("/brand/create", h.CreateProductBrandEvent, cmiddleware.Authorization, ProductBrandCreateValidate)
+	g.POST("/brand/:id/update", h.UpdateProductBrandEvent, cmiddleware.Authorization, ProductBrandUpdateValidate)
 	g.DELETE("/brand/:id/delete", h.DeleteProductBrand, cmiddleware.Authorization)
 	g.GET("/brand", h.GetAllBrands, cmiddleware.Authorization)
 	g.GET("/brand/dropdown", h.GetAllBrandsDropdown, cmiddleware.Authorization)
 	g.GET("/brand/search", h.SearchBrand, cmiddleware.Authorization)
 
 	//---------------------Product category---------------------------------------------------------------------------------------------
-	g.POST("/category/create", h.CreateProductCategory, cmiddleware.Authorization, ProductCategoryCreateValidate)
-	g.POST("/category/:id/update", h.UpdateProductCategory, cmiddleware.Authorization, ProductCategoryUpdateValidate)
+	g.POST("/category/create", h.CreateProductCategoryEvent, cmiddleware.Authorization, ProductCategoryCreateValidate)
+	g.POST("/category/:id/update", h.UpdateProductCategoryEvent, cmiddleware.Authorization, ProductCategoryUpdateValidate)
 	g.DELETE("/category/:id/delete", h.DeleteProductCategory, cmiddleware.Authorization)
 	g.GET("/category", h.GetAllProductCategory, cmiddleware.Authorization)
 	g.GET("/category/dropdown", h.GetAllProductCategoryDropdown, cmiddleware.Authorization)
@@ -70,18 +70,16 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("/selected_attributes_values/dropdown", h.GetAllProductSelectedAttributesValuesDropdown, cmiddleware.Authorization)
 
 	//---------------------Product Bundles-----------------------------------------------------------------------------------------------------------------------
-	g.POST("/bundle/create", h.CreateBundles, cmiddleware.Authorization, ProductBundleCreateValidate)
-	g.POST("/bundle/:id/update", h.UpdateBundle, cmiddleware.Authorization, ProductBundleUpdateValidate)
+	g.POST("/bundle/create", h.CreateBundlesEvent, cmiddleware.Authorization, ProductBundleCreateValidate)
+	g.POST("/bundle/:id/update", h.UpdateBundleEvent, cmiddleware.Authorization, ProductBundleUpdateValidate)
 	g.DELETE("/bundle/:id/delete", h.DeleteBundle, cmiddleware.Authorization)
 	g.GET("/bundle/:id", h.GetOneBundle, cmiddleware.Authorization)
 	g.GET("/bundle", h.GetAllBundles, cmiddleware.Authorization)
 	g.GET("/bundle/dropdown", h.GetAllBundlesDropdown, cmiddleware.Authorization)
 
 	//---------------------Product Template------------------
-	g.POST("/create", h.CreateProductDetails, cmiddleware.Authorization, ProductTemplateCreateValidate)
-	// g.POST("/create", h.CreateProductDetailsEvent, cmiddleware.Authorization, ProductTemplateCreateValidate)
-
-	g.POST("/:id/update", h.UpdateProduct, cmiddleware.Authorization, ProductTemplateUpdateValidate)
+	g.POST("/create", h.CreateProductDetailsEvent, cmiddleware.Authorization, ProductTemplateCreateValidate)
+	g.POST("/:id/update", h.UpdateProductEvent, cmiddleware.Authorization, ProductTemplateUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteProduct, cmiddleware.Authorization)
 	g.GET("/:id", h.GetProductView, cmiddleware.Authorization)
 	g.GET("", h.GetAllProducts, cmiddleware.Authorization)
@@ -92,8 +90,8 @@ func (h *handler) Route(g *echo.Group) {
 	// g.POST("/archive/:id/update", h.UpdateProductArchiveStatus)
 
 	//---------------------Product Variant------------------
-	g.POST("/variant/create", h.CreateProductVariant, cmiddleware.Authorization, ProductVariantCreateValidate)
-	g.POST("/variant/:id/update", h.UpdateProductVariant, cmiddleware.Authorization, ProductVariantUpdateValidate)
+	g.POST("/variant/create", h.CreateProductVariantEvent, cmiddleware.Authorization, ProductVariantCreateValidate)
+	g.POST("/variant/:id/update", h.UpdateProductVariantEvent, cmiddleware.Authorization, ProductVariantUpdateValidate)
 	g.DELETE("/variant/:id/delete", h.DeleteProductVariant, cmiddleware.Authorization)
 	g.GET("/variant/:id", h.GetProductVariantView, cmiddleware.Authorization)
 	g.GET("/variant", h.GetAllProductVariants, cmiddleware.Authorization)
@@ -111,12 +109,24 @@ func (h *handler) Route(g *echo.Group) {
 	g.POST("/bulk_create", h.CreateBulkProducts, cmiddleware.Authorization)
 
 	//--------------------Channel Api's ------------------------------------------------------------------
-	g.POST("/channels/upsert", h.ChannelProductUpsert, cmiddleware.Authorization)
-	g.POST("/channels/variant/upsert", h.ChannelProductVariantUpsert, cmiddleware.Authorization)
+	g.POST("/channels/upsert", h.ChannelProductUpsertEvent, cmiddleware.Authorization)
+	g.POST("/channels/variant/upsert", h.ChannelProductVariantUpsertEvent, cmiddleware.Authorization)
 	g.GET("/channels", h.GetAllChannelProducts, cmiddleware.Authorization)
 	g.GET("/channels/dropdown", h.GetAllChannelProductsDropdown, cmiddleware.Authorization)
 
 	//-------------------Filter Tabs-----------------------------------------------------------------
 	g.GET("/variant/:id/filter_module/:tab", h.GetProductVariantTab, cmiddleware.Authorization)
+
+	//======================================ADMIN============================================
+	g.GET("/admin/variant/:id", h.GetProductVariantAdmin, cmiddleware.Authorization)
+	g.GET("/admin/variant", h.ListProductVariantsAdmin, cmiddleware.Authorization)
+
+	// --------------------------------------------HSN-------------------------------------
+
+	g.POST("/hsn/create", h.CreateHsn, cmiddleware.Authorization)
+	g.GET("/hsn", h.FindAllHsn, cmiddleware.Authorization)
+	g.GET("/hsn/:id", h.FindOneHsn, cmiddleware.Authorization)
+	g.POST("/hsn/:id/update", h.UpdateHsn, cmiddleware.Authorization)
+	g.DELETE("/hsn/delete/:id", h.DeleteHsn, cmiddleware.Authorization)
 
 }

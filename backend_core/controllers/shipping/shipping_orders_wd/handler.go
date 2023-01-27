@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -30,9 +33,16 @@ type handler struct {
 	service Service
 }
 
+var ShippingOrdersWdHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ShippingOrdersWdHandler != nil {
+		return ShippingOrdersWdHandler
+	}
 	service := NewService()
-	return &handler{service}
+	ShippingOrdersWdHandler = &handler{service}
+	return ShippingOrdersWdHandler
 }
 
 // CreateWD godoc
@@ -49,17 +59,44 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd/create [post]
-func (h *handler) CreateWD(c echo.Context) (err error) {
+func (h *handler) CreateWDEvent(c echo.Context) (err error) {
 	data := new(WDRequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	id, err := h.service.CreateWD(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
 	}
-	return res.RespSuccess(c, "Created", map[string]interface{}{"Created_WD_Id": id})
+	eda.Produce(eda.CREATE_SHIPPING_ORDER_WD, request_payload)
+	return res.RespSuccess(c, "Shipping_order wd Creation Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateWD(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(shipping.WD)
+	helpers.JsonMarshaller(data, createPayload)
+	err := h.service.CreateWD(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_SHIPPING_ORDER_WD_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// cache implementation
+	UpdateWdInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	eda.Produce(eda.CREATE_SHIPPING_ORDER_WD_ACK, responseMessage)
+
 }
 
 // BulkCreateWD godoc
@@ -80,13 +117,13 @@ func (h *handler) BulkCreateWD(c echo.Context) (err error) {
 	data := new([]WDRequest)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateWD(data, token_id, access_template_id)
+	err = h.service.BulkCreateWD(metaData, data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -108,15 +145,19 @@ func (h *handler) BulkCreateWD(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd/{id} [get]
 func (h *handler) GetWD(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetWD(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	wdId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": wdId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetWD(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "success", result)
+	var response GetWD
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "success", response)
 }
 
 // GetAllWD godoc
@@ -137,15 +178,34 @@ func (h *handler) GetWD(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd [get]
 func (h *handler) GetAllWD(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllWD(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []GetAllWD
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetWdFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+
+	}
+
+	result, err := h.service.GetAllWD(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "WD list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "WD list Retrieved Successfully", response, p)
 }
 
 // GetAllWDDropDown godoc
@@ -166,15 +226,34 @@ func (h *handler) GetAllWD(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd/dropdown [get]
 func (h *handler) GetAllWDDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllWD(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []GetAllWD
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetWdFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+
+	}
+
+	result, err := h.service.GetAllWD(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "WD dropdown list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "WD list Retrieved Successfully", response, p)
 }
 
 // UpdateWD godoc
@@ -192,19 +271,48 @@ func (h *handler) GetAllWDDropDown(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd/{id}/update [post]
-func (h *handler) UpdateWD(c echo.Context) (err error) {
-	var data WDRequest
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
+func (h *handler) UpdateWDEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	wdId := c.Param("id")
+	data := new(WDRequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateWD(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         wdId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Updated Successfully", map[string]int{"Updated id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
+	}
+
+	eda.Produce(eda.UPDATE_SHIPPING_ORDER_WD, request_payload)
+	return res.RespSuccess(c, "Shipping_order wd Update Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateWD(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(shipping.WD)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateWD(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_SHIPPING_ORDER_WD_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateWdInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_SHIPPING_ORDER_WD_ACK, responseMessage)
+
 }
 
 // DeleteWD godoc
@@ -222,14 +330,20 @@ func (h *handler) UpdateWD(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_wd/{id}/delete [delete]
 func (h *handler) DeleteWD(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteWD(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	wdId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         wdId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteWD(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Deleted Successfully", map[string]string{"Deleted_WD_ID": get_id})
+
+	// cache implementation
+	UpdateWdInCache(metaData)
+
+	return res.RespSuccess(c, "Deleted Successfully", wdId)
 }

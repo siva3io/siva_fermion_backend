@@ -34,8 +34,7 @@ type Locations interface {
 	UpdateLocation(query map[string]interface{}, data *shared_pricing_and_location.Locations) error
 	DeleteLocation(query map[string]interface{}) error
 	FindOneLocation(query map[string]interface{}) (shared_pricing_and_location.Locations, error)
-	FindAllLocation(query interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.Locations, error)
-	SearchLocation(query string) ([]shared_pricing_and_location.Locations, error)
+	FindAllLocation(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.Locations, error)
 
 	//------------------------------Virtual Locations----------------------------------------
 	SaveVirtualLocation(data *shared_pricing_and_location.VirtualLocation) error
@@ -52,8 +51,6 @@ type Locations interface {
 	SaveStorageLocation(data *shared_pricing_and_location.StorageLocation) error
 	GetStorageLocationList(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.StorageLocation, error)
 	GetStorageLocation(query map[string]interface{}) (shared_pricing_and_location.StorageLocation, error)
-	// GetAuthKey(query map[string]interface{}) (location.LocalWarehouse, error)
-
 	GetStorageQuantityList(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.StorageQuantity, error)
 
 	//------------------------------Retail Locations-------------------------------------------
@@ -73,9 +70,16 @@ type locations struct {
 	db *gorm.DB
 }
 
+var locationsRepository *locations //singleton object
+
+// singleton function
 func NewLocations() *locations {
+	if locationsRepository != nil {
+		return locationsRepository
+	}
 	db := db.DbManager()
-	return &locations{db}
+	locationsRepository = &locations{db}
+	return locationsRepository
 }
 
 // ---------------------------------Locations----------------------------------
@@ -87,48 +91,47 @@ func (r *locations) SaveLocation(data *shared_pricing_and_location.Locations) er
 	return nil
 }
 func (r *locations) UpdateLocation(query map[string]interface{}, data *shared_pricing_and_location.Locations) error {
-	err := r.db.Model(&shared_pricing_and_location.Locations{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.Locations{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) DeleteLocation(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
-	err := r.db.Model(&shared_pricing_and_location.Locations{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.Locations{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) FindOneLocation(query map[string]interface{}) (shared_pricing_and_location.Locations, error) {
 	var data shared_pricing_and_location.Locations
-	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.Locations{}).Where(query).First(&data)
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&shared_pricing_and_location.Locations{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
+
 	return data, nil
 }
-func (r *locations) FindAllLocation(query interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.Locations, error) {
+func (r *locations) FindAllLocation(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.Locations, error) {
 	var data []shared_pricing_and_location.Locations
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.Locations{}).Scopes(helpers.Paginate(&shared_pricing_and_location.Locations{}, p, r.db)).Where(query).Find(&data).Error
-	if err != nil {
-		return data, err
-	}
-	return data, nil
-}
-func (r *locations) SearchLocation(query string) ([]shared_pricing_and_location.Locations, error) {
-	var data []shared_pricing_and_location.Locations
-	err := r.db.Model(&shared_pricing_and_location.Locations{}).Find(&data, "name ILIKE ? ", "%"+query+"%").Error
 	if err != nil {
 		return data, err
 	}
@@ -144,16 +147,29 @@ func (r *locations) SaveVirtualLocation(data *shared_pricing_and_location.Virtua
 	return nil
 }
 func (r *locations) UpdateVirtualLocation(query map[string]interface{}, data *shared_pricing_and_location.VirtualLocation) error {
-	err := r.db.Model(&shared_pricing_and_location.VirtualLocation{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.VirtualLocation{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) DeleteVirtualLocation(query map[string]interface{}) error {
-	err := r.db.Model(&shared_pricing_and_location.VirtualLocation{}).Where(query).Delete(&shared_pricing_and_location.VirtualLocation{}).Error
-	if err != nil {
-		return err
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
+	data := map[string]interface{}{
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
+	}
+	delete(query, "user_id")
+	err := r.db.Model(&shared_pricing_and_location.VirtualLocation{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
@@ -161,7 +177,7 @@ func (r *locations) FindOneVirtualLocation(query map[string]interface{}) (shared
 	var data shared_pricing_and_location.VirtualLocation
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.VirtualLocation{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -178,16 +194,29 @@ func (r *locations) SaveWarehouseLocation(data *shared_pricing_and_location.Loca
 	return nil
 }
 func (r *locations) UpdateWarehouseLocation(query map[string]interface{}, data *shared_pricing_and_location.LocalWarehouse) error {
-	err := r.db.Model(&shared_pricing_and_location.LocalWarehouse{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.LocalWarehouse{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) DeleteWarehouseLocation(query map[string]interface{}) error {
-	err := r.db.Model(&shared_pricing_and_location.LocalWarehouse{}).Where(query).Delete(&shared_pricing_and_location.LocalWarehouse{}).Error
-	if err != nil {
-		return err
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
+	data := map[string]interface{}{
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
+	}
+	delete(query, "user_id")
+	err := r.db.Model(&shared_pricing_and_location.LocalWarehouse{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
@@ -195,7 +224,7 @@ func (r *locations) FindOneWarehouseLocation(query map[string]interface{}) (shar
 	var data shared_pricing_and_location.LocalWarehouse
 	err := r.db.Preload(clause.Associations + "." + clause.Associations + "." + clause.Associations + "." + clause.Associations + "." + clause.Associations + "." + clause.Associations).Model(&shared_pricing_and_location.LocalWarehouse{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -212,7 +241,6 @@ func (r *locations) SaveStorageLocation(data *shared_pricing_and_location.Storag
 	}
 	return nil
 }
-
 func (r *locations) GetStorageLocationList(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.StorageLocation, error) {
 	var data []shared_pricing_and_location.StorageLocation
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.StorageLocation{}).Scopes(helpers.Paginate(shared_pricing_and_location.StorageLocation{}, p, r.db)).Where(query).Find(&data).Error
@@ -221,19 +249,17 @@ func (r *locations) GetStorageLocationList(query map[string]interface{}, p *pagi
 	}
 	return data, nil
 }
-
 func (r *locations) GetStorageLocation(query map[string]interface{}) (shared_pricing_and_location.StorageLocation, error) {
 	var data shared_pricing_and_location.StorageLocation
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.StorageLocation{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
 	return data, nil
 }
-
 func (r *locations) GetStorageQuantityList(query map[string]interface{}, p *pagination.Paginatevalue) ([]shared_pricing_and_location.StorageQuantity, error) {
 	var data []shared_pricing_and_location.StorageQuantity
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.StorageQuantity{}).Scopes(helpers.Paginate(shared_pricing_and_location.StorageQuantity{}, p, r.db)).Where(query).Find(&data).Error
@@ -242,18 +268,6 @@ func (r *locations) GetStorageQuantityList(query map[string]interface{}, p *pagi
 	}
 	return data, nil
 }
-
-// func (r *locations) GetAuthKey(query map[string]interface{}) (location.LocalWarehouse, error) {
-// 	var data location.LocalWarehouse
-// 	err := r.db.Model(&location.LocalWarehouse{}).Where(query).First(&data)
-// 	if err.RowsAffected == 0 {
-// 		return data, errors.New("record not found")
-// 	}
-// 	if err.Error != nil {
-// 		return data, err.Error
-// 	}
-// 	return data, nil
-// }
 
 // ---------------------------------Retails Locations--------------------------------
 func (r *locations) SaveRetailLocation(data *shared_pricing_and_location.Retail) error {
@@ -264,16 +278,30 @@ func (r *locations) SaveRetailLocation(data *shared_pricing_and_location.Retail)
 	return nil
 }
 func (r *locations) UpdateRetailLocation(query map[string]interface{}, data *shared_pricing_and_location.Retail) error {
-	err := r.db.Model(&shared_pricing_and_location.Retail{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.Retail{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) DeleteRetailLocation(query map[string]interface{}) error {
-	err := r.db.Model(&shared_pricing_and_location.Retail{}).Where(query).Delete(&shared_pricing_and_location.Retail{}).Error
-	if err != nil {
-		return err
+
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
+	data := map[string]interface{}{
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
+	}
+	delete(query, "user_id")
+	err := r.db.Model(&shared_pricing_and_location.Retail{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
@@ -281,7 +309,7 @@ func (r *locations) FindOneRetailLocation(query map[string]interface{}) (shared_
 	var data shared_pricing_and_location.Retail
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.Retail{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -298,16 +326,30 @@ func (r *locations) SaveOfficeLocation(data *shared_pricing_and_location.Office)
 	return nil
 }
 func (r *locations) UpdateOfficeLocation(query map[string]interface{}, data *shared_pricing_and_location.Office) error {
-	err := r.db.Model(&shared_pricing_and_location.Office{}).Where(query).Updates(data).Error
-	if err != nil {
-		return err
+	err := r.db.Model(&shared_pricing_and_location.Office{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
 func (r *locations) DeleteOfficeLocation(query map[string]interface{}) error {
-	err := r.db.Model(&shared_pricing_and_location.Office{}).Where(query).Delete(&shared_pricing_and_location.Office{}).Error
-	if err != nil {
-		return err
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
+	data := map[string]interface{}{
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
+	}
+
+	delete(query, "user_id")
+	err := r.db.Model(&shared_pricing_and_location.Office{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
 	}
 	return nil
 }
@@ -315,7 +357,7 @@ func (r *locations) FindOneOfficeLocation(query map[string]interface{}) (shared_
 	var data shared_pricing_and_location.Office
 	err := r.db.Preload(clause.Associations).Model(&shared_pricing_and_location.Office{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error

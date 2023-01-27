@@ -12,19 +12,28 @@ import (
 
 	// eda "fermion/backend_core/controllers/eda_core"
 	// consume "fermion/backend_core/controllers/consume"
+	"fermion/backend_core/controllers/eda"
 	mdm_base "fermion/backend_core/controllers/mdm/base"
+	location_service "fermion/backend_core/controllers/mdm/locations"
+	notification "fermion/backend_core/controllers/notifications"
+	access_checker "fermion/backend_core/pkg/util/access"
+	"fermion/backend_core/pkg/util/emitter"
+	"fermion/backend_core/pkg/util/events"
+
+	// "fermion/backend_core/pkg/util/emitter"
+	// "fermion/backend_core/pkg/util/events"
+
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 
 	// "fermion/backend_core/pkg/util/emitter"
 	// "fermion/backend_core/pkg/util/events"
-	"fermion/backend_core/pkg/util/emitter"
-	"fermion/backend_core/pkg/util/events"
 	"fermion/backend_core/pkg/util/helpers"
 
 	res "fermion/backend_core/pkg/util/response"
 
-	// "github.com/google/uuid"
+	uuid "github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	// "github.com/segmentio/kafka-go"
 )
@@ -45,21 +54,32 @@ import (
 */
 
 type handler struct {
-	service      Service
-	base_service mdm_base.ServiceBase
+	service              Service
+	base_service         mdm_base.ServiceBase
+	location_service     location_service.Service
+	notification_service notification.Service
 }
 
+var ProductsHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ProductsHandler != nil {
+		return ProductsHandler
+	}
 	service := NewService()
 	base_service := mdm_base.NewServiceBase()
-	return &handler{service, base_service}
+	location_service := location_service.NewService()
+	notification_service := notification.NewService()
+	ProductsHandler = &handler{service, base_service, location_service, notification_service}
+	return ProductsHandler
 }
 
-func (h *handler) Init() {
-	// go CreateProductConsumer(context.Background())
-	// go InitConsumers(h)
-	// InitConsumers(h)
-}
+// func (h *handler) Init() {
+// 	// go CreateProductConsumer(context.Background())
+// 	// go InitConsumers(h)
+// 	// InitConsumers(h)
+// }
 
 //-----------------------------Product Brand-------------------------------------------------------------------------------------------
 
@@ -77,21 +97,45 @@ func (h *handler) Init() {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/brand/create [post]
-func (h *handler) CreateProductBrand(c echo.Context) error {
+func (h *handler) CreateProductBrandEvent(c echo.Context) error {
 	data := c.Get("product_brand").(*BrandRequestAndResponseDTO)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+	user_id, _ := strconv.Atoi(token_id)
 	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-
-	var brand mdm.ProductBrand
-	jsondata, _ := json.Marshal(data)
-	json.Unmarshal(jsondata, &brand)
-
-	err := h.service.CreateBrand(&brand, token_id, access_template_id)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["user_id"] = user_id
+	meta_data["access_template_id"] = access_template_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.CREATE_PRODUCT_BRAND, request_payload)
+	return res.RespSuccess(c, "Product Brand Creation Inprogress", map[string]interface{}{"request_id": request_id})
+}
+func (h *handler) CreateProductBrand(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data mdm.ProductBrand
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	err := h.service.CreateBrand(&final_data, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_BRAND_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Brand Created", data)
+	response_message.Response = map[string]interface{}{
+		"created_id": final_data.ID,
+	}
+	// eda.Produce(eda.CREATE_PRODUCT_BRAND_ACK, *response_message)
+
 }
 
 // UpdateProductBrand godoc
@@ -109,7 +153,7 @@ func (h *handler) CreateProductBrand(c echo.Context) error {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/brand/{id}/update [post]
-func (h *handler) UpdateProductBrand(c echo.Context) error {
+func (h *handler) UpdateProductBrandEvent(c echo.Context) error {
 	data := c.Get("product_brand").(*BrandRequestAndResponseDTO)
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
@@ -121,19 +165,42 @@ func (h *handler) UpdateProductBrand(c echo.Context) error {
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
 	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["id"] = id
+	meta_data["query"] = query
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_PRODUCT_BRAND, request_payload)
+	return res.RespSuccess(c, "Product Brand Update Inprogress", map[string]interface{}{"request_id": request_id})
 
-	var brand mdm.ProductBrand
-	jsondata, _ := json.Marshal(data)
-	json.Unmarshal(jsondata, &brand)
+}
+func (h *handler) UpdateProductBrand(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data mdm.ProductBrand
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	query := meta_data["query"].(map[string]interface{})
 
-	err = h.service.UpdateBrand(&brand, query, token_id, access_template_id)
-	if err != nil && err.Error() == "record not found" {
-		return res.RespErr(c, err)
-	}
+	err := h.service.UpdateBrand(&final_data, query, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRODUCT_BRAND_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Brand Updated", map[string]interface{}{"product_brand_id": id})
+	response_message.Response = map[string]interface{}{
+		"updated_id": final_data.ID,
+	}
+	// eda.Produce(eda.UPDATE_PRODUCT_BRAND_ACK, *response_message)
+
 }
 
 // DeleteProductBrand godoc
@@ -198,7 +265,7 @@ func (h *handler) GetAllBrands(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Brands retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Brands retrieved successfully", resp, p)
 }
 
 // GetProductBrandDropdown godoc
@@ -227,7 +294,7 @@ func (h *handler) GetAllBrandsDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Brands retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Brands retrieved successfully", resp, p)
 }
 
 func (h *handler) SearchBrand(c echo.Context) (err error) {
@@ -259,7 +326,7 @@ func (h *handler) SearchBrand(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/category/create [post]
-func (h *handler) CreateProductCategory(c echo.Context) error {
+func (h *handler) CreateProductCategoryEvent(c echo.Context) error {
 	data := c.Get("product_category").(*CategoryAndSubcategoryRequestAndResponseDTO)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
@@ -269,11 +336,40 @@ func (h *handler) CreateProductCategory(c echo.Context) error {
 	jsondata, _ := json.Marshal(data)
 	json.Unmarshal(jsondata, &category)
 
-	err := h.service.CreateCategory(&category, token_id, access_template_id)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.CREATE_PRODUCT_CATEGORY, request_payload)
+	return res.RespSuccess(c, "Product category Creation Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
+func (h *handler) CreateProductCategory(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data mdm.ProductCategory
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	err := h.service.CreateCategory(&final_data, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_CATEGORY_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Category Created", data)
+
+	response_message.Response = map[string]interface{}{
+		"created_id": final_data.ID,
+	}
+	// eda.Produce(eda.CREATE_PRODUCT_CATEGORY_ACK, *response_message)
+
 }
 
 // UpdateProductCategory godoc
@@ -291,7 +387,7 @@ func (h *handler) CreateProductCategory(c echo.Context) error {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/category/{id}/update [post]
-func (h *handler) UpdateProductCategory(c echo.Context) error {
+func (h *handler) UpdateProductCategoryEvent(c echo.Context) error {
 	data := c.Get("product_category").(*CategoryAndSubcategoryRequestAndResponseDTO)
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
@@ -308,14 +404,41 @@ func (h *handler) UpdateProductCategory(c echo.Context) error {
 	jsondata, _ := json.Marshal(data)
 	json.Unmarshal(jsondata, &category)
 
-	err = h.service.UpdateCategory(&category, query, token_id, access_template_id)
-	if err != nil && err.Error() == "record not found" {
-		return res.RespErr(c, err)
-	}
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["query"] = query
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	//unique_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_PRODUCT_CATEGORY, request_payload)
+	return res.RespSuccess(c, "Product category Update Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
+func (h *handler) UpdateProductCategory(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data mdm.ProductCategory
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	query := meta_data["query"].(map[string]interface{})
+	access_template_id := meta_data["access_template_id"].(string)
+
+	err := h.service.UpdateCategory(&final_data, query, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRODUCT_CATEGORY_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Category Updated", map[string]interface{}{"Category_id": id})
+	response_message.Response = map[string]interface{}{
+		"updated_id": final_data.ID,
+	}
+	// eda.Produce(eda.UPDATE_PRODUCT_CATEGORY_ACK, *response_message)
 }
 
 // DeleteProductCategory godoc
@@ -380,7 +503,7 @@ func (h *handler) GetAllProductCategory(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Categories retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Categories retrieved successfully", resp, p)
 }
 
 // GetAllProductCategoryDropdown godoc
@@ -409,7 +532,7 @@ func (h *handler) GetAllProductCategoryDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Categories retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Categories retrieved successfully", resp, p)
 }
 
 func (h *handler) GetAllSubCategory(c echo.Context) (err error) {
@@ -421,7 +544,7 @@ func (h *handler) GetAllSubCategory(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Sub-Categories retrived successfully", resp)
+	return res.RespSuccess(c, "Sub-Categories retrieved successfully", resp)
 }
 
 func (h *handler) GetAllSubCategoryDropdown(c echo.Context) (err error) {
@@ -433,7 +556,7 @@ func (h *handler) GetAllSubCategoryDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Sub-Categories retrived successfully", resp)
+	return res.RespSuccess(c, "Sub-Categories retrieved successfully", resp)
 }
 
 func (h *handler) SearchCategory(c echo.Context) (err error) {
@@ -598,7 +721,7 @@ func (h *handler) GetAllProductBaseAttributes(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "BaseAttributes retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "BaseAttributes retrieved successfully", resp, p)
 }
 
 // ListofProductBaseAttributesDropdown godoc
@@ -627,7 +750,7 @@ func (h *handler) GetAllProductBaseAttributesDropdown(c echo.Context) (err error
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "BaseAttributes retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "BaseAttributes retrieved successfully", resp, p)
 }
 
 //------------------Product Base Attributes Values-----------------------------------------------------------------------------------------
@@ -767,7 +890,7 @@ func (h *handler) GetAllProductBaseAttributesValues(c echo.Context) (err error) 
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Base Attributes Values retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Base Attributes Values retrieved successfully", resp, p)
 }
 
 // ListofProductBaseAttributesValuesDropdown godoc
@@ -796,7 +919,7 @@ func (h *handler) GetAllProductBaseAttributesValuesDropdown(c echo.Context) (err
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Base Attributes Values retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Base Attributes Values retrieved successfully", resp, p)
 }
 
 // ------------------Product Selected Attributes-----------------------------------------------------------------------------------------
@@ -935,7 +1058,7 @@ func (h *handler) GetAllProductSelectedAttributes(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "SelectedAttributes retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "SelectedAttributes retrieved successfully", resp, p)
 }
 
 // GetAllProductSelectedAttributesDropdown godoc
@@ -964,7 +1087,7 @@ func (h *handler) GetAllProductSelectedAttributesDropdown(c echo.Context) (err e
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "SelectedAttributes retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "SelectedAttributes retrieved successfully", resp, p)
 }
 
 //------------------Product Selected Attributes Values-----------------------------------------------------------------------------------------
@@ -1104,7 +1227,7 @@ func (h *handler) GetAllProductSelectedAttributesValues(c echo.Context) (err err
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "Selected Attributes Values retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Selected Attributes Values retrieved successfully", resp, p)
 }
 
 // GetAllProductSelectedAttributesValuesDropdown godoc
@@ -1133,7 +1256,7 @@ func (h *handler) GetAllProductSelectedAttributesValuesDropdown(c echo.Context) 
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "Selected Attributes Values retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Selected Attributes Values retrieved successfully", resp, p)
 }
 
 //------------------Product Bundles------------------------------------------------------------------------------------------------------------
@@ -1152,16 +1275,44 @@ func (h *handler) GetAllProductSelectedAttributesValuesDropdown(c echo.Context) 
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/bundle/create [post]
-func (h *handler) CreateBundles(c echo.Context) error {
+func (h *handler) CreateBundlesEvent(c echo.Context) error {
 	data := c.Get("product_bundle").(*CreateBundlePayload)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
 	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	Bundle, err := h.service.CreateBundle(*data, token_id, access_template_id)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.CREATE_PRODUCT_BUNDLE, request_payload)
+	return res.RespSuccess(c, "Product bundle Create Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
+func (h *handler) CreateBundles(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data CreateBundlePayload
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	_, err := h.service.CreateBundle(final_data, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_BUNDLE_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Bundles Created", Bundle)
+
+	response_message.Response = map[string]interface{}{
+		"created_message": "created successfully",
+	}
+	// eda.Produce(eda.CREATE_PRODUCT_BUNDLE_ACK, *response_message)
 }
 
 // UpdateBundleDetails godoc
@@ -1179,7 +1330,7 @@ func (h *handler) CreateBundles(c echo.Context) error {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/bundle/{id}/update [post]
-func (h *handler) UpdateBundle(c echo.Context) error {
+func (h *handler) UpdateBundleEvent(c echo.Context) error {
 	data := c.Get("product_bundle").(*CreateBundlePayload)
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
@@ -1191,14 +1342,40 @@ func (h *handler) UpdateBundle(c echo.Context) error {
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
 	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateBundle(*data, query, token_id, access_template_id)
-	if err != nil && err.Error() == "record not found" {
-		return res.RespErr(c, err)
-	}
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["query"] = query
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	//unique_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_PRODUCT_BUNDLE, request_payload)
+	return res.RespSuccess(c, "Product bundle Update Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
+func (h *handler) UpdateBundle(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data CreateBundlePayload
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	query := meta_data["query"].(map[string]interface{})
+	err := h.service.UpdateBundle(final_data, query, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRODUCT_BUNDLE_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Bundle Updated", map[string]interface{}{"bundle_id": id})
+	response_message.Response = map[string]interface{}{
+		"updated_message": "updated successfully",
+	}
+	// eda.Produce(eda.UPDATE_PRODUCT_BUNDLE_ACK, *response_message)
 }
 
 // DeleteBundleDetails godoc
@@ -1294,7 +1471,7 @@ func (h *handler) GetAllBundles(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Bundles data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Bundles data retrieved successfully", resp, p)
 }
 
 // GetAllBundlesDropdown godoc
@@ -1323,7 +1500,7 @@ func (h *handler) GetAllBundlesDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Bundles data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "Bundles data retrieved successfully", resp, p)
 }
 
 //------------------Product BUlk---------------------------------------------------------------------------------------------
@@ -1572,6 +1749,74 @@ func (h *handler) FavouriteProductsView(c echo.Context) (err error) {
 
 //---------------------Product Template--------------------------------------------------------------------------------------
 
+func (h *handler) CreateProductDetailsEvent(c echo.Context) error {
+
+	token_id := c.Get("TokenUserID").(string)
+
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	token_user_id := helpers.ConvertStringToUint(token_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PRODUCTS", *token_user_id)
+	if !access_module_flag {
+		return res.SuccessWithError(c, "you dont have access for create products at view level", nil)
+	}
+	if data_access == nil {
+		return res.SuccessWithError(c, "you dont have access for create products at view level", nil)
+	}
+	access_module_flag, data_access = access_checker.ValidateUserAccess(access_template_id, "LIST", "LOCATIONS", *token_user_id)
+	if !access_module_flag {
+		return res.SuccessWithError(c, "you dont have access for list location at view level", nil)
+	}
+	if data_access == nil {
+		return res.SuccessWithError(c, "you dont have access for list location at data level", nil)
+	}
+
+	data := c.Get("product_template").(*CreateProductTemplatePayload)
+
+	//TODO :- Optimization not working
+	// fmt.Println("------data.ImageOptions--------", data.ImageOptions)
+
+	// data.ImageOptions, _ = json.Marshal(helpers.BASE64optimization(data.ImageOptions))
+	// for i, variant := range data.ProductVariantIds {
+	// 	data.ProductVariantIds[i].ImageOptions, _ = json.Marshal(helpers.BASE64optimization(variant.ImageOptions))
+	// }
+
+	// fmt.Println("------data.ImageOptions--------", data.ImageOptions)
+
+	data.CreatedByID = helpers.ConvertStringToUint(token_id)
+	company_id := c.Get("CompanyId").(string)
+	data.CompanyId = *helpers.ConvertStringToUint(company_id)
+	user_id, _ := strconv.Atoi(token_id)
+	t := uint(user_id)
+	query := map[string]interface{}{
+		"id": t,
+	}
+
+	host := c.Request().Host
+	scheme := c.Scheme()
+	user_token := c.Request().Header.Get("Authorization")
+
+	// emit event to create product
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = *data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	meta_data["query"] = query
+	meta_data["host"] = host
+	meta_data["scheme"] = scheme
+	meta_data["user_token"] = user_token
+	meta_data["user_id"] = user_id
+	meta_data["company_id"] = company_id
+	//unique_id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+
+	eda.Produce(eda.CREATE_PRODUCT, request_payload)
+	return res.RespSuccess(c, "Product Creation Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
 // CreateProductDetails godoc
 // @Summary      do a CreateProductDetails
 // @Description  Create a ProductDetails
@@ -1586,36 +1831,188 @@ func (h *handler) FavouriteProductsView(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/create [post]
-func (h *handler) CreateProductDetails(c echo.Context) error {
-	data := c.Get("product_template").(*CreateProductTemplatePayload)
+func (h *handler) CreateProductDetails(request map[string]interface{}) {
+	// var metaData core.MetaData
+	data := request["data"].(map[string]interface{})
+	meta_data := request["meta_data"].(map[string]interface{})
+	var data2 CreateProductTemplatePayload
+	json_data, _ := json.Marshal(data)
+	json.Unmarshal(json_data, &data2)
+
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+
+	user_id := meta_data["user_id"].(float64)
+	t := uint(user_id)
+	query := map[string]interface{}{
+		"id": t,
+	}
+	host := meta_data["host"].(string)
+	scheme := meta_data["scheme"].(string)
+	user_token := meta_data["user_token"].(string)
+	company_id := meta_data["company_id"].(string)
+	virtual_type_id, _ := helpers.GetLookupcodeId("LOCATION_TYPE", "VIRTUAL_LOCATION")
+	virtual_type_id_string := fmt.Sprintf("%v", virtual_type_id)
+	data2.CreatedByID = helpers.ConvertStringToUint(token_id)
+	data2.CompanyId = *helpers.ConvertStringToUint(company_id)
+	//=============create Template =======================
+	product_template_data_interface, err := h.service.CreateTemplate(data2, query, host, scheme, user_token)
+
+	var response_message eda.ConsumerResponse
+	response_message.MetaData = meta_data
+	if err != nil {
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_ACK, response_message)
+		return
+	}
+
+	product_template_data := product_template_data_interface.(mdm.ProductTemplate)
+	product_variant_arr := product_template_data.ProductVariantIds
+	p := new(pagination.Paginatevalue)
+	p.Filters = "[[\"name\",\"=\",\"Default Location\"],[\"location_type_id\",\"=\",\"" + virtual_type_id_string + "\"],[\"company_id\",\"=\",\"" + company_id + "\"]]"
+
+	metaData := core.MetaData{
+		TokenUserId:        *helpers.ConvertStringToUint(user_token),
+		AccessTemplateId:   *helpers.ConvertStringToUint(access_template_id),
+		CompanyId:          *helpers.ConvertStringToUint(company_id),
+		ModuleAccessAction: "LIST",
+	}
+
+	location_data, err := h.location_service.GetLocationList(metaData, p)
+	// response_message = new(eda.ConsumerResponse)
+	// response_message.MetaData = meta_data
+	fmt.Println("-----------2------------", err)
+	if err != nil {
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_ACK, response_message)
+		return
+	}
+	// response_message.Response = map[string]interface{}{
+	// 	"created_id": data2.ID,
+	// }
+	// eda.Produce(eda.CREATE_PRODUCT_ACK, *response_message)
+	var location_id interface{}
+	if location_data != nil {
+		var location_arr []location_service.LocationListResponseDTO
+		helpers.JsonMarshaller(location_data, &location_arr)
+		if len(location_arr) > 0 {
+			location_id = location_arr[0].ID
+		}
+	}
+	request_payload := make(map[string]interface{}, 0)
+	meta_data_inventory := make(map[string]interface{}, 0)
+	meta_data_inventory["token_id"] = token_id
+	meta_data_inventory["access_template_id"] = access_template_id
+	meta_data_inventory["company_id"] = helpers.ConvertStringToUint(company_id)
+	request_payload["meta_data"] = meta_data_inventory
+	data_payload := make(map[string]interface{}, 0)
+	data_payload["physical_location_id"] = location_id
+	data_payload["company_id"] = helpers.ConvertStringToUint(company_id)
+	for _, variant_data := range product_variant_arr {
+		variant_id := variant_data.ID
+		data_payload["product_variant_id"] = variant_id
+		request_payload["data"] = data_payload
+		eda.Produce(eda.CREATE_INVENTORY, request_payload)
+	}
+
+	// cache implementation
+	UpdateProductInCache(token_id, access_template_id)
+
+	// cache implementation for notifications
+	notification_type_id, _ := helpers.GetLookupcodeId("NOTIFICATION_TYPE", "USER_SPECIFIC")
+	notification_event_id, _ := helpers.GetLookupcodeId("NOTIFICATION_EVENT", "PRODUCT_CREATED")
+	notification_message := fmt.Sprintf("SKU %v: %v", product_template_data.SkuCode, notification.PRODUCT_CREATED_MESSAGE)
+
+	var notification_payload = make(map[string]interface{}, 0)
+	notification_payload["title"] = notification.PRODUCT_CREATED_TITLE
+	notification_payload["message"] = notification_message
+	notification_payload["source_type"] = notification.PRODUCT_LIST
+	notification_payload["source_id"] = product_template_data.SkuCode
+	notification_payload["notification_type_id"] = notification_type_id
+	notification_payload["notification_event_id"] = notification_event_id
+	notification_payload["created_by"] = helpers.ConvertStringToUint(token_id)
+	notification_payload["updated_by"] = helpers.ConvertStringToUint(token_id)
+
+	h.notification_service.CreateNotification(notification_payload)
+	notification.UpdateNotificationInCache(token_id, access_template_id)
+
+	// sending email
+	// sender := os.Getenv("AWS_PRIMARY_EMAIL")
+	// ipaas_utils.SendEmail(sender, "harnath.atmakuri@eunimart.com", "Product created", "<h1>Amazon SES Test Email (AWS SDK for Go)</h1><p>This email was sent with", "", scheme, host, ipaas_utils.AWS, user_token)
+	// ipaas_utils.SendEmail(sender, "harnath.atmakuri@eunimart.com", "Product created", "This email was sent with", "", scheme, host, ipaas_utils.AWS, user_token)
+
+	// fmt.Println(product_template_data_interface)
+	// if err != nil {
+	// 	return map[string]interface{}{"status": false, "message": err}
+	// }
+
+	//============catalogue sync event=====================
+	template_id := product_template_data.ID
+	emitter := emitter.GetObj()
+	company_id_uint := helpers.ConvertStringToUint(company_id)
+	emitter.Emit(events.ProductCatalogueSyncEvent+"template", host, scheme, user_token, *company_id_uint, template_id)
+
+	// return map[string]interface{}{"status": true, "message": "Product Created", "data": Template}
+	response_message.Response = map[string]interface{}{
+		"created_id": template_id,
+	}
+	fmt.Println("-----------3------------", response_message)
+	// eda.Produce(eda.CREATE_PRODUCT_ACK, response_message)
+
+}
+
+func (h *handler) UpdateProductEvent(c echo.Context) error {
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
 
+	token_user_id := helpers.ConvertStringToUint(token_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PRODUCTS", *token_user_id)
+	if !access_module_flag {
+		return res.SuccessWithError(c, "you dont have access for update products at view level", nil)
+	}
+	if data_access == nil {
+		return res.SuccessWithError(c, "you dont have access for update products at data level", nil)
+	}
+
+	data := c.Get("product_template").(*CreateProductTemplatePayload)
+
+	var id = c.Param("id")
+	var query = make(map[string]interface{}, 0)
+	val, err := strconv.Atoi(id)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	query["id"] = val
+	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
 	user_id, _ := strconv.Atoi(token_id)
 	t := uint(user_id)
-	// data.CreatedByID = &t
-	query := map[string]interface{}{
+	data.CreatedByID = &t
+	query2 := map[string]interface{}{
 		"id": t,
 	}
 	host := c.Request().Host
 	scheme := c.Scheme()
 
-	// data.CreatedByID = helpers.ConvertStringToUint(s)
-
-	//=============create Template =======================
 	user_token := c.Request().Header.Get("Authorization")
-	Template, err := h.service.CreateTemplate(*data, token_id, access_template_id, query, host, scheme, user_token)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
 
-	//============catalogue sync event=====================
-	template_id := Template.(mdm.ProductTemplate).ID
-	emitter := emitter.GetObj()
-	emitter.Emit(events.ProductCatalogueSyncEvent+"template", c, template_id)
-
-	return res.RespSuccess(c, "Product Created", Template)
+	// emit event to create product
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = *data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	meta_data["query"] = query
+	meta_data["query2"] = query2
+	meta_data["host"] = host
+	meta_data["scheme"] = scheme
+	meta_data["user_token"] = user_token
+	meta_data["user_id"] = user_id
+	//unique id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_PRODUCT, request_payload)
+	return res.RespSuccess(c, "Product Update Inprogress", map[string]interface{}{"request_id": request_id})
 }
 
 // UpdateProduct godoc
@@ -1633,37 +2030,48 @@ func (h *handler) CreateProductDetails(c echo.Context) error {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/{id}/update [post]
-func (h *handler) UpdateProduct(c echo.Context) error {
-	data := c.Get("product_template").(*CreateProductTemplatePayload)
+func (h *handler) UpdateProduct(request map[string]interface{}) {
 
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	val, err := strconv.Atoi(id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	query["id"] = val
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	user_id, _ := strconv.Atoi(token_id)
-	t := uint(user_id)
-	data.CreatedByID = &t
-	query2 := map[string]interface{}{
-		"id": t,
-	}
-	host := c.Request().Host
-	scheme := c.Scheme()
+	data := request["data"].(map[string]interface{})
+	meta_data := request["meta_data"].(map[string]interface{})
+	var data2 CreateProductTemplatePayload
+	json_data, _ := json.Marshal(data)
+	json.Unmarshal(json_data, &data2)
 
-	user_token := c.Request().Header.Get("Authorization")
-	err = h.service.UpdateTemplate(*data, query, token_id, access_template_id, query2, host, scheme, user_token)
-	if err != nil && err.Error() == "record not found" {
-		return res.RespErr(c, err)
-	}
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	data2.UpdatedByID = helpers.ConvertStringToUint(token_id)
+
+	query := meta_data["query"].(map[string]interface{})
+	query2 := meta_data["query2"].(map[string]interface{})
+
+	host := meta_data["host"].(string)
+	scheme := meta_data["scheme"].(string)
+	user_token := meta_data["user_token"].(string)
+
+	err := h.service.UpdateTemplate(data2, query, token_id, access_template_id, query2, host, scheme, user_token)
+	response_message := new(eda.ConsumerResponse)
+
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRODUCT_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Updated", map[string]interface{}{"product_id": id})
+	// cache implementation
+	UpdateProductInCache(token_id, access_template_id)
+
+	// if err != nil && err.Error() == "record not found" {
+	// 	return res.RespErr(c, err)
+	// }
+	// if err != nil {
+	// 	return res.RespErr(c, err)
+	// }
+	// return res.RespSuccess(c, "Product Updated", map[string]interface{}{"product_id": id})
+	response_message.Response = map[string]interface{}{
+		"updated_id": data2.ID,
+	}
+	// eda.Produce(eda.UPDATE_PRODUCT_ACK, *response_message)
+
 }
 
 // DeleteProduct godoc
@@ -1753,11 +2161,21 @@ func (h *handler) GetAllProducts(c echo.Context) (err error) {
 	c.Bind(p)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetProductFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	resp, err := h.service.GetAllTemplate(p, token_id, access_template_id, "LIST")
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", resp, p)
 }
 
 // GetAllProductsDropdown godoc
@@ -1786,7 +2204,7 @@ func (h *handler) GetAllProductsDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", resp, p)
 }
 
 // ------------------Product Variant----------------------------------------------------------------------------------------
@@ -1804,18 +2222,48 @@ func (h *handler) GetAllProductsDropdown(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/variant/create [post]
-func (h *handler) CreateProductVariant(c echo.Context) error {
+func (h *handler) CreateProductVariantEvent(c echo.Context) error {
 	data := c.Get("product_variant").(*CreateProductVariantDTO)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+	company_id := c.Get("CompanyId").(string)
+	data.CompanyId = *helpers.ConvertStringToUint(company_id)
 	data.CreatedByID = helpers.ConvertStringToUint(token_id)
 
 	//===============create new variant product =================
-	err := h.service.CreateVariant(*data, token_id, access_template_id)
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	//unique id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.CREATE_PRODUCT_VARIANT, request_payload)
+	return res.RespSuccess(c, "Product Variant Creation Inprogress", map[string]interface{}{"request_id": request_id})
+}
+
+func (h *handler) CreateProductVariant(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data CreateProductVariantDTO
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	err := h.service.CreateVariant(final_data, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PRODUCT_VARIANT_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Variant Created", data)
+	response_message.Response = map[string]interface{}{
+		"created_id": final_data.ID,
+	}
+	// eda.Produce(eda.CREATE_PRODUCT_VARIANT_ACK, *response_message)
 }
 
 // UpdateProductVariant godoc
@@ -1833,7 +2281,7 @@ func (h *handler) CreateProductVariant(c echo.Context) error {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/products/variant/{id}/update [post]
-func (h *handler) UpdateProductVariant(c echo.Context) error {
+func (h *handler) UpdateProductVariantEvent(c echo.Context) error {
 	data := c.Get("product_variant").(*CreateProductVariantDTO)
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
@@ -1847,14 +2295,42 @@ func (h *handler) UpdateProductVariant(c echo.Context) error {
 	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
 
 	//============update variant=================
-	err = h.service.UpdateVariant(*data, query, token_id, access_template_id)
-	if err != nil && err.Error() == "record not found" {
-		return res.RespErr(c, err)
-	}
+	request_payload := make(map[string]interface{}, 0)
+	request_payload["data"] = &data
+	meta_data := make(map[string]interface{}, 0)
+	meta_data["id"] = id
+	meta_data["query"] = query
+	meta_data["token_id"] = token_id
+	meta_data["access_template_id"] = access_template_id
+	//unique id
+	request_id := uuid.New().String()
+	meta_data["request_id"] = request_id
+	request_payload["meta_data"] = meta_data
+	eda.Produce(eda.UPDATE_PRODUCT_VARIANT, request_payload)
+	return res.RespSuccess(c, "Product Variant Update Inprogress", map[string]interface{}{"request_id": request_id})
+}
+func (h *handler) UpdateProductVariant(request map[string]interface{}) {
+	data := request["data"].(map[string]interface{})
+	var final_data CreateProductVariantDTO
+	marshal_data, _ := json.Marshal(data)
+	json.Unmarshal(marshal_data, &final_data)
+	meta_data := request["meta_data"].(map[string]interface{})
+	token_id := meta_data["token_id"].(string)
+	access_template_id := meta_data["access_template_id"].(string)
+	query := meta_data["query"].(map[string]interface{})
+
+	err := h.service.UpdateVariant(final_data, query, token_id, access_template_id)
+	response_message := new(eda.ConsumerResponse)
+
 	if err != nil {
-		return res.RespErr(c, err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PRODUCT_VARIANT_ACK, *response_message)
+		return
 	}
-	return res.RespSuccess(c, "Product Variant Updated", map[string]interface{}{"product_variant_id": id})
+	response_message.Response = map[string]interface{}{
+		"updated_id": final_data.ID,
+	}
+	// eda.Produce(eda.UPDATE_PRODUCT_VARIANT_ACK, *response_message)
 }
 
 // DeleteProductVariant godoc
@@ -1892,6 +2368,9 @@ func (h *handler) DeleteProductVariant(c echo.Context) error {
 	if err != nil {
 		return res.RespError(c, &res.ErrServerError)
 	}
+	// cache implementation
+	UpdateProductInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "Product Variant Deleted", map[string]interface{}{"deleted_id": id})
 }
 
@@ -1945,11 +2424,27 @@ func (h *handler) GetAllProductVariants(c echo.Context) (err error) {
 	c.Bind(p)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	helpers.AddMandatoryFilters(p, "company_id", "=", edaMetaData.CompanyId)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetProductFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	resp, err := h.service.GetAllVariant(p, token_id, access_template_id, "LIST")
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", resp, p)
 }
 
 // GetAllProductVariantsDropdown godoc
@@ -1978,11 +2473,11 @@ func (h *handler) GetAllProductVariantsDropdown(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "data retrived successfully", resp, p)
+	return res.RespSuccessInfo(c, "data retrieved successfully", resp, p)
 }
 
 // ---------------------Product Upset Api's ---------------------------------------------------------------------------------------------------------
-func (h *handler) ChannelProductUpsert(c echo.Context) (err error) {
+func (h *handler) ChannelProductUpsertEvent(c echo.Context) (err error) {
 	var arrayData []interface{}
 	var objectData interface{}
 	var data interface{}
@@ -1996,18 +2491,42 @@ func (h *handler) ChannelProductUpsert(c echo.Context) (err error) {
 		_ = json.Unmarshal(jsonData, &objectData)
 		arrayData = append(arrayData, objectData)
 	}
-
-	TokenUserID := c.Get("TokenUserID").(string)
-	// access_template_id := c.Get("AccessTemplateId").(string)
-	msg, err := h.service.UpsertProductTemplate(arrayData, TokenUserID)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_id := uuid.New().String()
+	request_payload := map[string]interface{}{
+		"meta_data": map[string]interface{}{
+			"token_id":           c.Get("TokenUserID"),
+			"access_template_id": c.Get("AccessTemplateId"),
+			"host":               c.Request().Host,
+			"scheme":             c.Scheme(),
+			"company_id":         c.Get("CompanyId"),
+			"request_id":         request_id,
+		},
+		"data": arrayData,
 	}
-	// fmt.Println("upsert api response-->>>",msg)
 
-	return res.RespSuccess(c, "Multiple records executed successfully", msg)
+	eda.Produce(eda.UPSERT_PRODUCT_TEMPLATE, request_payload)
+	return res.RespSuccess(c, "Multiple Records Upsert Inprogress", map[string]interface{}{"request_id": request_id})
 }
-func (h *handler) ChannelProductVariantUpsert(c echo.Context) (err error) {
+func (h *handler) ChannelProductUpsert(request map[string]interface{}) {
+	var data []interface{}
+	helpers.JsonMarshaller(request["data"], &data)
+	meta_data := request["meta_data"].(map[string]interface{})
+
+	msg, err := h.service.UpsertProductTemplate(data, meta_data)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
+	if err != nil {
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPSERT_PRODUCT_TEMPLATE_ACK, *response_message)
+		return
+	}
+	response_message.Response = map[string]interface{}{
+		"created_message": "template created successfully",
+	}
+	// eda.Produce(eda.UPSERT_PRODUCT_TEMPLATE_ACK, *response_message)
+	helpers.PrettyPrint("msg", msg)
+}
+func (h *handler) ChannelProductVariantUpsertEvent(c echo.Context) (err error) {
 	var arrayData []interface{}
 	var objectData interface{}
 
@@ -2022,15 +2541,40 @@ func (h *handler) ChannelProductVariantUpsert(c echo.Context) (err error) {
 		_ = json.Unmarshal(jsonData, &objectData)
 		arrayData = append(arrayData, objectData)
 	}
-
-	TokenUserID := c.Get("TokenUserID").(string)
-	// access_template_id := c.Get("AccessTemplateId").(string)
-	msg, err := h.service.UpsertProductVariant(arrayData, TokenUserID)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_id := uuid.New().String()
+	request_payload := map[string]interface{}{
+		"meta_data": map[string]interface{}{
+			"token_id":           c.Get("TokenUserID"),
+			"access_template_id": c.Get("AccessTemplateId"),
+			"host":               c.Request().Host,
+			"scheme":             c.Scheme(),
+			"company_id":         c.Get("CompanyId"),
+			"request_id":         request_id,
+		},
+		"data": arrayData,
 	}
-	// fmt.Println("upsert api response-->>>", msg)
-	return res.RespSuccess(c, "Multiple records executed successfully", msg)
+	eda.Produce(eda.UPSERT_PRODUCT_VARIANT, request_payload)
+	return res.RespSuccess(c, "Multiple Records Upsert Inprogress", map[string]interface{}{"request_id": request_id})
+}
+func (h *handler) ChannelProductVariantUpsert(request map[string]interface{}) {
+	var data []interface{}
+	helpers.JsonMarshaller(request["data"], &data)
+	meta_data := request["meta_data"].(map[string]interface{})
+
+	msg, err := h.service.UpsertProductVariant(data, meta_data)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = meta_data
+	if err != nil {
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.UPSERT_PRODUCT_VARIANT_ACK, *response_message)
+		return
+	}
+	response_message.Response = map[string]interface{}{
+		"created_message": "template created successfully",
+	}
+	// eda.Produce(eda.UPSERT_PRODUCT_VARIANT_ACK, *response_message)
+	helpers.PrettyPrint("msg", msg)
+
 }
 func (h *handler) GetAllChannelProducts(c echo.Context) (err error) {
 	p := new(pagination.Paginatevalue)
@@ -2104,4 +2648,91 @@ func (h *handler) GetProductVariantTab(c echo.Context) (err error) {
 	}
 
 	return res.RespSuccessInfo(c, "success", data, page)
+}
+
+func (h *handler) ListProductVariantsAdmin(c echo.Context) (err error) {
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	resp, err := h.service.GetAllVariant(p, token_id, access_template_id, "DROPDOWN_LIST")
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccessInfo(c, "data retrieved successfully", resp, p)
+}
+
+func (h *handler) GetProductVariantAdmin(c echo.Context) (err error) {
+	ID := c.Param("id")
+	id, _ := strconv.Atoi(ID)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+	var query = make(map[string]interface{}, 0)
+	query["id"] = id
+	result, err := h.service.GetVariantView(query, token_id, access_template_id)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "Product Fetched", result)
+}
+
+func (h *handler) CreateHsn(c echo.Context) error {
+	var data mdm.HSNCodesData
+	c.Bind(&data)
+	result, err := h.service.CreateHsn(data)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccess(c, "hsn created successfully", result)
+}
+
+func (h *handler) FindAllHsn(c echo.Context) error {
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	result, err := h.service.GetAllHsn(page)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccessInfo(c, "list of hsn fetched", result, page)
+}
+
+func (h *handler) FindOneHsn(c echo.Context) error {
+	query := map[string]interface{}{
+		"id": c.Param("id"),
+	}
+	result, err := h.service.GetOneHsn(query)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccess(c, "hsn fetched successfully", result)
+}
+
+func (h *handler) UpdateHsn(c echo.Context) error {
+	query := map[string]interface{}{
+		"id": c.Param("id"),
+	}
+	var data mdm.HSNCodesData
+	c.Bind(&data)
+	err := h.service.UpdateHsn(query, data)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccess(c, "hsn fetched successfully", map[string]interface{}{})
+
+}
+
+func (h *handler) DeleteHsn(c echo.Context) error {
+	query := map[string]interface{}{
+		"id": c.Param("id"),
+	}
+	err := h.service.DeleteHsn(query)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccess(c, "hsn Deleted successfully", map[string]interface{}{})
 }

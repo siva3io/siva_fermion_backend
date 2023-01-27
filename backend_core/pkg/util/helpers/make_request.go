@@ -25,13 +25,13 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Request struct {
-	Method string
-	Scheme string
-	Host   string
-	Path   string
-	Header map[string]string
-	Params map[string]string
-	Body   interface{}
+	Method string            `json:"method"`
+	Scheme string            `json:"scheme"`
+	Host   string            `json:"host"`
+	Path   string            `json:"path"`
+	Header map[string]string `json:"header"`
+	Params map[string]string `json:"params"`
+	Body   interface{}       `json:"body"`
 }
 
 func (request Request) logRequest() {
@@ -83,7 +83,7 @@ func MakeRequest(request Request) (interface{}, error) {
 		req.Header.Set(key, value)
 	}
 
-	request.logRequest()
+	// request.logRequest()
 
 	res, err := http.DefaultClient.Do(req)
 

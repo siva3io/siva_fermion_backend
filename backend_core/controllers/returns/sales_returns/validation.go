@@ -23,9 +23,30 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a SalesReturnsDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		//validation.Field(&a.SalesReturnNumber, validation.Required),
+		validation.Field(&a.SrDate, validation.Required),
+		validation.Field(&a.CustomerPickupAddress, validation.Required),
+		validation.Field(&a.CustomerBillingAddress, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.SalesReturnLines, validation.Required),
+	)
+}
+func (a SalesReturnLines) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.ProductId, validation.Required),
+		validation.Field(&a.UomId, validation.Required),
+		validation.Field(&a.QuantitySold, validation.Required),
+		validation.Field(&a.QuantityReturned, validation.Required),
+		validation.Field(&a.ReturnTypeId, validation.Required),
+		validation.Field(&a.Rate, validation.Required),
+		validation.Field(&a.Amount, validation.Required),
+	)
+}
 func SalesReturnsCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(returns.SalesReturns)
+	var data = new(SalesReturnsDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {
@@ -33,7 +54,7 @@ func SalesReturnsCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

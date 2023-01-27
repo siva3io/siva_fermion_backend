@@ -22,6 +22,33 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a CreditNoteDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+
+		validation.Field(&a.CustomerId, validation.Required),
+		validation.Field(&a.PurchaseInvoiceId, validation.Required),
+		validation.Field(&a.BillingAddressId, validation.Required),
+		validation.Field(&a.ShippingAddressId, validation.Required),
+		//validation.Field(&a.CreditNoteID, validation.Required),
+		validation.Field(&a.ReasonId, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.CreditNoteLineItems, validation.Required),
+	)
+}
+
+func (o CreditNoteLineItems) Validate() error {
+	return validation.ValidateStruct(&o,
+
+		validation.Field(&o.ProductVariantId, validation.Required),
+		validation.Field(&o.Quantity, validation.Required),
+		validation.Field(&o.UomId, validation.Required),
+		validation.Field(&o.Price, validation.Required),
+		validation.Field(&o.Discount, validation.Required),
+		validation.Field(&o.Tax, validation.Required),
+		validation.Field(&o.Amount, validation.Required),
+	)
+}
+
 func CreditNoteCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 	var data = new(CreditNoteDTO)
@@ -32,7 +59,7 @@ func CreditNoteCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

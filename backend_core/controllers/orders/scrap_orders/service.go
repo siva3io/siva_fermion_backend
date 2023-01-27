@@ -9,8 +9,10 @@ import (
 	// "fermion/backend_core/controllers/inventory_orders/grn"
 	inv_service "fermion/backend_core/controllers/mdm/basic_inventory"
 	shipping_order "fermion/backend_core/controllers/shipping/shipping_orders"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/internal/model/shipping"
 	inventory_order_repo "fermion/backend_core/internal/repository/inventory_orders"
 	orders_repo "fermion/backend_core/internal/repository/orders"
 	access_checker "fermion/backend_core/pkg/util/access"
@@ -35,14 +37,14 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateScrapOrder(data *ScrapOrders, token_id string, access_template_id string) (uint, error)
+	CreateScrapOrder(metaData core.MetaData, data *ScrapOrders) error
 	BulkCreateScrapOrder(data *[]ScrapOrders, token_id string, access_template_id string) error
-	UpdateScrapOrder(id uint, data *ScrapOrders, token_id string, access_template_id string) error
-	AllScrapOrders(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]ScrapOrdersResponseDTO, error)
-	FindScrapOrder(id uint, token_id string, access_template_id string) (interface{}, error)
-	DeleteScrapOrder(id uint, user_id uint, token_id string, access_template_id string) error
-	DeleteScrapOrderLines(query interface{}, token_id string, access_template_id string) error
-	GetScrapOrderTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	UpdateScrapOrder(metaData core.MetaData, data *ScrapOrders) error
+	AllScrapOrders(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	FindScrapOrder(metaData core.MetaData) (interface{}, error)
+	DeleteScrapOrder(metaData core.MetaData) error
+	DeleteScrapOrderLines(metaData core.MetaData) error
+	GetScrapOrderTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
@@ -52,54 +54,61 @@ type service struct {
 	grn_repositary         inventory_order_repo.GRN
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	shipping_order_service := shipping_order.NewService()
 	grn_service := inventory_order_repo.NewGRN()
-	return &service{orders_repo.NewScrap(), inv_service.NewService(), shipping_order_service, grn_service}
+	newServiceObj = &service{orders_repo.NewScrap(), inv_service.NewService(), shipping_order_service, grn_service}
+	return newServiceObj
 }
 
-func (s *service) CreateScrapOrder(data *ScrapOrders, token_id string, access_template_id string) (uint, error) {
+func (s *service) CreateScrapOrder(metaData core.MetaData, data *ScrapOrders) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "SCRAP_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "CREATE", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create scrap order at view level")
+		return fmt.Errorf("you dont have access for create scrap order at view level")
 	}
 	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create scrap order at data level")
+		return fmt.Errorf("you dont have access for create scrap order at data level")
 	}
+	createPayload := new(shipping.ShippingOrder)
+	helpers.JsonMarshaller(data, createPayload)
 	if data.IsShipping != nil && *data.IsShipping {
 		data.Shipping_details.CreatedByID = data.CreatedByID
-		res, err := s.shipping_order_service.CreateShippingOrder(&data.Shipping_details, token_id, access_template_id)
+		err := s.shipping_order_service.CreateShippingOrder(metaData, createPayload)
 		if err != nil {
-			return 0, err
+			return err
 		}
-		data.ShippingOrderId = &res.ID
+		// data.ShippingOrderId = &res.ID
 	}
 
 	var ScrapData *orders.ScrapOrders
-
-	dto, err := json.Marshal(*data)
+	helpers.JsonMarshaller(data, &ScrapData)
+	defaultStatus, err := helpers.GetLookupcodeId("SCRAP_ORDER_STATUS", "DRAFT")
 	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
-	err = json.Unmarshal(dto, &ScrapData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
+	ScrapData.Status_id = &defaultStatus
 	// var fetchData orders.DeliveryOrders
 	if data.AutoCreateScrapNumber {
-		ScrapData.Scrap_order_number = helpers.GenerateSequence("Scrap", token_id, "scrap_orders")
+		ScrapData.Scrap_order_number = helpers.GenerateSequence("SCRAP", fmt.Sprint(metaData.TokenUserId), "scrap_orders")
 	}
 	if data.AutoGenerateReferenceNumber {
-		ScrapData.Reference_id = helpers.GenerateSequence("REF", token_id, "scrap_orders")
+		ScrapData.Reference_id = helpers.GenerateSequence("REF", fmt.Sprint(metaData.TokenUserId), "scrap_orders")
 	}
-
-	result, _ := helpers.UpdateStatusHistory(ScrapData.Status_history, ScrapData.Status_id)
+	ScrapData.CompanyId = metaData.CompanyId
+	ScrapData.CreatedByID = &metaData.TokenUserId
+	result, _ := helpers.UpdateStatusHistory(ScrapData.Status_history, *ScrapData.Status_id)
 	ScrapData.Status_history = result
-	ScrapData.Status_history = nil
-	id, err := s.scrapRepository.SaveScrapOrder(ScrapData)
-
+	_, err = s.scrapRepository.SaveScrapOrder(ScrapData)
+	if err != nil {
+		return err
+	}
 	data_inv := map[string]interface{}{
 		"id":            ScrapData.ID,
 		"order_lines":   ScrapData.Order_lines,
@@ -109,16 +118,14 @@ func (s *service) CreateScrapOrder(data *ScrapOrders, token_id string, access_te
 	}
 
 	//updating the inventory & Committed Stock
-	go s.basicInventoryService.UpdateInventory(data_inv, token_id, access_template_id)
+	go s.basicInventoryService.UpdateTransactionInventory(metaData, data_inv)
 
-	return id, err
-	//}
-	//return 0, nil
+	return nil
 }
 
-func (s *service) UpdateScrapOrder(id uint, data *ScrapOrders, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "SCRAP_ORDERS", *token_user_id)
+func (s *service) UpdateScrapOrder(metaData core.MetaData, data *ScrapOrders) error {
+	//accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "UPDATE", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update scrap order at view level")
 	}
@@ -135,20 +142,21 @@ func (s *service) UpdateScrapOrder(id uint, data *ScrapOrders, token_id string, 
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 
-	old_data, er := s.scrapRepository.FindScrapOrderById(id)
+	old_data, er := s.scrapRepository.FindScrapOrderById(metaData.Query)
 	if er != nil {
 		return er
 	}
+
 	old_status := old_data.Status_id
 	new_status := data.Status_id
 
-	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.Status_history, ScrapData.Status_id)
+	if new_status != old_status && new_status != nil {
+		result, _ := helpers.UpdateStatusHistory(old_data.Status_history, *ScrapData.Status_id)
 		ScrapData.Status_history = result
 		final_status, _ := helpers.GetLookupcodeId("SCRAP_ORDER_STATUS", "SHIPPED_AND_RECEIVED")
 		partial_status1, _ := helpers.GetLookupcodeId("SCRAP_ORDER_STATUS", "SHIPPED_AND_PARTIALLY_RECEIVED")
 		partial_status, _ := helpers.GetLookupcodeId("SCRAP_ORDER_STATUS", "PARTIALLY_SHIPPED_AND_PARTIALLY_RECEIVED")
-		if data.Status_id == final_status || data.Status_id == partial_status || data.Status_id == partial_status1 {
+		if *ScrapData.Status_id == final_status || *ScrapData.Status_id == partial_status || *ScrapData.Status_id == partial_status1 {
 			data_inv := map[string]interface{}{
 				"id":            ScrapData.ID,
 				"order_lines":   ScrapData.Order_lines,
@@ -158,21 +166,23 @@ func (s *service) UpdateScrapOrder(id uint, data *ScrapOrders, token_id string, 
 			}
 
 			//updating the Committed Stock
-			go s.basicInventoryService.UpdateInventory(data_inv, token_id, access_template_id)
+			go s.basicInventoryService.UpdateTransactionInventory(metaData, data_inv)
 		}
 	}
+	ScrapData.UpdatedByID = &metaData.TokenUserId
+	err = s.scrapRepository.UpdateScrapOrder(metaData.Query, ScrapData)
 
-	err = s.scrapRepository.UpdateScrapOrder(id, ScrapData)
-	if er != nil {
+	if err != nil {
 		return err
 	}
+
 	for _, order_line := range ScrapData.Order_lines {
-		query := map[string]interface{}{"scrap_id": id, "product_id": order_line.Product_id}
+		query := map[string]interface{}{"scrap_id": metaData.Query["id"], "product_id": order_line.Product_id}
 		count, err1 := s.scrapRepository.UpdateScrapOrderLines(query, order_line)
 		if err1 != nil {
 			return err1
 		} else if count == 0 {
-			order_line.Scrap_id = id
+			order_line.Scrap_id = uint(metaData.Query["id"].(float64))
 			e := s.scrapRepository.CreateScrapOrderLines(order_line)
 			if e != nil {
 				return e
@@ -184,44 +194,41 @@ func (s *service) UpdateScrapOrder(id uint, data *ScrapOrders, token_id string, 
 	//return nil
 }
 
-func (s *service) AllScrapOrders(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]ScrapOrdersResponseDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "SCRAP_ORDERS", *token_user_id)
+func (s *service) AllScrapOrders(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), metaData.ModuleAccessAction, "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list scrap order at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list scrap order at data level")
 	}
-	result, err := s.scrapRepository.FindAllScrapOrders(p)
-	var response []ScrapOrdersResponseDTO
-	for _, data := range result {
-		var scraporderdata ScrapOrdersResponseDTO
-		mdata, _ := json.Marshal(data)
-		json.Unmarshal(mdata, &scraporderdata)
-		response = append(response, scraporderdata)
+	data, err := s.scrapRepository.FindAllScrapOrders(metaData.Query, page)
+
+	if err != nil {
+		return nil, err
 	}
-	return response, err
-	//}
-	//return nil, nil
+
+	return data, nil
 }
 
-func (s *service) FindScrapOrder(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SCRAP_ORDERS", *token_user_id)
+func (s *service) FindScrapOrder(metaData core.MetaData) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view scrap order at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view scrap order at data level")
 	}
-	result, err := s.scrapRepository.FindScrapOrderById(id)
+	result, err := s.scrapRepository.FindScrapOrderById(metaData.Query)
 
 	if err != nil {
 		return result, err
 	}
+
 	if result.ShippingOrderId != nil && *result.ShippingOrderId != 0 {
-		shipping_order_response, _ := s.shipping_order_service.GetShippingOrder(*result.ShippingOrderId, token_id, access_template_id)
+		shipping_order_response, _ := s.shipping_order_service.GetShippingOrder(metaData)
 		var shipping_order_data datatypes.JSON
 		dto, _ := json.Marshal(shipping_order_response)
 		json.Unmarshal(dto, &shipping_order_data)
@@ -242,53 +249,44 @@ func (s *service) FindScrapOrder(id uint, token_id string, access_template_id st
 	//return orders.ScrapOrders{}, nil
 }
 
-func (s *service) DeleteScrapOrder(id uint, user_id uint, token_id string, access_template_id string) error {
+func (s *service) DeleteScrapOrder(metaData core.MetaData) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SCRAP_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete scrap order at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete scrap order at data level")
 	}
-	_, er := s.scrapRepository.FindScrapOrderById(id)
-	if er != nil {
-		return er
-	}
-	err := s.scrapRepository.DeleteScrapOrder(id, user_id)
+	err := s.scrapRepository.DeleteScrapOrder(metaData.Query)
 	if err != nil {
 		return err
 	} else {
-		query := map[string]interface{}{"scrap_id": id}
-		er := s.scrapRepository.DeleteScrapOrderLines(query)
-		if er != nil {
-			return er
+		query := map[string]interface{}{
+			"scrap_id": metaData.Query["id"],
+		}
+		err = s.scrapRepository.DeleteScrapOrderLines(query)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
-	//}
-	//return nil
 }
 
-func (s *service) DeleteScrapOrderLines(query interface{}, token_id string, access_template_id string) error {
+func (s *service) DeleteScrapOrderLines(metaData core.MetaData) error {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SCRAP_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
-		return fmt.Errorf("you dont have access for delete scrap order at view level")
+		return fmt.Errorf("you dont have access for delete purchase order at view level")
 	}
 	if data_access == nil {
-		return fmt.Errorf("you dont have access for delete scrap order at data level")
+		return fmt.Errorf("you dont have access for delete purchase order at data level")
 	}
-	_, er := s.scrapRepository.FindScrapOrderLines(query)
-	if er != nil {
-		return er
+	err := s.scrapRepository.DeleteScrapOrderLines(metaData.Query)
+	if err != nil {
+		return err
 	}
-	err := s.scrapRepository.DeleteScrapOrderLines(query)
-	return err
-	//}
-	//return nil
+	return nil
 }
 
 func (s *service) BulkCreateScrapOrder(data *[]ScrapOrders, token_id string, access_template_id string) error {
@@ -315,17 +313,19 @@ func (s *service) BulkCreateScrapOrder(data *[]ScrapOrders, token_id string, acc
 	//return nil
 }
 
-func (s *service) GetScrapOrderTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetScrapOrderTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SCRAP_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "LIST", "SCRAP_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view scrap order at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view scrap order at data level")
 	}
-
+	id := metaData.Query["id"].(string)
+	tab := metaData.Query["tab"].(string)
+	// token_id := fmt.Sprint(metaData.TokenUserId)
+	//access_template_id := fmt.Sprint(metaData.AccessTemplateId)
 	scrapOrderId, err := strconv.Atoi(id)
 	if err != nil {
 		return nil, err
@@ -335,16 +335,19 @@ func (s *service) GetScrapOrderTab(id, tab string, page *pagination.Paginatevalu
 		scrapPagination := new(pagination.Paginatevalue)
 		source_document_type_id, _ := helpers.GetLookupcodeId("SCRAP_ORDERS_SOURCE_DOCUMENT_TYPES", "GRN")
 		scrapPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", scrapOrderId, source_document_type_id)
-		scrap_order, err := s.AllScrapOrders(scrapPagination, token_id, access_template_id, "LIST")
+		scrap_order_response, err := s.AllScrapOrders(metaData, scrapPagination)
 		if err != nil {
 			return nil, err
 		}
+		var scrap_order []ScrapOrders
+		helpers.JsonMarshaller(scrap_order_response, &scrap_order)
+
 		if len(scrap_order) == 0 {
 			return nil, errors.New("noo source document")
 		}
 
 		var scrapOrderSourceDoc map[string]interface{}
-		scrapOrderSourceDocJson := scrap_order[0]
+		scrapOrderSourceDocJson := scrap_order[0].SourceDocuments
 		dto, err := json.Marshal(scrapOrderSourceDocJson)
 		if err != nil {
 			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
@@ -358,10 +361,9 @@ func (s *service) GetScrapOrderTab(id, tab string, page *pagination.Paginatevalu
 		if scrapOrderSourceDocId == nil {
 			return nil, errors.New("no source document")
 		}
-
 		grnPage := page
 		grnPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", scrapOrderSourceDoc["id"])
-		data, err := s.grn_repositary.GetAllGRN(page)
+		data, err := s.grn_repositary.GetAllGRN(nil, page)
 		if err != nil {
 			return nil, err
 		}

@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/accounting/sales_invoice"
 	concurrency_management "fermion/backend_core/controllers/concurrency_management"
+	"fermion/backend_core/controllers/eda"
 	orders_base "fermion/backend_core/controllers/orders/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -36,11 +39,18 @@ type handler struct {
 	base_service       orders_base.ServiceBase
 }
 
+var DeliveryOrdersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if DeliveryOrdersHandler != nil {
+		return DeliveryOrdersHandler
+	}
 	service := NewService()
 	concurrencyService := concurrency_management.NewService()
 	base_service := orders_base.NewServiceBase()
-	return &handler{service, concurrencyService, base_service}
+	DeliveryOrdersHandler = &handler{service, concurrencyService, base_service}
+	return DeliveryOrdersHandler
 }
 
 // CreateDeliveryOrders godoc
@@ -57,14 +67,14 @@ func NewHandler() *handler {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/create [post]
-func (h *handler) CreateDeliveryOrders(c echo.Context) (err error) {
-	data := c.Get("delivery_orders").(*DeliveryOrderRequest)
-	// lookupcode_query := map[string]interface{}{"id": location.(LocationResponseDTO).LocationType.Id}
-	// lookupcode, err := h.coreRepository.GetLookupCodes(lookupcode_query, new(pagination.Paginatevalue))
-	// if err != nil || len(lookupcode) == 0 {
-	// 	return res.RespError(c, err)
-	// }
+func (h *handler) CreateDeliveryOrdersEvent(c echo.Context) error {
+	data := new(DeliveryOrderRequest)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("delivery_orders"),
+	}
 	//--------------------------concurrency_management_start-----------------------------------------
 	var source_documents map[string]interface{}
 	jsondata, err := json.Marshal(data.DeliveryOrdersDetails.SourceDocuments)
@@ -76,32 +86,24 @@ func (h *handler) CreateDeliveryOrders(c echo.Context) (err error) {
 		return res.RespErr(c, err)
 	}
 
-	if source_documents["id"] == nil || source_documents["id"].(float64) <= 0 {
-		return res.RespErr(c, errors.New("in source documents id must be present"))
+	if source_documents["id"] != nil && source_documents["id"].(float64) > 0 {
+		SourceDocumentType, err := helpers.GetLookupcodeName(int(*data.DeliveryOrdersDetails.Source_document_id))
+		if err != nil {
+			return res.RespError(c, err)
+		}
+		recordID := uint(source_documents["id"].(float64))
+		modelName := helpers.SourceDocumentTypeWithModelName[SourceDocumentType]
+		columnName := helpers.SourceDocumentTypeWithColumnName[SourceDocumentType]
+
+		response, PreviousStatusId, _ := h.concurrencyService.CheckConcurrencyStatus(recordID, columnName, modelName)
+		if response.Block {
+			return res.RespErr(c, errors.New(response.Message))
+		}
+		defer h.concurrencyService.ReleaseConcurrencyLock(recordID, PreviousStatusId, columnName, modelName)
 	}
-
-	SourceDocumentType, err := helpers.GetLookupcodeName(int(*data.DeliveryOrdersDetails.Source_document_id))
-	if err != nil {
-		return res.RespError(c, err)
-	}
-
-	recordID := uint(source_documents["id"].(float64))
-	modelName := helpers.SourceDocumentTypeWithModelName[SourceDocumentType]
-	columnName := helpers.SourceDocumentTypeWithColumnName[SourceDocumentType]
-
-	response, PreviousStatusId, err := h.concurrencyService.CheckConcurrencyStatus(recordID, columnName, modelName)
-	if response.Block {
-		return res.RespErr(c, errors.New(response.Message))
-	}
-	defer h.concurrencyService.ReleaseConcurrencyLock(recordID, PreviousStatusId, columnName, modelName)
-
 	//--------------------------concurrency_management_end-----------------------------------------
-
-	token_id := c.Get("TokenUserID").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	seq_delivery := helpers.GenerateSequence("scrap", token_id, "scrap_orders")
-	seq_ref := helpers.GenerateSequence("Ref", token_id, "scrap_orders")
+	seq_delivery := helpers.GenerateSequence("DO", fmt.Sprint(edaMetaData.TokenUserId), "delivery_orders")
+	seq_ref := helpers.GenerateSequence("REF", fmt.Sprint(edaMetaData.TokenUserId), "delivery_orders")
 
 	if data.DeliveryOrdersDetails.AutoCreateDoNumber {
 		data.DeliveryOrdersDetails.Delivery_order_number = seq_delivery
@@ -109,11 +111,32 @@ func (h *handler) CreateDeliveryOrders(c echo.Context) (err error) {
 	if data.DeliveryOrdersDetails.AutoGenerateReferenceNumber {
 		data.DeliveryOrdersDetails.Reference_id = seq_ref
 	}
-	id, err := h.service.CreateDeliveryOrder(data, token_id, access_template_id)
+	eda.Produce(eda.CREATE_DELIVERY_ORDERS, requestPayload)
+	return res.RespSuccess(c, "Delivery Order Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) CreateDeliveryOrders(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	requestPayload := new(DeliveryOrderRequest)
+	helpers.JsonMarshaller(request["data"], requestPayload)
+
+	err := h.service.CreateDeliveryOrder(edaMetaData, requestPayload)
+	responseMessage := new(eda.ConsumerResponse)
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_DELIVERY_ORDERS_ACK, *responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "DO created successfully", map[string]interface{}{"created_id": id})
+	// cache implementation
+	UpdateDeliverOrderInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": requestPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_DELIVERY_ORDERS_ACK, *responseMessage)
+
 }
 
 // UpdateDeliveryOrders godoc
@@ -131,18 +154,45 @@ func (h *handler) CreateDeliveryOrders(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/{id}/update [post]
-func (h *handler) UpdateDeliveryOrders(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("delivery_orders").(*DeliveryOrderRequest)
-	token_id := c.Get("TokenUserID").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	err = h.service.UpdateDeliveryOrder(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) UpdateDeliveryOrdersEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	idString := c.Param("id")
+	id, _ := strconv.Atoi(idString)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         id,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "DO updated successfully", map[string]interface{}{"updated_id": id})
+
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("delivery_orders"),
+	}
+
+	eda.Produce(eda.UPDATE_DELIVERY_ORDERS, requestPayload)
+	return res.RespSuccess(c, "Delivery Order Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateDeliveryOrders(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	requestPayload := new(DeliveryOrderRequest)
+	helpers.JsonMarshaller(request["data"], requestPayload)
+
+	err := h.service.UpdateDeliveryOrder(edaMetaData, requestPayload)
+	responseMessage := new(eda.ConsumerResponse)
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_DELIVERY_ORDERS_ACK, *responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateDeliverOrderInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_DELIVERY_ORDERS_ACK, *responseMessage)
 }
 
 // FindDeliveryOrders godoc
@@ -160,15 +210,20 @@ func (h *handler) UpdateDeliveryOrders(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/{id} [get]
 func (h *handler) FindDeliveryOrders(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.FindDeliveryOrder(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	doId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": doId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.FindDeliveryOrder(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "DO data retrieved successfully", result)
+
+	var response DeliveryOrderRequest
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Delivery Order Details retrieved succesfully", response)
 }
 
 // AllDeliveryOrders godoc
@@ -189,15 +244,30 @@ func (h *handler) FindDeliveryOrders(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders [get]
 func (h *handler) AllDeliveryOrders(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllDeliveryOrders(p, token_id, access_template_id, "LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetDeliverOrderFromCache(fmt.Sprint(metaData.TokenUserId))
+	}
+
+	if cacheResponse != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+	}
+
+	data, err := h.service.AllDeliveryOrders(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "DO data retrieved successfully", result, p)
+
+	var dtoData []DeliveryOrderResponse
+	helpers.JsonMarshaller(data, &dtoData)
+	return res.RespSuccessInfo(c, "list of delivery orders fetched", data, page)
 }
 
 // AllDeliveryOrdersDropDown godoc
@@ -218,15 +288,30 @@ func (h *handler) AllDeliveryOrders(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/dropdown [get]
 func (h *handler) AllDeliveryOrdersDropDown(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllDeliveryOrders(p, token_id, access_template_id, "DROPDOWN_LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetDeliverOrderFromCache(fmt.Sprint(metaData.TokenUserId))
+		if cacheResponse != nil {
+			return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+		}
+	}
+
+	data, err := h.service.AllDeliveryOrders(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "DO dropdown retrieved successfully", result, p)
+
+	var dtoData []DeliveryOrderResponse
+	helpers.JsonMarshaller(data, &dtoData)
+
+	return res.RespSuccessInfo(c, "dropdown list of delivery orders fetched", dtoData, page)
 }
 
 // DeleteDeliveryOrders godoc
@@ -244,16 +329,21 @@ func (h *handler) AllDeliveryOrdersDropDown(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/{id}/delete [delete]
 func (h *handler) DeleteDeliveryOrders(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	err = h.service.DeleteDeliveryOrder(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         id,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteDeliveryOrder(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "DO deleted successfully", map[string]int{"deleted_id": id})
+
+	// cache implementation
+	UpdateDeliverOrderInCache(metaData)
+	return res.RespSuccess(c, "delivery order deleted successfully", map[string]interface{}{"deleted_id": id})
 }
 
 // DeleteDeliveryOrderLines godoc
@@ -272,21 +362,17 @@ func (h *handler) DeleteDeliveryOrders(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/delivery_orders/{id}/delete_products [delete]
 func (h *handler) DeleteDeliveryOrderLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	product_id := c.QueryParam("product_id")
-	prod_id, _ := strconv.Atoi(product_id)
-	query := map[string]interface{}{
-		"do_id":      uint(id),
-		"product_id": uint(prod_id),
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"do_id":      id,
+		"product_id": c.QueryParam("product_id"),
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	err = h.service.DeleteDeliveryOrderLines(query, token_id, access_template_id)
+	err = h.service.DeleteDeliveryOrderLines(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "line items successfully Deleted", query)
+	return res.RespSuccess(c, "order line deleted successfully", metaData.Query)
 }
 
 // BulkCreateDeliveryOrders godoc
@@ -375,10 +461,19 @@ func (h *handler) DownloadDeliveryOrdersPDF(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/delivery_orders/{id}/generate_pdf [post]
 func (h *handler) GenerateDeliveryOrdersPDF(c echo.Context) error {
-	resp_data := map[string]interface{}{
-		"file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+	metaData := c.Get("MetaData").(core.MetaData)
+	deliveryOrderId := c.Param("id")
+	heading := c.QueryParam("heading")
+	helpers.PrettyPrint("=====================>", heading)
+	helpers.PrettyPrint("=====================>", metaData)
+	helpers.PrettyPrint("=====================>", deliveryOrderId)
+	// company_id := c.Get("CompanyId").(string)
+	x := sales_invoice.NewHandler()
+	er := x.GetSalesInvoicePdf(c)
+	if er != nil {
+		return res.RespSuccess(c, "Generated Successfully", "")
 	}
-	return res.RespSuccess(c, "PDF Generated", resp_data)
+	return c.Attachment("test.pdf", "test")
 }
 
 // FavouriteDeliveryOrders godoc
@@ -397,24 +492,19 @@ func (h *handler) GenerateDeliveryOrdersPDF(c echo.Context) error {
 // @Router /api/v1/delivery_orders/{id}/favourite [post]
 func (h *handler) FavouriteDeliveryOrders(c echo.Context) (err error) {
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id": id,
 	}
-
-	_, er := h.service.FindDeliveryOrder(uint(ID), token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
+	_, err = h.service.FindDeliveryOrder(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
 	}
-	err = h.base_service.FavouriteDeliveryOrders(query)
+	err = h.base_service.FavouriteDeliveryOrders(metaData.Query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "DeliveryOrders is Marked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "DeliveryOrder is Marked as Favourite", map[string]string{"id": id})
 }
 
 // UnFavouriteDeliveryOrders godoc
@@ -433,18 +523,17 @@ func (h *handler) FavouriteDeliveryOrders(c echo.Context) (err error) {
 // @Router /api/v1/delivery_orders/{id}/unfavourite [post]
 func (h *handler) UnFavouriteDeliveryOrders(c echo.Context) (err error) {
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"id":      id,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.UnFavouriteDeliveryOrders(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "DeliveryOrders is Unmarked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "DeliveryOrder is Unmarked as Favourite", map[string]string{"id": id})
 }
 
 //-----------------------------------------------------
@@ -452,21 +541,17 @@ func (h *handler) UnFavouriteDeliveryOrders(c echo.Context) (err error) {
 func (h *handler) GetDeliveryOrderTab(c echo.Context) (err error) {
 
 	page := new(pagination.Paginatevalue)
-	err = c.Bind(page)
+	c.Bind(page)
+
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id":  c.Param("id"),
+		"tab": c.Param("tab"),
+	}
+
+	data, err := h.service.GetDeliveryOrderTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-
-	id := c.Param("id")
-	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetDeliveryOrderTab(id, tab, page, access_template_id, token_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-
 	return res.RespSuccessInfo(c, "success", data, page)
 }

@@ -23,9 +23,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.GetAllPickList, cmiddleware.Authorization)
 	g.GET("/:id", h.GetPickList, cmiddleware.Authorization)
-	g.POST("/create", h.CreatePickList, cmiddleware.Authorization, PickListCreateValidate)
+	g.POST("/create", h.CreatePicklistEvent, cmiddleware.Authorization, PickListCreateValidate)
 	g.POST("/bulk_create", h.BulkCreatePickList, cmiddleware.Authorization)
-	g.PUT("/:id/edit", h.UpdatePickList, cmiddleware.Authorization, PickListUpdateValidate)
+	g.PUT("/:id/edit", h.UpdatePickListEvent, cmiddleware.Authorization, PickListUpdateValidate)
 	g.DELETE("/:id/delete", h.DeletePickList, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_products", h.DeletePickListLines, cmiddleware.Authorization)
 

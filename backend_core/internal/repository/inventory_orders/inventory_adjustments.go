@@ -1,10 +1,12 @@
 package inventory_orders
 
 import (
+	"errors"
 	"os"
 	"time"
 
 	"fermion/backend_core/db"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -28,42 +30,52 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type InventoryAdjustments interface {
-	CreateInvAdj(data *inventory_orders.InventoryAdjustments, userID string) (uint, error)
-	BulkCreateInvAdj(data *[]inventory_orders.InventoryAdjustments, userID string) error
-	UpdateInvAdj(id uint, data *inventory_orders.InventoryAdjustments) error
-	GetInvAdj(id uint) (inventory_orders.InventoryAdjustments, error)
-	GetAllInvAdj(p *pagination.Paginatevalue) ([]inventory_orders.InventoryAdjustments, error)
-	DeleteInvAdj(id uint, user_id uint) error
+	CreateInvAdj(data *inventory_orders.InventoryAdjustments) error
+	BulkCreateInvAdj(metaData core.MetaData, data *[]inventory_orders.InventoryAdjustments) error
+	UpdateInvAdj(query map[string]interface{}, data *inventory_orders.InventoryAdjustments) error
+	GetInvAdj(query map[string]interface{}) (inventory_orders.InventoryAdjustments, error)
+	GetAllInvAdj(query map[string]interface{}, p *pagination.Paginatevalue) ([]inventory_orders.InventoryAdjustments, error)
+	DeleteInvAdj(query map[string]interface{}) error
 
 	CreateInvAdjLines(data inventory_orders.InventoryAdjustmentLines) error
-	UpdateInvAdjLines(query interface{}, data inventory_orders.InventoryAdjustmentLines) (int64, error)
-	GetInvAdjLines(query interface{}) ([]inventory_orders.InventoryAdjustmentLines, error)
-	DeleteInvAdjLines(query interface{}) error
+	UpdateInvAdjLines(query map[string]interface{}, data inventory_orders.InventoryAdjustmentLines) (int64, error)
+	GetInvAdjLines(query map[string]interface{}) ([]inventory_orders.InventoryAdjustmentLines, error)
+	DeleteInvAdjLines(query map[string]interface{}) error
 }
 
 type invadj struct {
 	db *gorm.DB
 }
 
+var invadjRepository *invadj //singleton object
+
+// singleton function
 func NewInvAdj() *invadj {
+	if invadjRepository != nil {
+		return invadjRepository
+	}
 	db := db.DbManager()
-	return &invadj{db}
+	invadjRepository = &invadj{db}
+	return invadjRepository
 }
 
-func (r *invadj) CreateInvAdj(data *inventory_orders.InventoryAdjustments, userID string) (uint, error) {
+func (r *invadj) CreateInvAdj(data *inventory_orders.InventoryAdjustments) error {
 	var scode uint
 	err := r.db.Raw("SELECT lookupcodes.id FROM lookuptypes,lookupcodes WHERE lookuptypes.id = lookupcodes.lookup_type_id AND lookuptypes.lookup_type = 'ADJUSTMENT_STATUS' AND lookupcodes.lookup_code = 'DRAFT'").First(&scode).Error
 	if err != nil {
-		return 0, err
+		return err
 	}
 	data.StatusID = scode
 	res, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusID)
 	data.StatusHistory = res
-	result := r.db.Model(&inventory_orders.InventoryAdjustments{}).Create(&data)
-	return data.ID, result.Error
+	result := r.db.Model(&inventory_orders.InventoryAdjustments{}).Create(data).Error
+	if result != nil {
+		return err
+	}
+	return nil
 }
 
-func (r *invadj) BulkCreateInvAdj(data *[]inventory_orders.InventoryAdjustments, userID string) error {
+func (r *invadj) BulkCreateInvAdj(metaData core.MetaData, data *[]inventory_orders.InventoryAdjustments) error {
 	for _, value := range *data {
 		var scode uint
 		err := r.db.Raw("SELECT lookupcodes.id FROM lookuptypes,lookupcodes WHERE lookuptypes.id = lookupcodes.lookup_type_id AND lookuptypes.lookup_type = 'ADJUSTMENT_STATUS' AND lookupcodes.lookup_code = 'DRAFT'").First(&scode).Error
@@ -81,51 +93,95 @@ func (r *invadj) BulkCreateInvAdj(data *[]inventory_orders.InventoryAdjustments,
 	return nil
 }
 
-func (r *invadj) UpdateInvAdj(id uint, data *inventory_orders.InventoryAdjustments) error {
-	result := r.db.Model(&inventory_orders.InventoryAdjustments{}).Where("id", id).Updates(&data)
-	return result.Error
+func (r *invadj) UpdateInvAdj(query map[string]interface{}, data *inventory_orders.InventoryAdjustments) error {
+	err := r.db.Model(&inventory_orders.InventoryAdjustments{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+		return err.Error
+	}
+	return nil
 }
 
-func (r *invadj) GetInvAdj(id uint) (inventory_orders.InventoryAdjustments, error) {
+func (r *invadj) GetInvAdj(query map[string]interface{}) (inventory_orders.InventoryAdjustments, error) {
 	var data inventory_orders.InventoryAdjustments
-	result := r.db.Model(&inventory_orders.InventoryAdjustments{}).Preload(clause.Associations).Where("id", id).First(&data)
-	return data, result.Error
+	err := r.db.Model(&inventory_orders.InventoryAdjustments{}).Preload(clause.Associations).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err != nil {
+		return data, err.Error
+	}
+	return data, nil
+
 }
 
-func (r *invadj) GetAllInvAdj(p *pagination.Paginatevalue) ([]inventory_orders.InventoryAdjustments, error) {
+func (r *invadj) GetAllInvAdj(query map[string]interface{}, p *pagination.Paginatevalue) ([]inventory_orders.InventoryAdjustments, error) {
 	var data []inventory_orders.InventoryAdjustments
-	res := r.db.Model(&inventory_orders.InventoryAdjustments{}).Scopes(helpers.Paginate(&inventory_orders.InventoryAdjustments{}, p, r.db)).Where("is_active = true").Preload("InventoryAdjustmentLines.Product").Preload("InventoryAdjustmentLines.ProductVariant").Preload(clause.Associations).Find(&data)
-	return data, res.Error
+	err := r.db.Model(&inventory_orders.InventoryAdjustments{}).Scopes(helpers.Paginate(&inventory_orders.InventoryAdjustments{}, p, r.db)).Where("is_active = true").Preload("InventoryAdjustmentLines.Product").Preload("InventoryAdjustmentLines.ProductVariant").Preload(clause.Associations).Find(&data)
+	if err != nil {
+		return data, err.Error
+	}
+	return data, nil
+
 }
 
-func (r *invadj) DeleteInvAdj(id uint, user_id uint) error {
+func (r *invadj) DeleteInvAdj(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
-	result := r.db.Model(&inventory_orders.InventoryAdjustments{}).Where("id", id).Updates(data)
-	return result.Error
+	delete(query, "user_id")
+	err := r.db.Model(&inventory_orders.InventoryAdjustments{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+		return err.Error
+	}
+	return nil
+
 }
 
 func (r *invadj) CreateInvAdjLines(data inventory_orders.InventoryAdjustmentLines) error {
-	result := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Create(&data)
-	return result.Error
+	res := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Create(data)
+	if res.Error != nil {
+		return res.Error
+	}
+	return nil
 }
 
-func (r *invadj) UpdateInvAdjLines(query interface{}, data inventory_orders.InventoryAdjustmentLines) (int64, error) {
-	result := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Updates(&data)
-	return result.RowsAffected, result.Error
+func (r *invadj) UpdateInvAdjLines(query map[string]interface{}, data inventory_orders.InventoryAdjustmentLines) (int64, error) {
+	err := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Updates(data)
+	if err != nil {
+		return err.RowsAffected, err.Error
+	}
+	return err.RowsAffected, nil
 }
 
-func (r *invadj) GetInvAdjLines(query interface{}) ([]inventory_orders.InventoryAdjustmentLines, error) {
+func (r *invadj) GetInvAdjLines(query map[string]interface{}) ([]inventory_orders.InventoryAdjustmentLines, error) {
 	var data []inventory_orders.InventoryAdjustmentLines
-	result := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Preload(clause.Associations).Find(&data)
-	return data, result.Error
+	err := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Preload(clause.Associations).Find(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err != nil {
+		return data, err.Error
+	}
+	return data, nil
 }
 
-func (r *invadj) DeleteInvAdjLines(query interface{}) error {
-	result := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Delete(&inventory_orders.InventoryAdjustmentLines{})
-	return result.Error
+func (r *invadj) DeleteInvAdjLines(query map[string]interface{}) error {
+	err := r.db.Model(&inventory_orders.InventoryAdjustmentLines{}).Where(query).Delete(&inventory_orders.InventoryAdjustmentLines{})
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+		return err.Error
+	}
+	return nil
+
 }

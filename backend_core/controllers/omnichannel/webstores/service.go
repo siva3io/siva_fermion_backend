@@ -40,8 +40,15 @@ type service struct {
 	webstoreRepository omnichannel_repo.Webstore
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{omnichannel_repo.NewWebstore()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{omnichannel_repo.NewWebstore()}
+	return newServiceObj
 
 }
 

@@ -26,29 +26,31 @@ type SchedulerJobDto struct {
 	Function     string         `json:"function"`
 	FunctionType string         `json:"function_type"`
 	Params       datatypes.JSON `json:"params"`
-	State        string         `json:"state"`
+	State        *bool          `json:"state"`
 	StartTime    time.Time      `json:"start_time"`
 	Frequency    string         `json:"frequency"`
+	SourceType   string         `json:"source_type"`
+	SourceId     string         `json:"source_id"`
 }
 type SchedulerJobResponseDTO struct {
 	ID           uint           `json:"id"`
-	CreatedDate  uint           `json:"created_date"`
-	CreatedBy    string         `json:"created_by"`
-	UpdatedBy    string         `json:"updated_by"`
 	Name         string         `json:"name"`
 	Type         string         `json:"type"`
 	Function     string         `json:"function"`
 	FunctionType string         `json:"function_type"`
 	Params       datatypes.JSON `json:"params"`
-	State        string         `json:"state"`
+	State        *bool          `json:"state"`
 	StartTime    time.Time      `json:"start_time"`
 	Frequency    string         `json:"frequency"`
+	SourceType   string         `json:"source_type"`
+	SourceId     string         `json:"source_id"`
 }
 type SchedulerLogResponseDTO struct {
-	ID             uint           `json:"id"`
-	SchedulerJobId uint           `json:"scheduler_job_id"`
-	State          string         `json:"state"` //success / failed / queued
-	Notes          datatypes.JSON `json:"notes"`
-	StartTime      time.Time      `json:"start_time"`
-	EndTime        time.Time      `json:"end_time"`
+	ID             uint                    `json:"id"`
+	SchedulerJobId uint                    `json:"scheduler_job_id"`
+	SchedulerJob   SchedulerJobResponseDTO `json:"scheduler_job"`
+	State          string                  `json:"state"` //success / failed / queued
+	Notes          datatypes.JSON          `json:"notes"`
+	StartTime      time.Time               `json:"start_time"`
+	EndTime        time.Time               `json:"end_time"`
 }

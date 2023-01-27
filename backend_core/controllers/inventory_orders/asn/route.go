@@ -24,9 +24,9 @@ import (
 func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.GetAllAsn, cmiddleware.Authorization)
 	g.GET("/:id", h.GetAsn, cmiddleware.Authorization)
-	g.POST("/create", h.CreateAsn, cmiddleware.Authorization, AsnCreateValidate)
+	g.POST("/create", h.CreateAsnEvent, cmiddleware.Authorization, AsnCreateValidate)
 	g.POST("/bulk_create", h.BulkCreateAsn, cmiddleware.Authorization)
-	g.PUT("/:id/edit", h.UpdateAsn, cmiddleware.Authorization, AsnUpdateValidate)
+	g.PUT("/:id/edit", h.UpdateAsnEvent, cmiddleware.Authorization, AsnUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteAsn, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_products", h.DeleteAsnLines, cmiddleware.Authorization)
 

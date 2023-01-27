@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/controllers/omnichannel/channel"
 	shipping_base "fermion/backend_core/controllers/shipping/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/shipping"
 
+	// "fermion/backend_core/internal/repository/shipping"
 	"fermion/backend_core/pkg/util/emitter"
 	"fermion/backend_core/pkg/util/events"
 	"fermion/backend_core/pkg/util/helpers"
@@ -35,10 +39,17 @@ type handler struct {
 	base_service shipping_base.ServiceBase
 }
 
+var ShippingOrdersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ShippingOrdersHandler != nil {
+		return ShippingOrdersHandler
+	}
 	service := NewService()
 	base_service := shipping_base.NewServiceBase()
-	return &handler{service, base_service}
+	ShippingOrdersHandler = &handler{service, base_service}
+	return ShippingOrdersHandler
 }
 
 // CreateShippingOrder godoc
@@ -55,26 +66,63 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/create [post]
-func (h *handler) CreateShippingOrder(c echo.Context) (err error) {
-	data := c.Get("shipping_orders").(*ShippingOrderRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	response, err := h.service.CreateShippingOrder(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) CreateShippingOrderEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("shipping_orders"),
 	}
-	id := response.ID
-	shipping_partner := response.ShippingPartner.PartnerName
-	service_type := response.ShippingMode.DisplayName
+	eda.Produce(eda.CREATE_SHIPPING_ORDER, request_payload, false)
+	return res.RespSuccess(c, "Shipping_order Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+
+}
+
+func (h *handler) CreateShippingOrder(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(shipping.ShippingOrder)
+	helpers.JsonMarshaller(data, createPayload)
+	// t:=&final_data
+	err := h.service.CreateShippingOrder(edaMetaData, createPayload)
+	id := createPayload.ID
+	edaMetaData.Query = map[string]interface{}{
+		"id": id,
+	}
+	response_data_interface, err := h.service.GetShippingOrder(edaMetaData)
+	response_data := response_data_interface.(shipping.ShippingOrder)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_SHIPPING_ORDER_ACK, responseMessage)
+		return
+	}
+	// t:=*createPayload
+	fmt.Println("create payload data : ------>", *createPayload)
+	// helpers.PrettyPrint("create payload", *createPayload)
+	host := edaMetaData.Host
+	scheme := edaMetaData.Scheme
+	shipping_partner := response_data.ShippingPartner.PartnerName
+	service_type := response_data.ShippingMode.DisplayName
+	fmt.Println("host:"+host, "scheme:"+scheme, id, "shipping partner"+shipping_partner)
+	fmt.Println("service type:" + service_type)
+
 	emitter := emitter.GetObj()
 	if service_type == "Land" {
-		emitter.Emit(events.CreateShipmentEvent+shipping_partner+service_type, c, id)
+		fmt.Println("Entered land " + events.CreateShipmentEvent + shipping_partner + service_type)
+		emitter.Emit(events.CreateShipmentEvent+shipping_partner+service_type, host, scheme, id)
 	}
 	if service_type == "Air" {
-		emitter.Emit(events.CreateShipmentEvent+shipping_partner+service_type, c, id)
+		fmt.Println("Entered air " + events.CreateShipmentEvent + shipping_partner + service_type)
+		emitter.Emit(events.CreateShipmentEvent+shipping_partner+service_type, host, scheme, id)
 	}
-	return res.RespSuccess(c, "ShippingOrder Created Successfully", map[string]interface{}{"Created ShippingOrder Id": response})
+	// eda.Produce(eda.CREATE_SHIPPING_ORDER_ACK, responseMessage)
+	// cache implementation
+	UpdateShippingOrderInCache(edaMetaData)
+
 }
 
 // GetAllShippingOrders godoc
@@ -95,15 +143,31 @@ func (h *handler) CreateShippingOrder(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders [get]
 func (h *handler) GetAllShippingOrders(c echo.Context) (err error) {
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllShippingOrders(page, token_id, access_template_id, "LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []ShippingOrderResponse
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetShippingOrderFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllShippingOrders(metaData, p)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "ShippingOrders Fetched Successfully", result, page)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "ShippingOrders Fetched Successfully", response, p)
 }
 
 // GetAllShippingOrdersDropDown godoc
@@ -124,15 +188,30 @@ func (h *handler) GetAllShippingOrders(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/dropdown [get]
 func (h *handler) GetAllShippingOrdersDropDown(c echo.Context) (err error) {
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllShippingOrders(page, token_id, access_template_id, "DROPDOWN_LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []ShippingOrderResponse
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetShippingOrderFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllShippingOrders(metaData, p)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "dropdown of ShippingOrders Fetched Successfully", result, page)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "ShippingOrders Fetched Successfully", result, p)
 }
 
 // GetShippingOrder godoc
@@ -150,14 +229,19 @@ func (h *handler) GetAllShippingOrdersDropDown(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/{id} [get]
 func (h *handler) GetShippingOrder(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetShippingOrder(uint(id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingOrderId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": shippingOrderId,
+		// "company_id": metaData.CompanyId,
 	}
+
+	result, err := h.service.GetShippingOrder(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	var response ShippingOrderResponse
+	helpers.JsonMarshaller(result, &response)
 	return res.RespSuccess(c, "ShippingOrder Fetched Successfully", result)
 }
 
@@ -176,16 +260,22 @@ func (h *handler) GetShippingOrder(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/{id}/delete [delete]
 func (h *handler) DeleteShippingOrder(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteShippingOrder(uint(id), uint(user_id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingOrderId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         shippingOrderId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "ShippingOrder Deleted Successfully", map[string]string{"Deleted shipping order id": get_id})
+	err = h.service.DeleteShippingOrder(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	// cache implementation
+	UpdateShippingOrderInCache(metaData)
+
+	return res.RespSuccess(c, "ShippingOrder Deleted Successfully", map[string]string{"Deleted shipping order id": shippingOrderId})
 }
 
 // UpdateShippingOrder godoc
@@ -203,26 +293,62 @@ func (h *handler) DeleteShippingOrder(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/{id}/update [post]
-func (h *handler) UpdateShippingOrder(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	data := c.Get("shipping_orders").(*ShippingOrderRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateShippingOrder(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdateShippingOrderEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	shippingOrderId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         shippingOrderId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	response, _ := h.service.GetShippingOrder(uint(id), token_id, access_template_id)
-	status := response.ShippingStatus.Name
-	partner := response.ShippingPartner.PartnerName
-	shipping_id := response.AwbNumber
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("shipping_orders"),
+	}
+
+	eda.Produce(eda.UPDATE_SHIPPING_ORDER, request_payload)
+	return res.RespSuccess(c, "Basic Shipping_order Update Inprogress", map[string]interface{}{"request_id": shippingOrderId})
+
+}
+
+func (h *handler) UpdateShippingOrder(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	updatePayload := new(shipping.ShippingOrder)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateShippingOrder(edaMetaData, updatePayload)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_UOM_CLASS_ACK, responseMessage)
+		return
+	}
+	host := edaMetaData.Host
+	scheme := edaMetaData.Scheme
+
+	h.service.GetShippingOrder(edaMetaData)
+	status := updatePayload.ShippingStatus.DisplayName
+	partner := updatePayload.ShippingPartner.PartnerName
+	shipping_id := updatePayload.AwbNumber
 	if status == "Delivery unsuccessful" {
 		emitter := emitter.GetObj()
-		emitter.Emit(events.CancelShipmentEvent+partner, c, shipping_id)
+		emitter.Emit(events.CancelShipmentEvent+partner, host, scheme, shipping_id)
 	}
-	return res.RespSuccess(c, "ShippingOrder Updated Successfully", map[string]int{"Updated id": id})
+
+	// cache implementation
+	UpdateShippingOrderInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_UOM_CLASS_ACK, responseMessage)
+
 }
 
 // DeleteShippingOrderLine godoc
@@ -241,21 +367,21 @@ func (h *handler) UpdateShippingOrder(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/order_line/{id}/delete [delete]
 func (h *handler) DeleteShippingOrderLine(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	get_prod_id := c.QueryParam("product_id")
-	product_id, _ := strconv.Atoi(get_prod_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	query := map[string]interface{}{
-		"shipping_order_id": uint(id),
-		"product_id":        uint(product_id),
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingOrderId := c.Param("id")
+	productId := c.Param("product_id")
+	metaData.Query = map[string]interface{}{
+		"id":         shippingOrderId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+		"product_id": productId,
 	}
-	err = h.service.DeleteShippingOrderLine(query, token_id, access_template_id)
+
+	err = h.service.DeleteShippingOrderLine(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "ShippingOrder LineItem Deleted Successfully", query)
+	return res.RespSuccess(c, "ShippingOrder LineItem Deleted Successfully", shippingOrderId)
 }
 
 // BulkCreateShippingOrder godoc
@@ -276,13 +402,13 @@ func (h *handler) CreateBulkShippingOrder(c echo.Context) (err error) {
 	data := new([]shipping.ShippingOrder)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.CreateBulkShippingOrder(data, token_id, access_template_id)
+	err = h.service.CreateBulkShippingOrder(metaData, data)
 	if err != nil {
 		return res.RespError(c, err)
 	}
@@ -364,24 +490,22 @@ func (h *handler) GenerateShippingOrderPDF(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders/{id}/favourite [post]
 func (h *handler) FavouriteShippingOrder(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingOrderId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         shippingOrderId,
+		"company_id": metaData.CompanyId,
 	}
-	_, er := h.service.GetShippingOrder(uint(ID), token_id, access_template_id)
+	_, er := h.service.GetShippingOrder(metaData)
 	if er != nil {
 		return res.RespSuccess(c, "Specified record not found", er)
 	}
-	err = h.base_service.FavouriteShippingOrder(query)
+	err = h.base_service.FavouriteShippingOrder(metaData.Query)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "ShippingOrder is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "ShippingOrder is Marked as Favourite", map[string]string{"record_id": shippingOrderId})
 }
 
 // UnFavouriteShippingOrder godoc
@@ -450,4 +574,56 @@ func (h *handler) GetShippingOrderTab(c echo.Context) (err error) {
 	}
 
 	return res.RespSuccessInfo(c, "success", data, page)
+}
+
+func (h *handler) GetAllShippingOrdersAdmin(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	channelName := c.QueryParam("type")
+	if channelName == "ONDC" {
+		query := map[string]interface{}{
+			"name": channelName,
+		}
+		res, _ := channel.NewService().GetChannelService(query)
+		fmt.Println("===========>>>>", res.ID)
+		if res.ID != 0 {
+			helpers.AddMandatoryFilters(p, "channel_id", "=", res.ID)
+		}
+	}
+
+	var response []ShippingOrderResponseDTOForBPPAdmin
+
+	result, err := h.service.GetAllShippingOrders(metaData, p)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	helpers.JsonMarshaller(result, &response)
+	for i := 0; i < len(response); i++ {
+		for j := 0; j < len(response[i].ShippingOrderLines); j++ {
+			response[i].ShippingOrderLine.ProductName = response[i].ShippingOrderLines[j].ProductVariant.ProductName
+			response[i].ShippingOrderLine.SkuId = response[i].ShippingOrderLines[j].ProductVariant.SkuId
+		}
+	}
+	return res.RespSuccessInfo(c, "ShippingOrders Fetched Successfully", response, p)
+}
+
+func (h *handler) GetShippingOrderAdmin(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingOrderId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": shippingOrderId,
+	}
+
+	result, err := h.service.GetShippingOrder(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	var response ShippingOrderResponse
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "ShippingOrder Fetched Successfully", result)
 }

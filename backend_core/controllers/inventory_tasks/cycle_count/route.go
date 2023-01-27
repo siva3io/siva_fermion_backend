@@ -27,9 +27,9 @@ func (h *handler) Route(g *echo.Group) {
 
 	g.GET("", h.GetAllCycleCount, cmiddleware.Authorization)
 	g.GET("/:id", h.GetCycleCount, cmiddleware.Authorization)
-	g.POST("/create", h.CreateCycleCount, cmiddleware.Authorization, CycleCountCreateValidate)
+	g.POST("/create", h.CreateCycleCountEvent, cmiddleware.Authorization, CycleCountCreateValidate)
 	g.POST("/bulk_create", h.BulkCreateCycleCount, cmiddleware.Authorization)
-	g.PUT("/:id/edit", h.UpdateCycleCount, cmiddleware.Authorization, CycleCountUpdateValidate)
+	g.PUT("/:id/edit", h.UpdateCycleCountEvent, cmiddleware.Authorization, CycleCountUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteCycleCount, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_products", h.DeleteCycleCountLines, cmiddleware.Authorization)
 

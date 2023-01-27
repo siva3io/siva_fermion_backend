@@ -2,6 +2,7 @@ package contacts
 
 import (
 	app_core "fermion/backend_core/controllers/cores"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/pkg/util/response"
 
 	"gorm.io/datatypes"
@@ -29,27 +30,8 @@ type ContactViewDTO struct {
 	Meta response.SuccessResponse
 	Data PartnerResponseDTO
 }
-type SwaggerPartnerRequestDTO struct {
-	CreatedByID           *uint                 `json:"created_by_id"`
-	UpdatedByID           *uint                 `json:"updated_by_id"`
-	DeletedByID           *uint                 `json:"deleted_by_id"`
-	ContactTypeId         *uint                 `json:"contact_type_id"`
-	FirstName             string                `json:"first_name"`
-	LastName              string                `json:"last_name"`
-	IsAllowedLogin        *bool                 `json:"is_allowed_login"`
-	AccessTemplateId      uint                  `json:"access_template_id"`
-	CompanyName           string                `json:"company_name"`
-	Properties            []*Ids                `json:"properties,omitempty"`
-	PrimaryEmail          string                `json:"primary_email"`
-	PrimaryPhone          string                `json:"primary_phone"`
-	ParentId              *uint                 `json:"parent_id"`
-	ImageOptions          ImageOptionsDTO       `json:"image_options,omitempty"`
-	AddressDetails        []AddressDetailsDTO   `json:"address_details,omitempty"`
-	BillingDetails        BillingDetailsDTO     `json:"billing_details,omitempty"`
-	ProfileInfo           datatypes.JSON        `json:"profile_info,omitempty"`
-	AdditionalInformation AdditionalInformation `json:"additional_information,omitempty"`
-	IsEnabled             *bool                 `json:"is_enabled"`
-	IsActive              *bool                 `json:"is_active"`
+type SwaggerCreateOrUpdatePartnerResponseDTO struct {
+	RequestId string `json:"request_id"`
 }
 
 type Ids struct {
@@ -105,27 +87,30 @@ type AddressDetailsDTO struct {
 
 // ----------------------DTO for struct Model---------------------------
 type PartnerRequestDTO struct {
-	CreatedByID    *uint  `json:"created_by_id"`
-	UpdatedByID    *uint  `json:"updated_by_id"`
-	DeletedByID    *uint  `json:"deleted_by_id"`
-	ContactTypeId  *uint  `json:"contact_type_id"`
-	FirstName      string `json:"first_name"`
-	LastName       string `json:"last_name"`
-	IsAllowedLogin *bool  `json:"is_allowed_login"`
-	// AccessTemplateId      uint                `json:"access_template_id"`
-	CompanyName           string              `json:"company_name"`
-	Properties            []*Ids              `json:"properties,omitempty"`
-	PrimaryEmail          string              `json:"primary_email"`
-	PrimaryPhone          string              `json:"primary_phone"`
-	ParentId              *uint               `json:"parent_id"`
-	ImageOptions          datatypes.JSON      `json:"image_options,omitempty"`
-	AddressDetails        []AddressDetailsDTO `json:"address_details,omitempty"`
-	BillingDetails        datatypes.JSON      `json:"billing_details,omitempty"`
-	ProfileInfo           datatypes.JSON      `json:"profile_info,omitempty"`
-	ExternalDetails       datatypes.JSON      `json:"external_details"`
-	AdditionalInformation datatypes.JSON      `json:"additional_information,omitempty"`
-	IsEnabled             *bool               `json:"is_enabled"`
-	IsActive              *bool               `json:"is_active"`
+	CreatedByID           *uint                  `json:"created_by_id"`
+	UpdatedByID           *uint                  `json:"updated_by_id"`
+	DeletedByID           *uint                  `json:"deleted_by_id"`
+	ContactTypeId         *uint                  `json:"contact_type_id"`
+	FirstName             string                 `json:"first_name"`
+	LastName              string                 `json:"last_name"`
+	IsAllowedLogin        *bool                  `json:"is_allowed_login"`
+	AccessTemplateId      []*core.AccessTemplate `json:"access_template_id"`
+	AccessIds             datatypes.JSON         `json:"access_ids"`
+	CompanyName           string                 `json:"company_name"`
+	Properties            []*Ids                 `json:"properties,omitempty"`
+	PrimaryEmail          string                 `json:"primary_email"`
+	PrimaryPhone          string                 `json:"primary_phone"`
+	ParentId              *uint                  `json:"parent_id"`
+	ImageOptions          datatypes.JSON         `json:"image_options,omitempty"`
+	AddressDetails        []AddressDetailsDTO    `json:"address_details,omitempty"`
+	BillingDetails        datatypes.JSON         `json:"billing_details,omitempty"`
+	ProfileInfo           datatypes.JSON         `json:"profile_info,omitempty"`
+	ExternalDetails       datatypes.JSON         `json:"external_details"`
+	AdditionalInformation datatypes.JSON         `json:"additional_information,omitempty"`
+	IsEnabled             *bool                  `json:"is_enabled"`
+	IsActive              *bool                  `json:"is_active"`
+	RoleId                *uint                  `json:"role_id"`
+	UserTypes             datatypes.JSON         `json:"user_types"`
 }
 type PartnerResponseDTO struct {
 	Id             uint                    `json:"id"`

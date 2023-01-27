@@ -46,9 +46,16 @@ type serviceBase struct {
 	accountingRepository accounting_repo.AccountingBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	accountingRepository := accounting_repo.NewAccountingBase()
-	return &serviceBase{accountingRepository}
+	newServiceObj = &serviceBase{accountingRepository}
+	return newServiceObj
 }
 
 //-----------------------SalesInvoice------------------------------------

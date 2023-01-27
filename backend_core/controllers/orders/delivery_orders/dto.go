@@ -42,6 +42,7 @@ type SearchQuery struct {
 
 type (
 	DeliveryOrderRequest struct {
+		model_core.Model
 		DeliveryOrdersDetails  DeliveryOrdersDetails             `json:"delivery_order_details"`
 		DeliveryAddressDetails map[string]interface{}            `json:"delivery_address_details"`
 		BillingAddressDetails  map[string]interface{}            `json:"billing_address_details"`
@@ -64,7 +65,7 @@ type (
 		ShippingDetails        shipping_dto.ShippingOrderRequest `json:"shipping_details"`
 		Shipping_order_id      *uint                             `json:"shipping_order_id"`
 		IsShipping             *bool                             `json:"is_shipping"`
-		model_core.Model
+		TotalQuantity          int64                             `json:"total_quantity"`
 	}
 
 	DeliveryOrdersDetails struct {
@@ -76,6 +77,7 @@ type (
 		Do_currency                 *uint                  `json:"do_currency"`
 		Payment_due_date            string                 `json:"payment_due_date"`
 		Payment_term_id             *uint                  `json:"payment_term_id"`
+		Payment_Term                model_core.Lookupcode  `json:"payment_term"`
 		Delivery_order_date         string                 `json:"delivery_order_date"`
 		ExpectedShippingDate        string                 `json:"expected_shipping_date"`
 		SourceDocuments             map[string]interface{} `json:"source_documents"`
@@ -83,6 +85,7 @@ type (
 	}
 
 	DeliveryOrderLines struct {
+		model_core.Model
 		DO_id               uint
 		Product_id          *uint                 `json:"product_id"`
 		Product_template_id *uint                 `json:"product_template_id"`
@@ -101,7 +104,6 @@ type (
 		Price               uint                  `json:"price"`
 		PaymentTermsId      uint                  `json:"payment_terms_id"`
 		PaymentTerms        model_core.Lookupcode `json:"payment_terms"`
-		model_core.Model
 	}
 
 	Additionalinformation struct {
@@ -111,7 +113,7 @@ type (
 	}
 
 	Payment_details struct {
-		Currency_id       uint    `json:"currency_id"`
+		Currency_id       *uint   `json:"currency_id"`
 		Sub_total         float64 `json:"sub_total"`
 		Payment_tax       float64 `json:"tax"`
 		Shipping_charge   float64 `json:"shipping_charge"`

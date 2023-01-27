@@ -359,6 +359,67 @@ func ProductBundleUpdateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // --------------------------------Product Template-----------------------------------------------------------------------------------
+func (c CreateProductTemplatePayload) Validate() error {
+	return validation.ValidateStruct(&c,
+		validation.Field(
+			&c.SKUCode,
+			validation.Required,
+		),
+		validation.Field(
+			&c.Name,
+			validation.Required,
+		),
+		// validation.Field(
+		// 	&c. ProductProcurementTreatmentIds,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.PrimaryCategoryID,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.SecondaryCategoryID,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Description,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.Pincode,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.City,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.StateId,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.AddressLine1,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.AddressLine2,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.Location.AddressLine3,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.FoodItemDetails.IngredientsInfo,
+		// 	validation.Required,
+		// ),
+		// validation.Field(
+		// 	&c.FoodItemDetails.NutritionalInfo,
+		// 	validation.Required,
+		// ),
+	)
+}
+
 func ProductTemplateCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 	var data = new(CreateProductTemplatePayload)

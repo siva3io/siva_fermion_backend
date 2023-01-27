@@ -42,9 +42,16 @@ type omnichannelBase struct {
 	db *gorm.DB
 }
 
+var omnichannelBaseRepository *omnichannelBase //singleton object
+
+// singleton function
 func NewmarketPlaceBase() *omnichannelBase {
-	database := db.DbManager()
-	return &omnichannelBase{database}
+	if omnichannelBaseRepository != nil {
+		return omnichannelBaseRepository
+	}
+	db := db.DbManager()
+	omnichannelBaseRepository = &omnichannelBase{db}
+	return omnichannelBaseRepository
 
 }
 

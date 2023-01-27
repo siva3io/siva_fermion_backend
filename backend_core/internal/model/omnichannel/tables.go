@@ -35,4 +35,8 @@ var Omnichanneltables = []interface{}{
 	//-------------------Catalogue---------------------------
 	&CatalogueTemplate{},
 	&CatalogueTemplateData{},
+
+	//-------------------OmnichannelFields---------------------------
+	&OmnichannelField{},
+	&OmnichannelFieldData{},
 }

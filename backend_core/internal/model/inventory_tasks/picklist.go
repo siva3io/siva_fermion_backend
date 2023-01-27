@@ -27,15 +27,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type PickList struct {
 	PickListNumber       string                                `json:"pick_list_number" gorm:"type:varchar(50)"`
 	ReferenceNumber      string                                `json:"reference_number" gorm:"type:varchar(50)"`
-	SourceDocumentTypeID uint                                  `json:"source_document_type_id"`
+	SourceDocumentTypeID *uint                                 `json:"source_document_type_id"`
 	SourceDocumentType   model_core.Lookupcode                 `json:"source_doc_type" gorm:"foreignkey:SourceDocumentTypeID; references:ID"`
-	AssigneeToID         uint                                  `json:"assignee_to_id" gorm:"type:int"`
+	AssigneeToID         *uint                                 `json:"assignee_to_id" gorm:"type:int"`
 	AssigneeTo           mdm.Partner                           `json:"assignee_to" gorm:"foreignkey:AssigneeToID; references:ID"`
-	SelectCustomerId     uint                                  `json:"select_customer_id" gorm:"type:int"`
+	SelectCustomerId     *uint                                 `json:"select_customer_id" gorm:"type:int"`
 	SelectCustomer       mdm.Partner                           `json:"select_customer" gorm:"foreignkey:SelectCustomerId; references:ID"`
-	PartnerID            uint                                  `json:"partner_id"`
+	PartnerID            *uint                                 `json:"partner_id"`
 	Partner              mdm.Partner                           `json:"partner" gorm:"foreignkey:PartnerID; references:ID"`
-	WarehouseID          uint                                  `json:"warehouse_id"`
+	WarehouseID          *uint                                 `json:"warehouse_id"`
 	Warehouse            shared_pricing_and_location.Locations `json:"warehouse" gorm:"foreignkey:WarehouseID; references:ID"`
 	StatusID             uint                                  `json:"status_id"`
 	Status               model_core.Lookupcode                 `json:"status"  gorm:"foreignkey:StatusID; references:ID"`
@@ -48,24 +48,25 @@ type PickList struct {
 	EndDateTime          time.Time                             `json:"end_date_time" gorm:"type:time"`
 	TotalItemsToPick     uint                                  `gorm:"type:integer" json:"items_to_pick"`
 	TotalPickedItems     uint                                  `gorm:"type:integer" json:"total_picked_items"`
-	PriceListID          uint                                  `json:"price_list_id"`
+	PriceListID          *uint                                 `json:"price_list_id"`
 	PriceList            shared_pricing_and_location.Pricing   `json:"price_list" gorm:"foreignkey:PriceListID; references:ID"`
 	SourceDocuments      datatypes.JSON                        `json:"source_documents" gorm:"type:json; default:'[]'; not null"`
 	model_core.Model
 }
 
 type PickListLines struct {
-	PickList_Id       uint                `json:"-"`
-	ProductID         uint                `json:"product_id"`
-	Product           mdm.ProductTemplate `json:"product" gorm:"foreignkey:ProductID; references:ID"`
-	ProductVariantID  uint                `json:"product_variant_id"`
-	ProductVariant    mdm.ProductVariant  `json:"product_variant" gorm:"foreignKey:ProductVariantID; references:ID"`
-	SalesDocumentID   datatypes.JSON      `json:"sales_document_id" gorm:"type:json"`
-	PartnerID         uint                `json:"partner_id"`
-	Partner           mdm.Partner         `json:"partner" gorm:"foreignkey:PartnerID; references:ID"`
-	QuantityOrdered   uint                `json:"quantity_ordered" gorm:"type:integer"`
-	QuantityToPick    uint                `json:"quantity_to_pick" gorm:"type:integer"`
-	QuantityPicked    uint                `json:"quantity_picked" gorm:"type:integer"`
-	RemainingQuantity uint                `json:"remaining_quantity" gorm:"type:integer"`
+	PickList_Id       uint                 `json:"-"`
+	ProductID         *uint                `json:"product_id"`
+	Product           *mdm.ProductTemplate `json:"product" gorm:"foreignkey:ProductID; references:ID"`
+	ProductVariantID  *uint                `json:"product_variant_id"`
+	ProductVariant    *mdm.ProductVariant  `json:"product_variant" gorm:"foreignKey:ProductVariantID; references:ID"`
+	SalesDocumentID   datatypes.JSON       `json:"sales_document_id" gorm:"type:json"`
+	PartnerID         *uint                `json:"partner_id"`
+	Partner           mdm.Partner          `json:"partner" gorm:"foreignkey:PartnerID; references:ID"`
+	QuantityOrdered   uint                 `json:"quantity_ordered" gorm:"type:integer"`
+	QuantityToPick    uint                 `json:"quantity_to_pick" gorm:"type:integer"`
+	QuantityPicked    uint                 `json:"quantity_picked" gorm:"type:integer"`
+	RemainingQuantity uint                 `json:"remaining_quantity" gorm:"type:integer"`
+	CustomerName      string               `json:"customer_name" gorm:"type:varchar(250)"`
 	model_core.Model
 }

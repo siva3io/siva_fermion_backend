@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"fermion/backend_core/ipaas_core/model"
+	pkg_helpers "fermion/backend_core/pkg/util/helpers"
 )
 
 /*
@@ -34,18 +35,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Functions struct{}
 
-// -----------------------------function call-------------------------------------------------------------------------------
-func CallFunctionFromProps(propsArr []model.Props, parameters ...interface{}) (interface{}, error) {
+// ====================================function calls===================================================================================================================================================
+func CallFunctionFromProps(propsArr []model.Props, optionalParams ...interface{}) (interface{}, error) {
 	var valueToReturn []reflect.Value
 	var err error
 	var ReturnValue interface{}
 
-	featureSessionVariables, ok := parameters[0].([]model.KeyValuePair)
+	SessionVariables, ok := optionalParams[0].([]model.KeyValuePair)
 	if !ok {
 		return ReturnValue, errors.New("first parameter must be feature session variables")
 	}
+	var featureSessionVariables []model.KeyValuePair
+	featureSessionVariables = append(featureSessionVariables, SessionVariables...)
 
-	fmt.Println("--------> Function call from Props <----------------")
+	fmt.Println("=============> Function call from Props <=============")
 
 	for index := 0; index < len(propsArr); index++ {
 		var paramsAfterEvaluation = make([]interface{}, 0)
@@ -53,27 +56,23 @@ func CallFunctionFromProps(propsArr []model.Props, parameters ...interface{}) (i
 		for _, item := range propsArr[index].Params {
 			sessionValue := item.Value
 			if item.Type == "variable" {
-				sessionValue, _ = GetValueFromSessionVariablesKey(item.Value.(string), featureSessionVariables)
-				// if err != nil {
-				// 	return ReturnValue, err
-				// }
+				sessionValue = GetValueFromSessionVariablesKey(item.Value.(string), featureSessionVariables)
 			}
 			paramsAfterEvaluation = append(paramsAfterEvaluation, sessionValue)
 		}
-		parameters[0] = featureSessionVariables
-		paramsAfterEvaluation = append(paramsAfterEvaluation, parameters...)
+		optionalParams[0] = featureSessionVariables
+		paramsAfterEvaluation = append(paramsAfterEvaluation, optionalParams...)
 
-		//-----------------------call function by name --------------------------------------------------
+		//==============================call function by name================================================================================================================
 		valueToReturn, err = CallFuncByName(&Functions{}, propsArr[index].Name, paramsAfterEvaluation...)
 		if err != nil {
 			return ReturnValue, err
 		}
 
-		// fmt.Println("---->>>>", valueToReturn)
 		if len(valueToReturn) > 0 {
 			functionReturnValue := valueToReturn[0]
 
-			//-----------------temporary error handle-----------------------------
+			//=================================temporary error handle========================================================================================================
 			if len(valueToReturn) > 1 {
 				FunctionError := valueToReturn[1]
 				errorValue, ok := FunctionError.Interface().(error)
@@ -82,7 +81,7 @@ func CallFunctionFromProps(propsArr []model.Props, parameters ...interface{}) (i
 				}
 			}
 
-			//-------------------data type conversion ------------------------------------------------
+			//=============================data type conversion==============================================================================================================
 			ReturnValue, err = ReturnTheVariableType(functionReturnValue)
 			if err != nil {
 				return ReturnValue, err
@@ -95,7 +94,7 @@ func CallFunctionFromProps(propsArr []model.Props, parameters ...interface{}) (i
 	}
 	return ReturnValue, nil
 }
-func CallFuncByName(myClass interface{}, funcName string, params ...interface{}) (out []reflect.Value, err error) {
+func CallFuncByName(myClass interface{}, funcName string, optionalParams ...interface{}) (out []reflect.Value, err error) {
 
 	myClassValue := reflect.ValueOf(myClass)
 	m := myClassValue.MethodByName(funcName)
@@ -104,9 +103,9 @@ func CallFuncByName(myClass interface{}, funcName string, params ...interface{})
 		errorString := fmt.Sprintf("method not found \"%s\"", funcName)
 		return make([]reflect.Value, 0), errors.New(errorString)
 	}
-	in := make([]reflect.Value, len(params))
-	fmt.Printf("--------> function name<----------------%v(", funcName)
-	for index, param := range params {
+	in := make([]reflect.Value, len(optionalParams))
+	fmt.Printf("=============> function name =============> %v(", funcName)
+	for index, param := range optionalParams {
 		if index != 0 {
 			fmt.Printf(",")
 		}
@@ -121,7 +120,7 @@ func CallFuncByName(myClass interface{}, funcName string, params ...interface{})
 	out = m.Call(in)
 	return
 }
-func ReturnTheVariableType(value reflect.Value) (interface{}, error) {
+func ReturnTheVariableType(value reflect.Value, optionalParams ...interface{}) (interface{}, error) {
 	var dataType interface{}
 	var ok bool
 
@@ -157,30 +156,36 @@ func ReturnTheVariableType(value reflect.Value) (interface{}, error) {
 	return value.Interface(), nil
 }
 
-// -----------------------------ipaas props function--------------------------------------------------------------------------------
-func (f *Functions) TokenBearerType(token interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
+// ==================================ipaas props functions==============================================================================================================================================
+func (f *Functions) TokenBearerType(token interface{}, optionalParams ...interface{}) (string, error) {
 	tokenString, ok := token.(string)
-
 	if !ok {
-		return "", errors.New("token must be a string")
+		return "", errors.New("oops! token must be a string")
 	}
-	if tokenString == "" {
-		return "", errors.New("token must not be empty")
+	output, err := pkg_helpers.TokenBearerType(tokenString)
+	if err != nil {
+		return output, err
 	}
-	output := "Bearer " + tokenString
 
-	//  fmt.Println("TokenBearerType --->>>>", output)
+	//  fmt.Println("TokenBearerType ===>>>>", output)
 	return output, nil
 }
-func (f *Functions) Paginate(initialValue, pageValue, stepValue interface{}, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
+func (f *Functions) Paginate(initialValue, pageValue, stepValue interface{}, optionalParams ...interface{}) (interface{}, error) {
 
 	if pageValue == nil || pageValue == "" {
 		return initialValue, nil
 	}
-	currentPage, _ := strconv.Atoi(pageValue.(string))
-	stepValueInt, _ := strconv.Atoi(stepValue.(string))
+	IntegerCurrentPageNumber, err := strconv.Atoi(pageValue.(string))
+	if err != nil {
+		return nil, err
+	}
+	IntegerStepValue, _ := strconv.Atoi(stepValue.(string))
+	if err != nil {
+		return nil, err
+	}
 
-	return strconv.Itoa(currentPage + stepValueInt), nil
+	//  fmt.Println("Paginate ===>>>>", strconv.Itoa(IntegerCurrentPageNumber + IntegerStepValue))
+	return strconv.Itoa(IntegerCurrentPageNumber + IntegerStepValue), nil
 }
 func (f *Functions) ConditionNorms(key string, value interface{}, optionalParams ...interface{}) (bool, error) {
 
@@ -199,14 +204,14 @@ func (f *Functions) ConditionNorms(key string, value interface{}, optionalParams
 
 	var responseValue interface{}
 	if response.Body == nil {
-		errorString := fmt.Sprintf("%v is not available in response", key)
+		errorString := fmt.Sprintf("oops! %v is not available in response", key)
 		return false, errors.New(errorString)
 	}
 	responseValue, err := ParseJsonPathFromObject(response.Body, key)
 	if err != nil {
 		return false, err
 	}
-	fmt.Printf("OPERATOR --------->%v , Prev Resp -----------> %v , conditionValue --------> %v ,actualValue --------> %v", operator, prevResponse, fmt.Sprintf("%v", value), fmt.Sprintf("%v", responseValue))
+	// fmt.Printf("OPERATOR ===>>>> %v , Prev Resp ===>>>> %v , conditionValue ===>>>> %v ,actualValue ===>>>> %v", operator, prevResponse, fmt.Sprintf("%v", value), fmt.Sprintf("%v", responseValue))
 	if responseValue == nil {
 		return true, nil
 	}
@@ -216,106 +221,73 @@ func (f *Functions) ConditionNorms(key string, value interface{}, optionalParams
 	if operator == "AND" {
 		return prevResponse && fmt.Sprintf("%v", responseValue) == fmt.Sprintf("%v", value), nil
 	}
+
+	//  fmt.Println("ConditionNorms ===>>>>")
 	return true, nil
 }
-func (f *Functions) GetLength(array []interface{}, featureSessionVariables []model.KeyValuePair) int {
-	return len(array)
-}
-func (f *Functions) ParseJsonPathFromObject(data map[string]interface{}, keypath string, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
+func (f *Functions) ParseJsonPathFromObject(data interface{}, keypath string, optionalParams ...interface{}) (interface{}, error) {
 
 	if data == nil {
 		return nil, nil
 	}
-	res, err := ParseJsonPathFromObject(data, keypath)
+	object, ok := data.(map[string]interface{})
+	if !ok {
+		return nil, errors.New("oops! cannot convert to object")
+	}
+	res, err := ParseJsonPathFromObject(object, keypath)
 	if err != nil {
 		return res, err
 	}
+
+	//  fmt.Println("ParseJsonPathFromObject ===>>>>", res)
 	return res, nil
 }
-func (f *Functions) ReturnIndexObjectFromArray(array interface{}, index string, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
-	var output map[string]interface{}
-	var inputArray []interface{}
+func (f *Functions) ReturnIndexObjectFromArray(array interface{}, index string, optionalParams ...interface{}) (interface{}, error) {
+	output := map[string]interface{}{}
+	var inputArray []map[string]interface{}
 
-	madata, err := json.Marshal(array)
+	err := pkg_helpers.JsonMarshaller(array, &inputArray)
 	if err != nil {
-		return output, err
-	}
-	err = json.Unmarshal(madata, &inputArray)
-	if err != nil {
-		return output, err
+		return nil, err
 	}
 
 	i, err := strconv.Atoi(index)
 	if err != nil {
 		return output, err
 	}
-
-	if i < 0 || i >= len(inputArray) {
+	if len(inputArray) == 0 {
 		return output, nil
 	}
+
+	if i < 0 || i >= len(inputArray) {
+		return output, errors.New("oops! index out of range for ReturnIndexObjectFromArray")
+	}
+
+	//  fmt.Println("ReturnIndexObjectFromArray ===>>>>", inputArray[i])
 	return inputArray[i], nil
+}
+func (f *Functions) GetLength(array []interface{}, optionalParams ...interface{}) int {
+
+	//  fmt.Println("GetLength ===>>>>", len(array))
+	return len(array)
 }
 func (f *Functions) CheckStatus(optionalParams ...interface{}) bool {
 
 	response := optionalParams[0].(model.EndpointResponse)
 
+	//  fmt.Println("CheckStatus ===>>>>", response.StatusCode < 200 || response.StatusCode >= 300)
 	return response.StatusCode < 200 || response.StatusCode >= 300
-}
-func (f *Functions) FloattoString(input interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
-	floatValue, ok := input.(float64)
-	if !ok {
-		return "", errors.New("invalid input type")
-	}
-	return fmt.Sprintf("%v", floatValue), nil
-}
-func (f *Functions) StringtoFloat(input interface{}, featureSessionVariables []model.KeyValuePair) (float32, error) {
-	if input == nil {
-		return 0, nil
-	}
-	stringValue, ok := input.(string)
-	if !ok {
-		return 0, errors.New("invalid input type")
-	}
-	if stringValue == "" {
-		return 0, nil
-	}
-	output, err := strconv.ParseFloat(stringValue, 32)
-	fmt.Println("-=========", output)
-	if err != nil {
-		panic(err)
-		// return 0, err
-	}
-	return float32(output), nil
-}
-func (f *Functions) FloattoInt(input interface{}, featureSessionVariables []model.KeyValuePair) (int, error) {
-	if input == nil {
-		return 0, errors.New("invalid input type")
-	}
-	floatValue, ok := input.(float64)
-	if !ok {
-		return 0, errors.New("invalid conversion input type")
-	}
-	return int(floatValue), nil
-}
-func (f *Functions) AppendToArray(input interface{}, featureSessionVariables []model.KeyValuePair) ([]interface{}, error) {
-	array := []interface{}{}
-	if input == nil {
-		return array, errors.New("input must be non-nil")
-	}
-	array = append(array, input)
-	return array, nil
-}
-func (f *Functions) GetValueFromSessionVariables(value interface{}, featureSessionVariables []model.KeyValuePair) interface{} {
-	//-------------get the value from the session variables and return it simple------------------------
-	return value
 }
 func (f *Functions) ParseKeyValuePairThenReturnJSONString(input interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
 	array, ok := input.([]interface{})
 	if !ok {
-		return "", errors.New("cannot convert to []interface{})")
+		return "", errors.New("oops! issue in coversion_type from interface{} to []interface{}")
 	}
 
-	keyValuePairs := ParseObjectsFromConfigPayload(array)
+	keyValuePairs, err := ParseObjectsFromConfigPayload(array)
+	if err != nil {
+		return "", err
+	}
 	keyValuePairs = ParseKeyValuePair(keyValuePairs, featureSessionVariables)
 	output := ConvertKeyValuePairToInterface(keyValuePairs)
 
@@ -323,46 +295,194 @@ func (f *Functions) ParseKeyValuePairThenReturnJSONString(input interface{}, fea
 	if err != nil {
 		return "", err
 	}
+
+	//  fmt.Println("ParseKeyValuePairThenReturnJSONString ===>>>>", string(jsonByteArray))
 	return string(jsonByteArray), nil
 }
+func (f *Functions) AppendToArray(input interface{}, optionalParams ...interface{}) ([]interface{}, error) {
+	array := []interface{}{}
+	if input == nil {
+		return array, errors.New("oops! input must be non-nil")
+	}
+	array = append(array, input)
 
-// ---------------------------mapper api call prop functions-----------------------------------------------------------------
+	//  fmt.Println("AppendToArray ===>>>>", array)
+	return array, nil
+}
+func (f *Functions) GetValueFromSessionVariables(value interface{}, optionalParams ...interface{}) interface{} {
+	// whatever the value getting as a input just return it because, already processed in params itself
+
+	//  fmt.Println("GetValueFromSessionVariables ===>>>>", value)
+	return value
+}
+
+// ==================================ipaas type_conversion or type_casting props functions=====================================================================================================================
+func (f *Functions) StringtoFloat(input interface{}, optionalParams ...interface{}) (float32, error) {
+	if input == nil {
+		return 0, nil
+	}
+	stringValue, ok := input.(string)
+	if !ok {
+		return 0, errors.New("oops! invalid input_type for StringtoFloat Function")
+	}
+	if stringValue == "" {
+		return 0, nil
+	}
+	output, err := strconv.ParseFloat(stringValue, 32)
+	if err != nil {
+		return 0, err
+	}
+	//  fmt.Println("StringtoFloat ===>>>>", float32(output))
+	return float32(output), nil
+}
+func (f *Functions) FloattoString(input interface{}, optionalParams ...interface{}) (string, error) {
+	if input == nil {
+		return "", nil
+	}
+	floatValue, ok := input.(float64)
+	if !ok {
+		return "", errors.New("oops! invalid input_type for FloattoString Function")
+	}
+
+	//  fmt.Println("StringtoFloat ===>>>>", fmt.Sprintf("%v", floatValue))
+	return fmt.Sprintf("%v", floatValue), nil
+}
+func (f *Functions) FloattoInt(input interface{}, optionalParams ...interface{}) (int, error) {
+	if input == nil {
+		return 0, nil
+	}
+	floatValue, ok := input.(float64)
+	if !ok {
+		return 0, errors.New("oops! invalid input_type for FloattoInt Function")
+	}
+
+	//  fmt.Println("FloattoInt ===>>>>", int(floatValue))
+	return int(floatValue), nil
+}
+func (f *Functions) ExponentialToString(number float64, optionalParams ...interface{}) string {
+
+	//  fmt.Println("ExponentialToString ===>>>>", strconv.FormatFloat(number, 'f', 0, 64))
+	return strconv.FormatFloat(number, 'f', 0, 64)
+}
+func (f *Functions) TsvToJson(data string, optionalParams ...interface{}) (map[string]interface{}, error) {
+
+	var jsonArrayResponse []interface{}
+	var jsonResponse = make(map[string]interface{}, 0)
+
+	responseList := strings.Split(data, "\n")
+	headersList := strings.Split(responseList[0], "\t")
+
+	for index := 1; index < len(responseList)-1; index++ {
+		valuesList := strings.Split(responseList[index], "\t")
+		var appendObj = make(map[string]interface{}, 0)
+		for innerIndex, key := range headersList {
+			appendObj[key] = valuesList[innerIndex]
+		}
+		jsonArrayResponse = append(jsonArrayResponse, appendObj)
+	}
+
+	jsonResponse["data"] = jsonArrayResponse
+
+	//  fmt.Println("TsvToJson ===>>>>", jsonResponse)
+	return jsonResponse, nil
+}
+func (f *Functions) InterfaceToXml(key string, data interface{}, optionalParams ...interface{}) (string, error) {
+
+	var xmlString string
+	specialCases := strings.Split(key, "@@")
+	leftKey := key
+	rightKey := key
+	if len(specialCases) > 1 {
+		leftKey = fmt.Sprintf("%v %v", strings.TrimSpace(specialCases[0]), strings.TrimSpace(specialCases[1]))
+		rightKey = strings.TrimSpace(specialCases[0])
+	}
+
+	switch data.(type) {
+	case map[string]interface{}:
+		obj := data.(map[string]interface{})
+		sequences := GetSequenceFromMap(obj)
+		for _, sequence := range sequences {
+			seqString := sequence.(string)
+			formatedString, _ := f.InterfaceToXml(seqString, obj[seqString])
+			xmlString += formatedString
+		}
+		if key == "" {
+			return xmlString, nil
+		}
+		//  fmt.Println("InterfaceToXml ===>>>>", fmt.Sprintf("<%v>%v</%v>", leftKey, xmlString, rightKey))
+		return fmt.Sprintf("<%v>%v</%v>", leftKey, xmlString, rightKey), nil
+
+	case []interface{}:
+		arrayData := data.([]interface{})
+		for _, value := range arrayData {
+			formatedString, _ := f.InterfaceToXml(key, value)
+			xmlString += formatedString
+		}
+		//  fmt.Println("InterfaceToXml ===>>>>", xmlString)
+		return xmlString, nil
+
+	default:
+		//  fmt.Println("InterfaceToXml ===>>>>",fmt.Sprintf("<%v>%v</%v>", leftKey, data, rightKey))
+		return fmt.Sprintf("<%v>%v</%v>", leftKey, data, rightKey), nil
+	}
+}
+func (f *Functions) XmlToInterface(data string, optionalParams ...interface{}) (map[string]interface{}, error) {
+	var jsonData = make(map[string]interface{}, 1)
+	// TODO :- to be converted from xml to interface , now to handle the error, its been used .
+	jsonData["data"] = data
+
+	//  fmt.Println("XmlToInterface ===>>>>", jsonData)
+	return jsonData, nil
+}
+func (f *Functions) NdJsonToJson(ndJson []byte, optionalParams ...interface{}) (map[string]interface{}, error) {
+	var jsonResponse = make(map[string]interface{}, 0)
+	arrayResponse := strings.Split(string(ndJson), "\n")
+	arrayResponse = arrayResponse[0 : len(arrayResponse)-1]
+
+	var jsonArray = make([]interface{}, 0)
+
+	for _, value := range arrayResponse {
+		var jsonObj interface{}
+		json.Unmarshal([]byte(value), &jsonObj)
+		jsonArray = append(jsonArray, jsonObj)
+	}
+
+	jsonResponse["data"] = jsonArray
+
+	//  fmt.Println("NdJsonToJson ===>>>>", jsonResponse)
+	return jsonResponse, nil
+}
+
+// ================================mapper api_call props functions========================================================================================================================================
 func (f *Functions) ExecuteGetApiCall(taskObject map[string]interface{}, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
 
 	taskResponseArray := []model.TaskEndpointResponse{}
 	taskResponseObject := model.TaskEndpointResponse{}
-	singleTaskObject := map[string]interface{}{}
 
-	//---------------------base path----------------------------------------------
-	// path, err := GetValueFromSessionVariablesKey("basePath", featureSessionVariables)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// basePath := path.(string)
+	var endpointTaskFile model.APIFile
 
-	//---------------------read file----------------------------------------------
-	endpointTaskFile, err := ReadFeature("apis", "", "eunimart.mapper_api_call")
-	if err != nil {
-		return nil, err
-	}
+	endpointTaskFile.Scheme = "http"
+	endpointTaskFile.Endpoint = taskObject["endpoint"].(string)
+	endpointTaskFile.RequestConfiguration.Method = "GET"
+	endpointTaskFile.RequestConfiguration.Type = "single"
+	endpointTaskFile.Payload.Headers = []model.KeyValuePair{
+		{Key: "Content-Type", Value: "application/json", Type: "static"},
+		{Key: "Authorization", Value: "Authorization", Type: "variable"}}
 
-	//---------------------endpoint------------------------------------------------
-	endpointTaskFile["endpoint"] = taskObject["endpoint"]
-
-	//-----------------query params------------------------------------------------
+	//========================query params======================================================================
 	query_params := []model.KeyValuePair{}
 	if taskObject["query_params"] != nil {
 		jsonQueryParamsArray, ok := taskObject["query_params"].([]interface{})
 		if !ok {
-			return nil, errors.New("invalid query params conversion([]interface{})")
+			return nil, errors.New("oops! invalid query_params conversion from interface{} to []interface{} in ExecuteGetApiCall")
 		}
-
 		if len(jsonQueryParamsArray) > 0 {
 			for _, josnQueryParam := range jsonQueryParamsArray {
 				param, ok := josnQueryParam.(map[string]interface{})
 				if !ok {
-					return nil, errors.New("invalid query params conversion(map[string]interface{})")
+					return nil, errors.New("oops! invalid query_params conversion from interface to map[string]interface{} in ExecuteGetApiCall")
 				}
+				//====================filters=================================================
 				if param["key"] == "filters" {
 					res, err := f.FormatFilter(param["value"], featureSessionVariables)
 					if err != nil {
@@ -371,6 +491,7 @@ func (f *Functions) ExecuteGetApiCall(taskObject map[string]interface{}, feature
 					query_params = append(query_params, model.KeyValuePair{Key: param["key"].(string), Value: res, Type: "static"})
 					continue
 				}
+				//====================sorts===================================================
 				if param["key"] == "sort" {
 					res, err := f.FormatSort(param["value"], featureSessionVariables)
 					if err != nil {
@@ -384,20 +505,16 @@ func (f *Functions) ExecuteGetApiCall(taskObject map[string]interface{}, feature
 		}
 	}
 
-	marshaldata, err := json.Marshal(query_params)
+	endpointTaskFile.Payload.QueryParams = append(endpointTaskFile.Payload.QueryParams, query_params...)
+
+	//=======================================execute the get_request_method=============================================================================================================================
+	response, err := f.ExecuteGetRequest(taskResponseArray, taskResponseObject, endpointTaskFile, featureSessionVariables)
 	if err != nil {
 		return nil, err
 	}
-	queryParamsInput := []interface{}{}
-	err = json.Unmarshal(marshaldata, &queryParamsInput)
-	if err != nil {
-		return nil, err
-	}
-	endpointTaskFile["payload"].(map[string]interface{})["query_params"] = queryParamsInput
 
-	taskResponseObject = f.ExecuteGetRequest(taskResponseArray, taskResponseObject, singleTaskObject, endpointTaskFile, featureSessionVariables)
-
-	return taskResponseObject.Body, nil
+	fmt.Println("ExecuteGetApiCall ===>>>>", response)
+	return response, nil
 }
 func (f *Functions) FormatFilter(input interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
 
@@ -407,12 +524,12 @@ func (f *Functions) FormatFilter(input interface{}, featureSessionVariables []mo
 		Value    interface{} `json:"value"`
 		Type     string      `json:"type"`
 	}
-
 	var filters []Filter
 
 	if input == nil {
-		return "", errors.New("Filters function input must not be nil")
+		return "", errors.New("oops! input must not be nil in FormatFilter")
 	}
+
 	data, err := json.Marshal(input)
 	if err != nil {
 		return "", err
@@ -432,10 +549,7 @@ func (f *Functions) FormatFilter(input interface{}, featureSessionVariables []mo
 		loop_output = loop_output + "\"" + filter.Column + "\","
 		loop_output = loop_output + "\"" + filter.Operator + "\","
 		if filter.Type == "variable" {
-			interfaceValue, err := GetValueFromSessionVariablesKey(filter.Value.(string), featureSessionVariables)
-			if err != nil {
-				return "", err
-			}
+			interfaceValue := GetValueFromSessionVariablesKey(filter.Value.(string), featureSessionVariables)
 			stringValue := fmt.Sprintf("%v", interfaceValue)
 			loop_output = loop_output + "\"" + stringValue + "\"]"
 			output = output + loop_output
@@ -446,6 +560,8 @@ func (f *Functions) FormatFilter(input interface{}, featureSessionVariables []mo
 		output = output + loop_output
 	}
 	output = output + "]"
+
+	//  fmt.Println("FormatFilter ===>>>>", output)
 	return output, nil
 }
 func (f *Functions) FormatSort(input interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
@@ -457,7 +573,7 @@ func (f *Functions) FormatSort(input interface{}, featureSessionVariables []mode
 	var sorts []Sort
 
 	if input == nil {
-		return "", errors.New("sorting function input must not be nil")
+		return "", errors.New("oops! input must not be nil in FormatSort")
 	}
 	data, err := json.Marshal(input)
 	if err != nil {
@@ -481,259 +597,202 @@ func (f *Functions) FormatSort(input interface{}, featureSessionVariables []mode
 	}
 	output = output + "]"
 
+	//  fmt.Println("FormatSort ===>>>>", output)
 	return output, nil
 }
-
-// TODO : redanunt function same as "single request"
-func (f *Functions) ExecuteGetRequest(taskResponseArray []model.TaskEndpointResponse, taskResponseObject model.TaskEndpointResponse, singleTaskObject map[string]interface{}, endpointTaskFile map[string]interface{}, featureSessionVariables []model.KeyValuePair) model.TaskEndpointResponse {
+func (f *Functions) ExecuteGetRequest(taskResponseArray []model.TaskEndpointResponse, taskResponseObject model.TaskEndpointResponse, endpointTaskFile model.APIFile, featureSessionVariables []model.KeyValuePair) (map[string]interface{}, error) {
 	var requestBody interface{}
 	var queryParams string
 	var urlWithParams string
-	headers := []model.KeyValuePair{}
 	var requestMethod string
-	Errors := map[string]interface{}{}
 
-	//---------------------payload details-[ header-[], body-[],query_params-[], oauth-[] ]--------------------------------------
-	payload, ok := endpointTaskFile["payload"].(map[string]interface{})
-	if !ok {
-		fmt.Println("--------> error in single_request payload <----------------")
-		Errors["message"] = "error in single_request payload"
-		taskResponseObject.Errors = Errors
-		taskResponseObject.Completed = false
-		return taskResponseObject
-	}
-
-	//-----------------------------end point url---------------------------------------------------------------------------------
-	getURL := endpointTaskFile["scheme"].(string) + "://" + endpointTaskFile["endpoint"].(string)
+	payload := endpointTaskFile.Payload
+	getURL := endpointTaskFile.Scheme + "://" + endpointTaskFile.Endpoint
 	getURL, err := FormatEndpoint(getURL, featureSessionVariables)
 	if err != nil {
-		Errors["message"] = "error from format endpoint function"
-		Errors["format_endpoint_error"] = fmt.Sprintf("%v", err)
-		taskResponseObject.Errors = Errors
-		taskResponseObject.Completed = false
-		return taskResponseObject
+		return nil, err
 	}
 
-	//-----------------------------query params----------------------------------------------------------------------------------
-	if payload["query_params"] != nil {
-		jsonQueryParams, ok := payload["query_params"].([]interface{})
-		if !ok {
-			fmt.Println("--------> error in single_request query_params <----------------")
-			Errors["message"] = "error in single_request query_params"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-		if len(jsonQueryParams) > 0 {
-			params := ParseObjectsFromConfigPayload(jsonQueryParams)
-			params = ParseKeyValuePair(params, featureSessionVariables)
-			queryParams, err = GetUrlQueryParams(params, featureSessionVariables)
-			if err != nil {
-				fmt.Println("--------> error in api call function <----------------")
-				Errors["message"] = "error in api call function"
-				Errors["api_error"] = fmt.Sprintf("%v", err)
-				taskResponseObject.Errors = Errors
-				taskResponseObject.Completed = false
-				return taskResponseObject
-			}
+	if len(payload.QueryParams) > 0 {
+		params := ParseKeyValuePair(payload.QueryParams, featureSessionVariables)
+		queryParams, err = GetUrlQueryParams(params, featureSessionVariables)
+		if err != nil {
+			return nil, err
 		}
 	}
 	urlWithParams = getURL + queryParams
-	fmt.Println("--------> api endpoint <----------------" + urlWithParams)
+	headers := payload.Headers
+	requestMethod = endpointTaskFile.RequestConfiguration.Method
 
-	//-----------------------------request body----------------------------------------------------------------------------------
-	if payload["body"] != nil {
-		jsonPayloadBody, ok := payload["body"].([]interface{})
-		if !ok {
-			fmt.Println("--------> error in single_request payload[body] <----------------")
-			Errors["message"] = "error in single_request payload[body]"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-		if len(jsonPayloadBody) > 0 {
-			bodyKeyValuePair := ParseObjectsFromConfigPayload(jsonPayloadBody)
-			bodyKeyValuePair = ParseKeyValuePair(bodyKeyValuePair, featureSessionVariables)
-			requestBody = ConvertKeyValuePairToInterface(bodyKeyValuePair)
-		}
-	}
-
-	//-----------------------------headers---------------------------------------------------------------------------------------
-	if payload["headers"] != nil {
-		jsonPayloadHeaders, ok := payload["headers"].([]interface{})
-		if !ok {
-			fmt.Println("--------> error in single_request payload[headers] <----------------")
-			Errors["message"] = "error in single_request payload[headers]"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-		headers = ParseObjectsFromConfigPayload(jsonPayloadHeaders)
-	}
-	fmt.Println("--------> passing headers <----------------" + taskResponseObject.Name)
-
-	//------------------------------request method-----------------------------------------------------------------------------
-	if endpointTaskFile["request_configuration"] != nil {
-		jsonRequestConfiguration, ok := endpointTaskFile["request_configuration"].(map[string]interface{})
-		if !ok {
-			fmt.Println("--------> error in single_request request_configuration <----------------")
-			Errors["message"] = "error in single_request request_configuration"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-		requestMethod, ok = jsonRequestConfiguration["method"].(string)
-		if !ok {
-			fmt.Println("--------> error in single_request request_configuration[method] <----------------")
-			Errors["message"] = "error in single_request request_configuration[method]"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-	}
-
-	//-------------call the MakeAPIRequest function and get the response of the API call--------------------------------------------
+	//==============call the MakeAPIRequest function and get the response of the API call==============================================================================================
 	response, err := MakeAPIRequest(requestMethod, urlWithParams, headers, requestBody, featureSessionVariables, endpointTaskFile)
 	if err != nil {
-		fmt.Println("--------> error in api call function <----------------")
-		Errors["message"] = "error in api call function"
-		Errors["api_error"] = fmt.Sprintf("%v", err)
-		taskResponseObject.Errors = Errors
-		taskResponseObject.Completed = false
-		return taskResponseObject
+		return nil, err
 	}
 
-	//-----------------customize the API response------------------------------------------------
-	if endpointTaskFile["response"] != nil {
-		jsonResponse, ok := endpointTaskFile["response"].(map[string]interface{})
-		if !ok {
-			fmt.Println("--------> error in single_request response <----------------")
-			Errors["message"] = "error in single_request response"
-			taskResponseObject.Errors = Errors
-			taskResponseObject.Completed = false
-			return taskResponseObject
-		}
-		//------------------------1.session variables--------------------------------------------------------------------------
-		if jsonResponse["session_variables"] != nil {
-			jsonResponseSessionVariables, ok := jsonResponse["session_variables"].([]interface{})
-			if !ok {
-				fmt.Println("--------> error in single_request response[session_variables] <----------------")
-				Errors["message"] = "error in single_request response[session_variables]"
-				taskResponseObject.Errors = Errors
-				taskResponseObject.Completed = false
-				return taskResponseObject
-			}
+	fmt.Println("ExecuteGetRequest ===>>>>", response.Body)
+	return response.Body, nil
+}
 
-			taskSessionVariables, err := ConvertArrayInterfaceToArrayStructWithJsonKeyParse(jsonResponseSessionVariables, response, featureSessionVariables)
-			if err != nil {
-				fmt.Println("--------> error in ConvertArrayInterfaceToArrayStructWithJsonKeyParse function <----------------")
-				Errors["message"] = "error in ConvertArrayInterfaceToArrayStructWithJsonKeyParse function"
-				Errors["api_error"] = fmt.Sprintf("%v", err)
-				taskResponseObject.Errors = Errors
-				taskResponseObject.Completed = false
-				return taskResponseObject
-			}
-			taskSessionVariables = AppendOrUpdateKeyValuePair(taskSessionVariables, featureSessionVariables)
-			taskResponseObject.SessionVariables = taskSessionVariables
-		}
+// ==================================ipaas time_and_date related props functions=====================================================================================================================
+func (f *Functions) GetDateTime(isUtc bool, format string, delay float64, optionalParams ...interface{}) string {
+	output := pkg_helpers.GetDateTime(isUtc, format, delay)
+
+	//  fmt.Println("GetDateTime ===>>>>", output)
+	return output
+}
+func (f *Functions) UnixMilliToDateConversion(s interface{}, optionalParams ...interface{}) (time.Time, error) {
+	s_string := s.(string)
+	open_index := strings.Index(s_string, "(")
+	value := s_string[open_index+1 : open_index+11]
+	int_value, _ := strconv.Atoi(value)
+	data := time.Unix(int64(int_value), 0)
+
+	//  fmt.Println("UnixMilliToDateConversion ===>>>>", data)
+	return data, nil
+}
+func (f *Functions) CurrentTimeStamp(isMilli bool, optionalParams ...interface{}) string {
+	currentTimeInUnix := time.Now().UnixNano()
+	if isMilli {
+		currentTimeInUnix = currentTimeInUnix / int64(time.Millisecond)
 	}
 
-	//------------------task response ------------------------------------------------------------------------------------------
-	taskResponseObject.EndpointResponse = response
-	taskResponseObject.Completed = true
-
-	return taskResponseObject
+	//  fmt.Println("CurrentTimeStamp ===>>>>", strconv.FormatInt(currentTimeInUnix, 10))
+	return strconv.FormatInt(currentTimeInUnix, 10)
 }
+func (f *Functions) SleepExecution(sleepTimeInSecs float64, optionalParams ...interface{}) {
+	sleepTime := time.Duration(int(sleepTimeInSecs))
 
-func (f *Functions) ArrayToSingleValue(arr_obj interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
-	fmt.Println(arr_obj)
-	arr := arr_obj.([]interface{})
-	fmt.Println(arr[0].(string))
-	// if len(arr) == 1{
-	// 	value := arr[0].(string)
-	// 	return value,nil
-	// }
-	return arr[0].(string), nil
+	time.Sleep(sleepTime * time.Second)
 }
+func (f *Functions) FormatDateTime(input, inputFormat, outputFormat string, optionalParams ...interface{}) (string, error) {
 
-func (f *Functions) GetDateTime(isUtc bool, format string, delay float64, featureSessionVariables []model.KeyValuePair) string {
-
-	dateTime := time.Now()
-
-	if isUtc {
-		dateTime = dateTime.UTC()
+	dateTime, err := time.Parse(inputFormat, input)
+	if err != nil {
+		return "", err
 	}
+	output := dateTime.Format(outputFormat)
 
-	dateTime = dateTime.Add(time.Hour*time.Duration(0) +
-		time.Minute*time.Duration(delay) +
-		time.Second*time.Duration(0))
-
-	formatedDateTime := dateTime.Format(format)
-
-	return formatedDateTime
+	//  fmt.Println("FormatDateTime ===>>>>", output)
+	return output, nil
 }
 
-func (f *Functions) GetPathFromUrl(url string, featureSessionVariables []model.KeyValuePair) string {
-
+// ==================================ipaas props functions=====================================================================================================================
+func (f *Functions) GetPathFromUrl(url string, optionalParams ...interface{}) string {
 	urlList := strings.Split(url, "?")
 
-	fmt.Println("\n\n -------->", urlList)
-
+	//  fmt.Println("GetPathFromUrl ===>>>>", strings.Split(urlList[0], "//")[1])
 	return strings.Split(urlList[0], "//")[1]
 }
-
-func (f *Functions) GetParamsFromUrl(urlString string, keyName string, featureSessionVariables []model.KeyValuePair) string {
+func (f *Functions) GetParamsFromUrl(urlString string, keyName string, optionalParams ...interface{}) string {
 
 	urlList := strings.Split(urlString, "?")
-
 	paramsList := strings.Split(urlList[1], "&")
-
 	queryParams := make(map[string]interface{}, 0)
-
 	for _, param := range paramsList {
 		x := strings.Split(param, "=")
 		queryParams[x[0]], _ = url.QueryUnescape(x[1])
 	}
 
-	fmt.Println("\n queryParams ------->", queryParams)
-
+	//  fmt.Println("GetParamsFromUrl ===>>>>", queryParams[keyName].(string))
 	return queryParams[keyName].(string)
 }
+func (f *Functions) FormatString(format string, optionalParams ...interface{}) (string, error) {
 
-func (f *Functions) TsvToJson(data string, featureSessionVariables []model.KeyValuePair, optionalParams ...interface{}) (map[string]interface{}, error) {
+	featureSessionVariables := optionalParams[len(optionalParams)-1].([]model.KeyValuePair)
+	for index, param := range optionalParams {
 
-	var jsonArrayResponse []interface{}
-	var jsonResponse = make(map[string]interface{}, 0)
-
-	responseList := strings.Split(data, "\n")
-	headersList := strings.Split(responseList[0], "\t")
-
-	for index := 1; index < len(responseList)-1; index++ {
-		valuesList := strings.Split(responseList[index], "\t")
-		var appendObj = make(map[string]interface{}, 0)
-		for innerIndex, key := range headersList {
-			appendObj[key] = valuesList[innerIndex]
-		}
-		jsonArrayResponse = append(jsonArrayResponse, appendObj)
+		featureSessionVariables = append(featureSessionVariables, model.KeyValuePair{
+			Key:   "param" + fmt.Sprint(index+1),
+			Value: param,
+			Type:  "static",
+		})
 	}
-	response, _ := json.MarshalIndent(jsonArrayResponse, "", "\t")
-	fmt.Println("\nTsvToJson converted response -------------->", string(response))
+	regex := regexp.MustCompile(`\{{(.*?)\}}`)
+	keys := regex.FindAllStringSubmatch(format, -1)
 
-	jsonResponse["data"] = jsonArrayResponse
-	return jsonResponse, nil
+	for _, key := range keys {
+		result := GetValueFromSessionVariablesKey(key[1], featureSessionVariables)
+		value := fmt.Sprintf("%v", result)
+		format = strings.Replace(format, key[0], value, -1)
+	}
+	// fmt.Println("FormatString --->>>>", format)
+	return format, nil
+}
+func (f *Functions) ReturnMatchedObjectFromArray(array interface{}, keyofObject string, valueofKey interface{}, optionalParams ...interface{}) (interface{}, error) {
+	inputArray, ok := array.([]map[string]interface{})
+	if !ok {
+		return nil, errors.New("oops! issue in conversion from interface{} to []map[string]interface{}")
+	}
+	for _, object := range inputArray {
+		if object[keyofObject] != nil {
+			if object[keyofObject] == valueofKey {
 
+				//  fmt.Println("ReturnMatchedObjectFromArray ===>>>>", object)
+				return object, nil
+			}
+		}
+	}
+	return nil, nil
+}
+func (f *Functions) GetOneOfManyValues(optionalParams ...interface{}) interface{} {
+
+	paramsLen := len(optionalParams)
+	optionalParams = optionalParams[0 : paramsLen-1]
+
+	for _, value := range optionalParams {
+		if value != nil {
+
+			//  fmt.Println("GetOneOfManyValues ===>>>>", value)
+			return value
+		}
+	}
+	return nil
+}
+func (f *Functions) ArrofObjecttoArrofInterface(input interface{}, key string, optionalParams ...interface{}) (interface{}, error) {
+	arrayOfObject := []map[string]interface{}{}
+	err := pkg_helpers.JsonMarshaller(input, &arrayOfObject)
+	if err != nil {
+		return nil, err
+	}
+	var output []interface{}
+	for _, obj := range arrayOfObject {
+		if obj[key] != nil {
+			output = append(output, obj[key])
+		}
+	}
+	return output, nil
 }
 
-func (f *Functions) XmlToInterface(data string, featureSessionVariables []model.KeyValuePair, optionalParams ...interface{}) (map[string]interface{}, error) {
-	var jsonData = make(map[string]interface{}, 1)
+// === TODO: Below are redundant functions :-> drupadh needs to check it and remove from either pkg_helpers or here=========
+func (f *Functions) AesEncrypt(iv string, key string, data string, optionalParams ...interface{}) ([]byte, error) {
 
-	// TODO :- to be converted from xml to interface , now to handle the error, its been used .
-	jsonData["data"] = data
+	decodedKey, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("decoded key -------->", key, decodedKey)
 
-	return jsonData, nil
+	decodedIv, err := base64.StdEncoding.DecodeString(iv)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("decoded key -------->", iv, decodedIv)
+
+	block, err := aes.NewCipher(decodedKey)
+	if err != nil {
+		return nil, err
+	}
+	ecb := cipher.NewCBCEncrypter(block, []byte(decodedIv))
+
+	content := f.PKCS5Padding([]byte(data), block.BlockSize())
+	crypted := make([]byte, len(content))
+	ecb.CryptBlocks(crypted, content)
+
+	fmt.Println("Crypted ------------->", crypted)
+	return crypted, nil
 }
-
-func (f *Functions) AesDecrypt(initialVector string, key string, featureSessionVariables []model.KeyValuePair, crypt []byte) (string, error) {
+func (f *Functions) AesDecrypt(initialVector string, key string, crypt []byte, optionalParams ...interface{}) (string, error) {
 
 	decodedKey, err := base64.StdEncoding.DecodeString(key)
 
@@ -762,188 +821,25 @@ func (f *Functions) AesDecrypt(initialVector string, key string, featureSessionV
 
 	return string(decrypted), nil
 }
-
-func (f *Functions) PKCS5Trimming(encrypt []byte) []byte {
-	padding := encrypt[len(encrypt)-1]
-	return encrypt[:len(encrypt)-int(padding)]
-}
-
-func (f *Functions) NdJsonToJson(featureSessionVariables []model.KeyValuePair, ndJson []byte) (map[string]interface{}, error) {
-
-	fmt.Println("recieved ndjson ------------>", string(ndJson))
-
-	var jsonResponse = make(map[string]interface{}, 0)
-
-	arrayResponse := strings.Split(string(ndJson), "\n")
-
-	arrayResponse = arrayResponse[0 : len(arrayResponse)-1]
-
-	var jsonArray = make([]interface{}, 0)
-
-	for _, value := range arrayResponse {
-		var jsonObj interface{}
-		json.Unmarshal([]byte(value), &jsonObj)
-		jsonArray = append(jsonArray, jsonObj)
-	}
-
-	fmt.Println("len of arr --->", len(arrayResponse))
-
-	jsonResponse["data"] = jsonArray
-
-	return jsonResponse, nil
-
-}
-
-func (f *Functions) UnixMilliToDateConversion(s interface{}, featureSessionVariables []model.KeyValuePair) (time.Time, error) {
-	s_string := s.(string)
-	open_index := strings.Index(s_string, "(")
-	value := s_string[open_index+1 : open_index+11]
-	int_value, _ := strconv.Atoi(value)
-	data := time.Unix(int64(int_value), 0)
-	return data, nil
-}
-
-func (f *Functions) CurrentTimeStamp(isMilli bool, featureSessionVariables []model.KeyValuePair) string {
-	currentTimeInUnix := time.Now().UnixNano()
-	if isMilli {
-		currentTimeInUnix = currentTimeInUnix / int64(time.Millisecond)
-	}
-	return strconv.FormatInt(currentTimeInUnix, 10)
-}
-
-func (f *Functions) FormatString(format string, params ...interface{}) (string, error) {
-
-	featureSessionVariables := params[len(params)-1].([]model.KeyValuePair)
-
-	for index, param := range params {
-
-		featureSessionVariables = append(featureSessionVariables, model.KeyValuePair{
-			Key:   "param" + fmt.Sprint(index+1),
-			Value: param,
-			Type:  "static",
-		})
-	}
-	// fmt.Println(param)
-	regex := regexp.MustCompile(`\{{(.*?)\}}`)
-	keys := regex.FindAllStringSubmatch(format, -1)
-
-	for _, key := range keys {
-		result, err := GetValueFromSessionVariablesKey(key[1], featureSessionVariables)
-		if err != nil {
-			fmt.Println(err)
-			fmt.Println("--------> error in format endpoint url <----------------")
-			return format, err
-		}
-		value := fmt.Sprintf("%v", result)
-		format = strings.Replace(format, key[0], value, -1)
-	}
-	// fmt.Println("FormatEndpoint --->>>>", format)
-	return format, nil
-}
-
-func (f *Functions) ExponentialToString(number float64, featureSessionVariables []model.KeyValuePair) string {
-	return strconv.FormatFloat(number, 'f', 0, 64)
-}
-
-func (f *Functions) SleepExecution(sleepTimeInSecs float64, featureSessionVariables []model.KeyValuePair) {
-	sleepTime := time.Duration(int(sleepTimeInSecs))
-
-	time.Sleep(sleepTime * time.Second)
-}
-
-func (f *Functions) GetOneOfManyValues(params ...interface{}) interface{} {
-
-	paramsLen := len(params)
-
-	params = params[0 : paramsLen-1]
-
-	for _, value := range params {
-		if value != nil {
-			return value
-		}
-	}
-
-	return nil
-}
-
-func (f *Functions) InterfaceToXml(key string, data interface{}, featureSessionVariables []model.KeyValuePair) (string, error) {
-
-	marshalData, _ := json.Marshal(data)
-	json.Unmarshal(marshalData, &data)
-
-	xmlData, err := InterfaceToXml(data, key)
-	fmt.Println("----------------xmlData------------", xmlData)
-	if err != nil {
-		return xmlData, err
-	}
-	return xmlData, nil
-}
-
-func (f *Functions) AesEncrypt(iv string, key string, data string, optionalParams ...interface{}) ([]byte, error) {
-
-	decodedKey, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("decoded key -------->", key, decodedKey)
-
-	decodedIv, err := base64.StdEncoding.DecodeString(iv)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("decoded key -------->", iv, decodedIv)
-
-	block, err := aes.NewCipher(decodedKey)
-	if err != nil {
-		return nil, err
-	}
-	ecb := cipher.NewCBCEncrypter(block, []byte(decodedIv))
-
-	content := f.PKCS5Padding([]byte(data), block.BlockSize())
-	crypted := make([]byte, len(content))
-	ecb.CryptBlocks(crypted, content)
-
-	fmt.Println("Crypted ------------->", crypted)
-	return crypted, nil
-}
-
-func (f *Functions) PKCS5Padding(ciphertext []byte, blockSize int) []byte {
+func (f *Functions) PKCS5Padding(ciphertext []byte, blockSize int, optionalParams ...interface{}) []byte {
 	padding := blockSize - len(ciphertext)%blockSize
 	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
 	return append(ciphertext, padtext...)
 }
-
-func (f *Functions) FormatDateTime(input, inputFormat, outputFormat string, featureSessionVariables []model.KeyValuePair) (string, error) {
-
-	dateTime, err := time.Parse(inputFormat, input)
-	if err != nil {
-		return "", nil
-	}
-
-	output := dateTime.Format(outputFormat)
-
-	return output, nil
+func (f *Functions) PKCS5Trimming(encrypt []byte, optionalParams ...interface{}) []byte {
+	padding := encrypt[len(encrypt)-1]
+	return encrypt[:len(encrypt)-int(padding)]
 }
 
-func (f *Functions) SingleValueToArray(value interface{}, featureSessionVariables []model.KeyValuePair) []interface{} {
+func (f *Functions) FieldMapping(input interface{}, mappedValue map[string]interface{}, optionalParams ...interface{}) (interface{}, error) {
 
-	var arrayResponse = make([]interface{}, 0)
-
-	arrayResponse = append(arrayResponse, value)
-
-	return arrayResponse
-}
-func (f *Functions) ReturnMatchedObjectFromArray(array interface{}, keyofObject interface{}, valueofKey interface{}, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
-	inputArray, ok := array.([]map[interface{}]interface{})
-	if !ok {
-		return nil, errors.New("cannot convert to []map[string]interface{}")
-	}
-	for _, object := range inputArray {
-		if object[keyofObject] != nil {
-			if object[keyofObject] == valueofKey {
-				return object, nil
+	if len(optionalParams) > 1 && optionalParams[0] == true {
+		for key, value := range mappedValue {
+			if value == input {
+				return key, nil
 			}
 		}
+		return nil, nil
 	}
-	return nil, nil
+	return mappedValue[input.(string)], nil
 }

@@ -2,17 +2,18 @@ package ipaas_core
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 
-	cache "fermion/backend_core/controllers/cache"
-	"fermion/backend_core/internal/model/pagination"
-	"fermion/backend_core/internal/repository"
 	model "fermion/backend_core/ipaas_core/model"
+	repo "fermion/backend_core/ipaas_core/repository"
 	"fermion/backend_core/ipaas_core/utils"
-	res "fermion/backend_core/pkg/util/response"
+	pkg_helpers "fermion/backend_core/pkg/util/helpers"
+	pkg_response "fermion/backend_core/pkg/util/response"
 
 	"github.com/labstack/echo/v4"
 )
@@ -33,23 +34,42 @@ import (
 */
 
 type handler struct {
-	service        Service
-	coreRepository repository.Core
+	service Service
 }
 
-func NewIpaasHandler() *handler {
-	return &handler{
-		NewService(),
-		repository.NewCore(),
+var IpaasCoreHandler *handler //singleton object
+
+// singleton function
+func NewHandler() *handler {
+	if IpaasCoreHandler != nil {
+		return IpaasCoreHandler
 	}
+	service := NewService()
+	IpaasCoreHandler = &handler{service}
+	return IpaasCoreHandler
 }
 
-func Init() {
-	CacheSync()
-}
+/*
+This function mainly represents to execute the feature.
 
+It holds the inputs like
+
+	`1. c :  context of the current HTTP request.
+	 2. input : input_configuration of input parameters`
+
+Each feature contains 'n' of tasks. This function execute the ExecuteFeatureTasks functions get the response of the function.
+Finally, it returns the reponse of all the tasks as a single response
+
+Function flow :
+
+	`1. get the platform token to access the credentials of the 3rd party service of core API
+	 2. by using the access token to get the feature file data, which neeeds to be executed
+	 3. initialize the query_params and auth_token in featureSessionVariables to execute the tasks of the feature
+	 4. add the request_body, base_path and task_list_object_feature to the feature_session variables`
+*/
 func ExecuteFeature(c echo.Context, input model.InputConfigForTask) ([]interface{}, error) {
-	var tasksListObjectFromFeature []map[string]interface{}
+	var Feature model.Feature
+	var tasksListObjectFromFeature []model.Task
 	var featureSessionVariables []model.KeyValuePair
 	var taskResponseArray []model.TaskEndpointResponse
 
@@ -57,18 +77,20 @@ func ExecuteFeature(c echo.Context, input model.InputConfigForTask) ([]interface
 	var requestBody interface{}
 	var response []interface{}
 
-	//----------------dynamic app token for all the feature api calls---------------------------------------------------
-	authOptions := *input.AppAuthOptions
-	tokenData := authOptions["token"].(string)
-	featureSessionVariables = append(featureSessionVariables, utils.MakeKeyValuePair("euni_access_token", tokenData, "static", nil))
+	//======================dynamic app token for all the feature api calls=======================================================
+	featureSessionVariables = utils.AppendOrUpdateKeyValuePair(featureSessionVariables, utils.ConvertObjectToKeyValuePair(input.AppAuthOptions))
 
-	//-----------------read feature file-------------------------------------------------
-	featureFileData, err := utils.ReadFeature("features", input.Id)
+	//======================read feature=======================================================================================================
+	fileData, err := utils.ReadFeature("features", input.Id)
+	if err != nil {
+		return nil, err
+	}
+	err = pkg_helpers.JsonMarshaller(fileData, &Feature)
 	if err != nil {
 		return nil, err
 	}
 
-	//-----------------initialize query_parameters to feature_session_variables---------------------------------------------------
+	//==================initialize query_parameters to feature_session_variables======================================================================
 	queryParams = c.Request().URL.Query()
 	for key, value := range queryParams {
 		if len(value) > 1 {
@@ -78,33 +100,24 @@ func ExecuteFeature(c echo.Context, input model.InputConfigForTask) ([]interface
 		featureSessionVariables = append(featureSessionVariables, utils.MakeKeyValuePair(key, value[0], "static", nil))
 	}
 
-	//---------------initialize request_body to feature_session_variables---------------------------------------------------------
-	json.NewDecoder(c.Request().Body).Decode(&requestBody)
+	//==================initialize request_body to feature_session_variables==========================================================================
+	requestBody = utils.GetBodyData(c)
 	featureSessionVariables = append(featureSessionVariables, model.KeyValuePair{Key: "requestPayload", Value: requestBody})
 
-	//-------------------read FeatureFileData and BasePath -----------------------------------------------------------------------
-	// featureFileData := input.FeatureFileData
-	basePath := input.BasePath
+	//=================take tasks from feature========================================================================================================
+	tasksListObjectFromFeature = Feature.Tasks
 
-	//--------------------get the task list from the feature file data------------------------------------------------------------
-	tasksListStringFromFeature, err := json.Marshal(featureFileData["tasks"])
-	if err != nil {
-		fmt.Println("--------> marshal error for tasksListStringFromFeature <----------------")
-	}
-	if err := json.Unmarshal(tasksListStringFromFeature, &tasksListObjectFromFeature); err != nil {
-		return nil, err
-	}
-
-	//------------------------add basePath and tasksListObjectFromFeature to the featureSessionVariables--------------------------
+	//=================add basePath and tasksListObjectFromFeature to the featureSessionVariables=====================================================
 	featureSessionVariables = append(featureSessionVariables,
 		[]model.KeyValuePair{
-			{Key: "basePath", Value: basePath},
+			{Key: "basePath", Value: input.BasePath},
 			{Key: "tasksListObjectFromFeature", Value: tasksListObjectFromFeature}}...)
 
-	//----------------------execute the feature tasks----------------------------------------------------------------------------
-	result := ExecuteFeatureTasks(tasksListObjectFromFeature, featureSessionVariables, taskResponseArray)
+	//==================execute the feature tasks=====================================================================================================
+	taskResponseArray = ExecuteFeatureTasks(tasksListObjectFromFeature, featureSessionVariables, taskResponseArray)
 
-	for _, taskResponse := range result {
+	for _, taskResponse := range taskResponseArray {
+		fmt.Println(taskResponse.Name)
 		if taskResponse.Errors != nil {
 			taskResponseObj := make(map[string]interface{}, 0)
 			taskResponseObj["name"] = taskResponse.Name
@@ -117,20 +130,40 @@ func ExecuteFeature(c echo.Context, input model.InputConfigForTask) ([]interface
 	}
 	return response, nil
 }
-func ExecuteFeatureTasks(tasksListObjectFromFeature []map[string]interface{}, featureSessionVariables []model.KeyValuePair, taskResponseArray []model.TaskEndpointResponse) []model.TaskEndpointResponse {
+
+/*
+This function mainly represents to execute the feature tasks.
+
+It holds the input parameters like the following are :
+
+	   `1. tasksListObjectFromFeature : list of tasks
+		2. featureSessionVariables : holds the requires session variables to execute all the task of the feature
+		3. taskResponseArray : holds the response of all the task of the feature`
+
+# It returns the reponse of the all the tasks of the feature
+
+Function flow :
+
+	   `1. loop all the tasks of the feature
+		2. check the dependency task is executed or not. if it is successfully executed then execute the current task
+		3. next it checks the task is present in the skip task list or not. if it is not present then execute the current task
+		4. then it checks the task is endpoint or not. if it is endpoint then execute the current task
+		5. once the task is completed then store the required session_variables in featureSessionVariables
+		6. it checks if any of the tasks need to skip after execution of the task, then it will add the tasks in skipTaskList`
+*/
+func ExecuteFeatureTasks(tasksListObjectFromFeature []model.Task, featureSessionVariables []model.KeyValuePair, taskResponseArray []model.TaskEndpointResponse) []model.TaskEndpointResponse {
 	var tasksToSkip []string
 
-	//-------------------execute each task from the list of tasks object from the feature------------------------------------------
+	//=======================execute each task from the list of task_object from the feature============================================================
 	for task := 0; task < len(tasksListObjectFromFeature); task++ {
 		singleTaskObject := tasksListObjectFromFeature[task]
-		// Errors := map[string]interface{}{}
 
-		//----------------- check dependency task is executed successfully or not--------------------------------------------------
-		if singleTaskObject["dependents"] != nil && len(singleTaskObject["dependents"].([]interface{})) > 0 {
+		//====================check dependency tasks were executed successfully or not===================================================================
+		if len(singleTaskObject.Dependents) > 0 {
 			dependencyStatus := true
-			for _, dependencyTaskName := range singleTaskObject["dependents"].([]interface{}) {
+			for _, dependencyTaskName := range singleTaskObject.Dependents {
 				for _, taskRespose := range taskResponseArray {
-					if taskRespose.Name == dependencyTaskName.(string) {
+					if taskRespose.Name == dependencyTaskName {
 						if !taskRespose.Completed {
 							dependencyStatus = false
 							break
@@ -143,108 +176,108 @@ func ExecuteFeatureTasks(tasksListObjectFromFeature []map[string]interface{}, fe
 			}
 			if !dependencyStatus {
 				var taskResponseObject model.TaskEndpointResponse
-				taskResponseObject.Name = singleTaskObject["name"].(string)
+				taskResponseObject.Name = singleTaskObject.TaskName
 				taskResponseObject.Completed = false
 				taskResponseArray = append(taskResponseArray, taskResponseObject)
 				continue
 			}
 		}
 
-		//---------------------------if the task was already executed then skip the task----------------------------------------------------------------
-		if utils.ContainString(tasksToSkip, singleTaskObject["name"].(string)) {
+		//========================if the task was already executed then skip the task====================================================================
+		if pkg_helpers.Contains(tasksToSkip, singleTaskObject.TaskName) {
 			var taskResponseObject model.TaskEndpointResponse
-			taskResponseObject.Name = singleTaskObject["name"].(string)
+			taskResponseObject.Name = singleTaskObject.TaskName
 			taskResponseObject.Completed = true
 			taskResponseArray = append(taskResponseArray, taskResponseObject)
 			continue
 		}
 
-		//---------------------------execute the task if the type is endpoint------------------------------------------------------
-		if singleTaskObject["type"] == "endpoint" {
-			fmt.Println("--------> singleTaskObject <----------------" + singleTaskObject["name"].(string))
-
-			//------------------------------execute the endpoint task -------------------------------------------------------------
+		//===============================execute the task if the type is endpoint========================================================================
+		if singleTaskObject.Type == "endpoint" {
+			fmt.Println("=============> singleTaskObject <============= " + singleTaskObject.TaskName)
+			//=================================execute the endpoint task=================================================================================
 			taskResponseObject := ExecuteTaskForEndpoint(singleTaskObject, featureSessionVariables, taskResponseArray)
-			fmt.Println("--------> ExecTaskForEndpoint successfully <----------------")
-			fmt.Println("==================================================================================================================================================================")
+			fmt.Println("=============> ExecTaskForEndpoint successfully <============= ")
+			fmt.Println("===================================================================================================================================================================================================")
 
-			//-------------add or update the endpoint task sessionVariables to FeatureSession variables ---------------------------
+			//==================add or update the endpoint task sessionVariables to FeatureSession variables=============================================
 			featureSessionVariables = utils.AppendOrUpdateKeyValuePair(featureSessionVariables, taskResponseObject.SessionVariables)
-			// taskResponseObject.Completed = true
 
-			//-----------------------append the endpoint task  response -----------------------------------------------------------
+			//==========================append the endpoint task  response===============================================================================
 			taskResponseArray = append(taskResponseArray, taskResponseObject)
 
-			//------------------if task contain any skip tasks then add to the taskToSkip array------------------------------------
-			if singleTaskObject["on_success_skip_tasks"] != nil {
-				marshaldata, _ := json.Marshal(singleTaskObject["on_success_skip_tasks"])
-				var skipTasks []string
-				json.Unmarshal(marshaldata, &skipTasks)
-				tasksToSkip = append(tasksToSkip, skipTasks...)
-			}
+			//=================if task contain any skip tasks then add to the taskToSkip array===========================================================
+			tasksToSkip = append(tasksToSkip, singleTaskObject.OnSuccessSkipTasks...)
 		}
 	}
 	return taskResponseArray
 }
-func ExecuteTaskForEndpoint(singleTaskObject map[string]interface{}, featureSessionVariables []model.KeyValuePair, taskResponseArray []model.TaskEndpointResponse) model.TaskEndpointResponse {
+
+/*
+This function mainly represents to execute the api file of the particular task.
+
+It holds the input parameters like the following are :
+
+	   `1. singleTaskObject : the task to execute
+		2. featureSessionVariables : the variable which holds the required values from previous tasks session_variables as well as initial values
+		3. taskResponseArray : which holds the previous task response`
+
+# It returns the endpoint response of the task
+
+Function flow :
+
+	   `1. read the api file
+		2. initialize the session_variables of this task
+		3. execute the endpoint request based on the request_type call the function
+
+		request_types are : [`single`, `paginated`, `batch`, ... ]
+		4. get the task response and return it`
+*/
+func ExecuteTaskForEndpoint(singleTaskObject model.Task, featureSessionVariables []model.KeyValuePair, taskResponseArray []model.TaskEndpointResponse) model.TaskEndpointResponse {
 	var taskResponseObject model.TaskEndpointResponse
+	var endpointTaskFile model.APIFile
 
-	//------------------task name--------------------------------------------------------------------------------------------
-	taskResponseObject.Name = singleTaskObject["name"].(string)
+	//=====================task name=====================================================================================================================
+	taskResponseObject.Name = singleTaskObject.TaskName
 
-	//------------------get endpointTaskFile for the task--------------------------------------------------------------------
-	// basePath, err := utils.GetValueFromSessionVariablesKey("basePath", featureSessionVariables)
-	// if err != nil {
-	// 	fmt.Println("--------> base path not exists <----------------")
-	// 	return taskResponseObject
-	// }
-
-	endpointTaskFile, err := utils.ReadFeature("apis", singleTaskObject["task_id"].(string))
+	fileData, err := utils.ReadFeature("apis", singleTaskObject.Id)
 	if err != nil {
-		fmt.Println("--------> Error reading endpointTaskFile <----------------")
+		fmt.Println("=============> Error reading endpointTaskFile <============= ")
+		return taskResponseObject
+	}
+	err = pkg_helpers.JsonMarshaller(fileData, &endpointTaskFile)
+	if err != nil {
 		return taskResponseObject
 	}
 
-	//------------------initialize the sessionVariables to featureSessionVariables, if it exists-----------------------------
-	if endpointTaskFile["session_variables"] != nil {
-		jsonSessionVariables, ok := endpointTaskFile["session_variables"].([]interface{})
-		if ok {
-			sessionVariables := utils.ParseObjectsFromConfigPayload(jsonSessionVariables)
-			sessionVariables = utils.ParseKeyValuePair(sessionVariables, featureSessionVariables)
-			featureSessionVariables = utils.AppendOrUpdateKeyValuePair(featureSessionVariables, sessionVariables)
-		}
+	//====================initialize the sessionVariables to featureSessionVariables, if it exists======================================================
+	if len(endpointTaskFile.SessionVariables) > 0 {
+		sessionVariables := utils.ParseKeyValuePair(endpointTaskFile.SessionVariables, featureSessionVariables)
+		featureSessionVariables = utils.AppendOrUpdateKeyValuePair(featureSessionVariables, sessionVariables)
 	}
 
-	//----------------------get request configuration for the task-----------------------------------------------------------
-	requestConfiguration, ok := endpointTaskFile["request_configuration"].(map[string]interface{})
-	if !ok {
-		fmt.Println("--------> error in request_configuration <----------------")
-	}
-
-	//----------------------execute the task based on request type-----------------------------------------------------------
-	//-----------------------------single request type configuration---------------------------------------------------------
-	if requestConfiguration["type"].(string) == "single" {
-		fmt.Println("--------> executing endpoint request type - SINGLE request <----------------")
+	//===========================execute the task based on request type=================================================================================
+	//=============================single request type configuration====================================================================================
+	if endpointTaskFile.RequestConfiguration.Type == "single" {
+		fmt.Println("=============> executing endpoint request type - SINGLE request <============= ")
 		return ExecuteSingleRequest(taskResponseArray, taskResponseObject, singleTaskObject, endpointTaskFile, featureSessionVariables)
 
 	}
-	//-----------------------------pagination request type configuration------------------------------------------------------
-	if requestConfiguration["type"].(string) == "paginated" {
-		fmt.Println("--------> executing endpoint request type - PAGINATED request <----------------")
+	//=========================pagination request type configuration====================================================================================
+	if endpointTaskFile.RequestConfiguration.Type == "paginated" {
+		fmt.Println("=============> executing endpoint request type - PAGINATED request <============= ")
 		return ExecutePaginationRequest(taskResponseArray, taskResponseObject, singleTaskObject, endpointTaskFile, featureSessionVariables)
 
 	}
-	//-----------------------------bulk request type configuration------------------------------------------------------
-	if requestConfiguration["type"].(string) == "batch" {
-		fmt.Println("--------> executing endpoint request type - BATCH request <----------------")
+	//=============================bulk request type configuration======================================================================================
+	if endpointTaskFile.RequestConfiguration.Type == "batch" {
+		fmt.Println("=============> executing endpoint request type - BATCH request <============= ")
 		return ExecuteBatchRequest(taskResponseArray, taskResponseObject, singleTaskObject, endpointTaskFile, featureSessionVariables)
-
 	}
-
 	return taskResponseObject
 }
 
-// need to handle error
+// ========================ipaas_rate_calculator=================================================================================================================================================================
 func (h *handler) GenericHandler(c echo.Context) (err error) {
 	//get dynamic host
 	host := c.Request().Host
@@ -274,15 +307,16 @@ func (h *handler) GenericHandler(c echo.Context) (err error) {
 			shipping_partner_name := response.Body["data"].(map[string]interface{})["partner_name"].(string)
 			shipping_partner_name = strings.ToLower(shipping_partner_name)
 			tracking_resp, _ := utils.MakeAPIRequest("GET", scheme+"://"+host+"/integrations/"+shipping_partner_name+"/"+task_name+"/"+tracking_id, headers, requestBody, nil)
-			return res.RespSuccess(c, "Tracking details retrieved successfully", tracking_resp.Body)
+			return pkg_response.RespSuccess(c, "Tracking details retrieved successfully", tracking_resp.Body)
 		}
 		//---------------------------------Task level error handling------------------------------------------------------------
-		return res.RespValidationErr(c, "task name "+task_name+" not found inside "+module_name+" module", err)
+		return pkg_response.RespValidationErr(c, "task name "+task_name+" not found inside "+module_name+" module", err)
 	}
 	//-----------------------------------Module level error handling-----------------------------------------------------------
-	return res.RespValidationErr(c, "module name "+module_name+" not found", err)
+	return pkg_response.RespValidationErr(c, "module name "+module_name+" not found", err)
 }
 
+/**/
 func (h *handler) RateCalculator(c echo.Context) (err error) {
 	host := c.Request().Host
 	scheme := c.Scheme()
@@ -340,24 +374,10 @@ func (h *handler) RateCalculator(c echo.Context) (err error) {
 		}(app)
 	}
 	wg.Wait()
-	return res.RespSuccess(c, "Shipping partners rates retrieved successfully", list)
+	return pkg_response.RespSuccess(c, "Shipping partners rates retrieved successfully", list)
 }
 
-func CacheSync() {
-	p := new(pagination.Paginatevalue)
-	p.Per_page = 1000
-	installed_apps, _ := NewIpaasHandler().coreRepository.ListInstalledApps(p)
-	var applist []string
-	for _, app := range installed_apps {
-		app_code := app.Code
-		app_code = strings.ReplaceAll(app_code, " ", "")
-		cache.SetCacheVariable(app_code+"AUTHORIZATION", app.AccessToken)
-		applist = append(applist, app_code)
-	}
-	fmt.Println("Cache sync is successfull for the following installed applications")
-	fmt.Println(applist)
-}
-
+// ========================ipass_integrations_handler============================================================================================================================================================
 func (h *handler) GetFeature(c echo.Context) (err error) {
 
 	id := c.Param("id")
@@ -366,18 +386,17 @@ func (h *handler) GetFeature(c echo.Context) (err error) {
 	feature, err := h.service.GetFeature(collection, id)
 
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "success", feature)
+	return pkg_response.RespSuccess(c, "success", feature)
 }
-
 func (h *handler) CreateFeature(c echo.Context) (err error) {
 
 	requestBody := make(map[string]interface{}, 0)
 	err = json.NewDecoder(c.Request().Body).Decode(&requestBody)
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
 	collection := c.Param("collection")
@@ -385,18 +404,17 @@ func (h *handler) CreateFeature(c echo.Context) (err error) {
 	feature, err := h.service.CreateFeature(collection, requestBody)
 
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "success", feature)
+	return pkg_response.RespSuccess(c, "success", feature)
 }
-
 func (h *handler) UpdateFeature(c echo.Context) (err error) {
 
 	requestBody := make(map[string]interface{}, 0)
 	err = json.NewDecoder(c.Request().Body).Decode(&requestBody)
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
 	id := c.Param("id")
@@ -405,12 +423,11 @@ func (h *handler) UpdateFeature(c echo.Context) (err error) {
 	feature, err := h.service.UpdateFeature(collection, id, requestBody)
 
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "success", feature)
+	return pkg_response.RespSuccess(c, "success", feature)
 }
-
 func (h *handler) DeleteFeature(c echo.Context) (err error) {
 
 	id := c.Param("id")
@@ -419,8 +436,146 @@ func (h *handler) DeleteFeature(c echo.Context) (err error) {
 	data, err := h.service.DeleteFeature(collection, id)
 
 	if err != nil {
-		return res.RespErr(c, err)
+		return pkg_response.RespErr(c, err)
 	}
 
-	return res.RespSuccess(c, "success", data)
+	return pkg_response.RespSuccess(c, "success", data)
+}
+func (h *handler) GetAppFeatures(c echo.Context) (err error) {
+
+	query := map[string]interface{}{
+		"app_code": c.Param("app_code"),
+	}
+
+	features, err := h.service.GetAppFeatures(query)
+	if err != nil {
+		return pkg_response.RespErr(c, err)
+	}
+
+	return pkg_response.RespSuccess(c, "success", features)
+}
+
+// ==============================Boson convertor==================================================================================================================================================================
+func (h *handler) BosonConvertor(c echo.Context) (err error) {
+	// isDataEncryption := true
+	// encryption := c.QueryParam("encryption")
+	// if encryption != "" {
+	// 	isDataEncryption, _ = strconv.ParseBool(encryption)
+	// }
+
+	// requestId := uuid.New().String()
+
+	var response BosonConvertorDTO
+	var data BosonConvertorDataOuput
+
+	requestPayload := map[string]interface{}{}
+	err = c.Bind(&requestPayload)
+	if err != nil {
+		response.Data = BosonConvertorDataOuput{
+			ErrorMessage: err,
+		}
+		return c.JSON(http.StatusBadRequest, response)
+	}
+
+	if requestPayload["data"] == nil {
+		response.Data = BosonConvertorDataOuput{
+			ErrorMessage: errors.New("data not found in request payload"),
+		}
+		return c.JSON(http.StatusBadRequest, response)
+	}
+
+	var bosonConvertorDataInput BosonConvertorDataInput
+	err = pkg_helpers.JsonMarshaller(requestPayload["data"], &bosonConvertorDataInput)
+	if err != nil {
+		response.Data = BosonConvertorDataOuput{
+			ErrorMessage: err,
+		}
+		return c.JSON(http.StatusBadRequest, response)
+	}
+
+	if metaData := requestPayload["meta_data"]; metaData != nil {
+		response.MetaData = metaData.(map[string]interface{})
+	}
+
+	// if requestPayload["meta_data"] != nil {
+	// 	metaData, ok := requestPayload["meta_data"].(map[string]interface{})
+	// 	if !ok {
+	// 		pkg_response.RespErr(c, errors.New("oops! Request payload meta_data error"))
+	// 	}
+	// 	if metaData["request_id"] == nil {
+	// 		metaData["request_id"] = requestId
+	// 	}
+	// 	metaData["encryption"] = isDataEncryption
+	// 	requestPayload["meta_data"] = metaData
+	// } else {
+	// 	requestPayload["meta_data"] = map[string]interface{}{
+	// 		"request_id": requestId,
+	// 		"encryption": isDataEncryption,
+	// 	}
+	// }
+	// eda.Produce(eda.BOSON_MAPPER_CONVERTOR, requestPayload, isDataEncryption)
+
+	// edaResponse := map[string]interface{}{}
+	// for {
+	// 	output := cache.GetCacheVariable(requestId)
+	// 	if output != nil {
+	// 		var resp map[string]interface{}
+	// 		err := pkg_helpers.JsonMarshaller(output, &resp)
+	// 		if err != nil {
+	// 			return pkg_response.RespErr(c, err)
+	// 		}
+	// 		metaData := resp["meta_data"].(map[string]interface{})
+	// 		if metaData["encryption"].(bool) {
+	// 			decrypted_payload, _ := pkg_helpers.AESGCMDecrypt(resp["data"].(string))
+	// 			var decryptedResponseData interface{}
+	// 			err := json.Unmarshal([]byte(decrypted_payload), &decryptedResponseData)
+	// 			if err != nil {
+	// 				pkg_response.RespErr(c, err)
+	// 			}
+	// 			resp["data"] = decryptedResponseData
+	// 		}
+	// 		err = pkg_helpers.JsonMarshaller(resp, &edaResponse)
+	// 		if err != nil {
+	// 			pkg_response.RespErr(c, err)
+	// 		}
+	// 		break
+	// 	}
+	// }
+
+	mapperInputType := "object"
+	_, ok := bosonConvertorDataInput.InputData.([]interface{})
+	if ok {
+		mapperInputType = "array"
+	}
+
+	// var data BosonConvertorDataOuput
+
+	//=================execute object mapper=======================================================
+	if mapperInputType == "object" {
+		data.MappedResponse, data.ErrorMessage = repo.ExecuteObjMapper(bosonConvertorDataInput.InputData, bosonConvertorDataInput.MapperTemplate, bosonConvertorDataInput.FeatureSessionVariables)
+		if data.ErrorMessage != nil {
+			response.Data = data
+			return c.JSON(http.StatusBadRequest, response)
+		}
+	}
+	//=================execute array mapper=======================================================
+	if mapperInputType == "array" {
+		var mapperInput []interface{}
+
+		err = pkg_helpers.JsonMarshaller(bosonConvertorDataInput.InputData, &mapperInput)
+		if err != nil {
+			response.Data = BosonConvertorDataOuput{
+				ErrorMessage: err,
+			}
+			return c.JSON(http.StatusBadRequest, response)
+		}
+		data.MappedResponse, data.ErrorMessage = repo.ExecuteArrayMapper(mapperInput, bosonConvertorDataInput.MapperTemplate, bosonConvertorDataInput.FeatureSessionVariables)
+		if data.ErrorMessage != nil {
+			response.Data = data
+			return c.JSON(http.StatusBadRequest, response)
+		}
+	}
+
+	response.Data = data
+	return c.JSON(http.StatusOK, response)
 }

@@ -1,21 +1,22 @@
 --
 -- PostgreSQL database dump
 --
--- Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
--- All rights reserved.
--- This program is free software: you can redistribute it and/or modify
--- it under the terms of the GNU Lesser General Public License v3.0 as published by
--- the Free Software Foundation, either version 3 of the License, or
--- (at your option) any later version.
--- This program is distributed in the hope that it will be useful,
--- but WITHOUT ANY WARRANTY; without even the implied warranty of
--- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
--- GNU Lesser General Public License v3.0 for more details.
--- You should have received a copy of the GNU Lesser General Public License v3.0
--- along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
-
 -- Dumped from database version 14.1
 -- Dumped by pg_dump version 14.3
+/*
+Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+All rights reserved.
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License v3.0 as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License v3.0 for more details.
+You should have received a copy of the GNU Lesser General Public License v3.0
+along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+*/
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -140,6 +141,50 @@ INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('INVOICE_GENE
 INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('FILE_SERVICES', 'File Services') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
 INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('TYPE_OF_BUSINESS', 'Type of Business') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
 INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('CONCURRENCY_TYPE', 'concurrency types') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('WEBSTORE_FUNCTION_TYPE', 'Webstore Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('MARKETPLACE_FUNCTION_TYPE', 'Marketplace Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('VIRTUAL_WAREHOUSE_FUNCTION_TYPE', 'Virtual Warehouse Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('SHIPPING_FUNCTION_TYPE', 'Shipping Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('LOCAL_WAREHOUSE_FUNCTION_TYPE', 'Local Warehouse Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('POS_FUNCTION_TYPE', 'Pos Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('RETAIL_FUNCTION_TYPE', 'Retail Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('ACCOUNTING_FUNCTION_TYPE', 'Accounting Function Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'TYPE_OF_COMPANY', 'Type of Company' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'TYPE_OF_USER', 'Type of User' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'STD_CODES', 'STD Codes' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'TYPE_OF_DOMAIN', 'Type of Domain' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('SCHEDULER_FREQUENCY', 'Scheduler Frequency') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('CANCEL_REASON', 'Cancel Reason ') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'NOTIFICATION_TYPE', 'Notification Type' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'NOTIFICATION_BROADCAST_SCOPE', 'Notification Broadcast Scopes' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'NOTIFICATION_EVENT', 'Notification_Event' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ( 'FEATURE_LIST', 'Feature List' ) ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('PRODUCT_ESTIMATED_DELIVERY_TIME', 'Product estimated delivery time') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('PRODUCT_FULFILLMENT', 'Product Fulfillment') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('TIME_WITHIN', 'Time Within') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('ANSWER_TYPE', 'Answer Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('SELLER_NP_TYPE', 'Seller Np Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('ORDER_CATEGORY', 'Order Category') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('DELIVERY_TYPE', 'Delivery Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('PRODUCT_FULFILLMENT_MANAGED_BY', 'Product Fulfillment Managed By') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('PRODUCT_DOMAIN', 'Product Domain') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('FOOD_TYPE', 'Food Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('DELIVERY_TYPE_PREFERENCES', 'Delivery type Preferences') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('OTP_PREFERENCES', 'OTP Preferences') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('OFFERS_DISCOUNT_TYPE', 'Offers Discunt Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('OFFERS_TERMS_AND_CONDTONS', 'Offers Terms And Conditions') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('MONTHS', 'Months') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('SHIPPING_FULFILLMENT_TYPE', 'Shipping Fulfillment Type') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO public.lookuptypes (lookup_type, display_name) VALUES ('CANCELLED_BY', 'Cancelled By') ON CONFLICT (lookup_type) DO UPDATE SET display_name = EXCLUDED.display_name;
+
 SET session_replication_role = 'origin';
 -- PostgreSQL database dump complete
 --

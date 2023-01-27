@@ -33,30 +33,45 @@ type PaymentTerm interface {
 	UpdatePaymentTerm(query map[string]interface{}, data *accounting.PaymentTerms) error
 	DeletePaymentTerm(query map[string]interface{}) error
 	FindOnePaymentTerm(query map[string]interface{}) (accounting.PaymentTerms, error)
-	FindAllPaymentTerm(query interface{}, p *pagination.Paginatevalue) ([]accounting.PaymentTerms, error)
+	FindAllPaymentTerm(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.PaymentTerms, error)
 }
 type Payment_term struct {
 	db *gorm.DB
 }
 
+var PaymentTermRepository *Payment_term //singleton object
+
+// singleton function
 func NewPaymentTerm() *Payment_term {
+	if PaymentTermRepository != nil {
+		return PaymentTermRepository
+	}
 	db := db.DbManager()
-	return &Payment_term{db}
+	PaymentTermRepository = &Payment_term{db}
+	return PaymentTermRepository
 }
 
 func (r *Payment_term) CreatePaymentTerm(data *accounting.PaymentTerms) error {
 
-	err := r.db.Model(&accounting.PaymentTerms{}).Create(data).Error
+	err := r.db.Model(&accounting.PaymentTerms{}).Create(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if err != nil {
-		return err
+
+		return err.Error
 	}
 	return nil
 }
 func (r *Payment_term) UpdatePaymentTerm(query map[string]interface{}, data *accounting.PaymentTerms) error {
 
-	err := r.db.Model(&accounting.PaymentTerms{}).Where(query).Updates(data).Error
+	err := r.db.Model(&accounting.PaymentTerms{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if err != nil {
-		return err
+
+		return err.Error
 	}
 	return nil
 }
@@ -64,13 +79,17 @@ func (r *Payment_term) DeletePaymentTerm(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"].(uint),
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
-	res := r.db.Model(&accounting.PaymentTerms{}).Where(query).Updates(data)
-	if res.Error != nil {
-		return res.Error
+	err := r.db.Model(&accounting.PaymentTerms{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+
+		return err.Error
 	}
 	return nil
 }
@@ -79,7 +98,7 @@ func (r *Payment_term) FindOnePaymentTerm(query map[string]interface{}) (account
 	var data accounting.PaymentTerms
 	err := r.db.Preload(clause.Associations).Model(&accounting.PaymentTerms{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -87,11 +106,12 @@ func (r *Payment_term) FindOnePaymentTerm(query map[string]interface{}) (account
 	return data, nil
 }
 
-func (r *Payment_term) FindAllPaymentTerm(query interface{}, p *pagination.Paginatevalue) ([]accounting.PaymentTerms, error) {
+func (r *Payment_term) FindAllPaymentTerm(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.PaymentTerms, error) {
 	var data []accounting.PaymentTerms
-	err := r.db.Preload(clause.Associations).Model(&accounting.PaymentTerms{}).Scopes(helpers.Paginate(&accounting.PaymentTerms{}, p, r.db)).Where(query).Find(&data).Error
-	if err != nil {
-		return data, err
+	err := r.db.Preload(clause.Associations).Model(&accounting.PaymentTerms{}).Scopes(helpers.Paginate(&accounting.PaymentTerms{}, p, r.db)).Where(query).Find(&data)
+	if err.Error != nil {
+		return nil, err.Error
 	}
+
 	return data, nil
 }

@@ -21,11 +21,11 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreateShippingOrder, cmiddleware.Authorization, ShippingOrdersCreateValidate)
+	g.POST("/create", h.CreateShippingOrderEvent, cmiddleware.Authorization, ShippingOrdersCreateValidate)
 	g.GET("", h.GetAllShippingOrders, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetAllShippingOrdersDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.GetShippingOrder, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdateShippingOrder, cmiddleware.Authorization, ShippingOrdersUpdateValidate)
+	g.POST("/:id/update", h.UpdateShippingOrderEvent, cmiddleware.Authorization, ShippingOrdersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteShippingOrder, cmiddleware.Authorization)
 	g.DELETE("/order_line/:id/delete", h.DeleteShippingOrderLine, cmiddleware.Authorization)
 	g.POST("/bulk_create", h.CreateBulkShippingOrder, cmiddleware.Authorization)
@@ -36,4 +36,8 @@ func (h *handler) Route(g *echo.Group) {
 	g.POST("/:id/favourite", h.FavouriteShippingOrder, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouriteShippingOrder, cmiddleware.Authorization)
 	g.GET("/:id/filter_module/:tab", h.GetShippingOrderTab, cmiddleware.Authorization)
+
+	//================================ADMIN===========================================
+	g.GET("/admin/list", h.GetAllShippingOrdersAdmin, cmiddleware.Authorization)
+	g.GET("/admin/:id", h.GetShippingOrderAdmin, cmiddleware.Authorization)
 }

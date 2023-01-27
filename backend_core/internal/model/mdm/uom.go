@@ -18,25 +18,24 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Uom struct {
 	model_core.Model
-	ItemTypeId       uint                  `json:"item_type_id"`
+	ItemTypeId       *uint                 `json:"item_type_id"`
 	ItemType         model_core.Lookupcode `json:"item_type" gorm:"foreignkey:ItemTypeId"`
 	Code             string                `json:"code" gorm:"unique"`
 	Name             string                `json:"name" gorm:""`
 	Description      string                `json:"description" gorm:""`
-	UomClassId       uint                  `json:"uom_class_id"`
+	UomClassId       *uint                 `json:"uom_class_id"`
 	UomClassCode     UomClass              `json:"uom_class_code" gorm:"foreignkey:UomClassId;references:ID"`
 	UomClassName     string                `json:"uom_class_name"`
 	BaseUom          string                `json:"base_uom" gorm:""`
-	ConversionTypeId uint                  `json:"conversion_type_id"`
+	ConversionTypeId *uint                 `json:"conversion_type_id"`
 	ConversionType   model_core.Lookupcode `json:"conversion_type" gorm:"foreignkey:ConversionTypeId"`
 	ConversionFactor float64               `json:"conversion_factor" gorm:""`
 }
 
 type UomClass struct {
 	model_core.Model
-	Code    string `json:"code" gorm:"unique"`
-	Name    string `json:"name" gorm:""`
-	BaseUom string `json:"base_uom" gorm:""`
-	//Uom         *Uom   `json:"uom" gorm:"foreignkey:ID;references:ID"`
+	Code        string `json:"code" gorm:"unique"`
+	Name        string `json:"name" gorm:""`
+	BaseUom     string `json:"base_uom" gorm:""`
 	Description string `json:"description" gorm:""`
 }

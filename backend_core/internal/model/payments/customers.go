@@ -22,11 +22,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Customers struct {
 	model_core.Model
-	Email           string               `json:"email" gorm:"type:text"`
-	ExternalDetails datatypes.JSON       `json:"external_details"`
-	CurrencyId      string               `json:"currency_id" gorm:"type:text"`
-	CurrencyCode    model_core.Currency  `json:"currency_code" gorm:"foreignKey:CurrencyId; references:CurrencyCode"`
-	UserId          uint                 `json:"user_id" gorm:""`
-	User            model_core.CoreUsers `json:"user" gorm:"foreignKey:UserId; references:ID"`
-	Gateway         string               `json:"gateway" gorm:"type:text"`
+	Email           string                `json:"email" gorm:"type:text"`
+	ExternalDetails datatypes.JSON        `json:"external_details"`
+	CurrencyId      *uint                 `json:"currency_id" gorm:"type:text"`
+	CurrencyCode    *model_core.Currency  `json:"currency_code" gorm:"foreignKey:CurrencyId; references:ID"`
+	UserId          uint                  `json:"user_id" gorm:""`
+	User            *model_core.CoreUsers `json:"user" gorm:"foreignKey:UserId; references:ID"`
+	Gateway         string                `json:"gateway" gorm:"type:text"`
 }

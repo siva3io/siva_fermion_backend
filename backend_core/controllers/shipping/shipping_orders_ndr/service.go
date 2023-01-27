@@ -3,12 +3,15 @@ package shipping_orders_ndr
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	ds "fermion/backend_core/pkg/util/dynamic_struct"
+
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/shipping"
 	shipping_repo "fermion/backend_core/internal/repository/shipping"
 	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 )
 
@@ -27,49 +30,56 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateNDR(data *NDRRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateNDR(data *[]NDRRequest, token_id string, access_template_id string) error
-	GetAllNDR(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.NDR, error)
-	GetNDR(id uint, token_id string, access_template_id string) (interface{}, error)
-	UpdateNDR(id uint, data NDRRequest, token_id string, access_template_id string) error
-	DeleteNDR(id uint, user_id uint, token_id string, access_template_id string) error
-	DeleteNDRLines(query interface{}, token_id string, access_template_id string) error
+	CreateNDR(metaData core.MetaData, data *shipping.NDR) error
+	BulkCreateNDR(metaData core.MetaData, data *[]NDRRequest) error
+	GetAllNDR(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetNDR(metaData core.MetaData) (interface{}, error)
+	UpdateNDR(metaData core.MetaData, data *shipping.NDR) error
+	DeleteNDR(metaData core.MetaData) error
+	DeleteNDRLines(metaData core.MetaData) error
 }
 
 type service struct {
 	ndrRepository shipping_repo.NDR
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	ndrRepository := shipping_repo.NewNDR()
-	return &service{ndrRepository}
+	newServiceObj = &service{ndrRepository}
+	return newServiceObj
 }
 
-func (s *service) CreateNDR(data *NDRRequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "NDR", *token_user_id)
-	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create ndr at view level")
+func (s *service) CreateNDR(metaData core.MetaData, data *shipping.NDR) error {
+	metaDataReader := ds.NewDynamicStructReader(metaData)
+
+	accessTemplateId := strconv.FormatUint(uint64(metaDataReader.GetField("AccessTemplateId").Uint()), 10)
+	tokenUserId := metaDataReader.GetField("TokenUserId").Uint()
+	companyId := metaDataReader.GetField("CompanyId").Uint()
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "NDR", tokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for create contacts at view level")
 	}
-	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create ndr at data level")
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for create contacts at data level")
 	}
-	var NDRData shipping.NDR
-	dto, err := json.Marshal(*data)
+	data.CreatedByID = &tokenUserId
+	data.CompanyId = companyId
+	err := s.ndrRepository.CreateNDR(data)
 	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
-	err = json.Unmarshal(dto, &NDRData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	id, err := s.ndrRepository.CreateNDR(&NDRData)
-	return id, err
+	return nil
 }
 
-func (s *service) BulkCreateNDR(data *[]NDRRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "NDR", *token_user_id)
+func (s *service) BulkCreateNDR(metaData core.MetaData, data *[]NDRRequest) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create ndr at view level")
 	}
@@ -89,56 +99,49 @@ func (s *service) BulkCreateNDR(data *[]NDRRequest, token_id string, access_temp
 	return err
 }
 
-func (s *service) GetNDR(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "NDR", *token_user_id)
+func (s *service) GetNDR(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view ndr at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view ndr at data level")
 	}
-	res, er := s.ndrRepository.GetNDR(id)
+	res, er := s.ndrRepository.GetNDR(metaData.Query)
 	if er != nil {
 		return res, er
-	}
-	query := map[string]interface{}{
-		"non_delivery_request_id": id,
-	}
-	result_non_delivery_request, err := s.ndrRepository.GetNDRLines(query)
-	res.NDRLines = result_non_delivery_request
-	if err != nil {
-		return res, err
 	}
 
 	return res, nil
 }
 
-func (s *service) GetAllNDR(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.NDR, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "NDR", *token_user_id)
+func (s *service) GetAllNDR(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list ndr at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list ndr at data level")
 	}
-	result, err := s.ndrRepository.GetAllNDR(p)
+	result, err := s.ndrRepository.GetAllNDR(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) UpdateNDR(id uint, data NDRRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "NDR", *token_user_id)
+func (s *service) UpdateNDR(metaData core.MetaData, data *shipping.NDR) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update ndr at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update ndr at data level")
 	}
+	data.UpdatedByID = &metaData.TokenUserId
 	var NDRData shipping.NDR
 	dto, err := json.Marshal(data)
 	if err != nil {
@@ -149,69 +152,54 @@ func (s *service) UpdateNDR(id uint, data NDRRequest, token_id string, access_te
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 
-	_, er := s.ndrRepository.GetNDR(id)
-	if er != nil {
-		return er
-	}
-	err = s.ndrRepository.UpdateNDR(id, NDRData)
+	res := s.ndrRepository.UpdateNDR(metaData.Query, data)
 	for _, non_delivery_request := range NDRData.NDRLines {
 		query := map[string]interface{}{
-			"non_delivery_request_id": uint(id),
-			"ndrs_id":                 non_delivery_request.NdrsId,
+			"non_delivery_request_id": metaData.Query["id"],
 		}
-		fmt.Println("!!!!", query)
-		count, er := s.ndrRepository.UpdateNDRLines(query, non_delivery_request)
+		count, er := s.ndrRepository.UpdateNDRLines(query, &non_delivery_request)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			non_delivery_request.Non_delivery_request_id = id
+			non_delivery_request.Non_delivery_request_id = uint(metaData.Query["id"].(float64))
 			e := s.ndrRepository.CreateNDRLines(non_delivery_request)
 			if e != nil {
 				return e
 			}
 		}
 	}
-	return err
+	return res
 }
 
-func (s *service) DeleteNDR(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "NDR", *token_user_id)
+func (s *service) DeleteNDR(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete ndr at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete ndr at data level")
 	}
-	_, errmsg := s.ndrRepository.GetNDR(id)
-	if errmsg != nil {
-		return errmsg
-	}
-	err := s.ndrRepository.DeleteNDR(id, user_id)
+
+	err := s.ndrRepository.DeleteNDR(metaData.Query)
 	if err != nil {
 		return err
 	}
-	query := map[string]interface{}{"non_delivery_request_id": id}
-	err1 := s.ndrRepository.DeleteNDRLines(query)
-	return err1
+
+	return nil
 }
 
-func (s *service) DeleteNDRLines(query interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "NDR", *token_user_id)
+func (s *service) DeleteNDRLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "NDR", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete ndr at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete ndr at data level")
 	}
-	data, errmsg := s.ndrRepository.GetNDRLines(query)
-	if errmsg != nil {
-		return errmsg
-	}
-	if len(data) <= 0 {
-		return errmsg
-	}
-	err := s.ndrRepository.DeleteNDRLines(query)
+
+	err := s.ndrRepository.DeleteNDRLines(metaData.Query)
 	return err
 }

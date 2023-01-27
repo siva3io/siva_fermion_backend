@@ -39,6 +39,7 @@ type (
 		Status               app_core.LookupCode    `json:"status"`
 		Source_document_id   *uint                  `json:"source_document_id"`
 		Source_document      map[string]interface{} `json:"source_documents"`
+		TotalQuantity        int64                  `json:"total_quantity"`
 		model_core.Model
 	}
 	GetAllPurchaseReturnsResponse struct {
@@ -49,12 +50,13 @@ type (
 	} //@ name GetAllPurchaseReturnsResponse
 )
 type PurchaseReturnsDTO struct {
+	model_core.Model
+	PurchaseReturnNumber  string                       `json:"purchase_return_number" gorm:"type:text"`
 	ReferenceNumber       string                       `json:"reference_number"`
 	VendorDetails         map[string]interface{}       `json:"vendor_details"`
 	DebitNoteIssuedId     uint                         `json:"debit_note_issued_id"`
 	Amount                float32                      `json:"amount"`
 	PaymentTermsId        uint                         `json:"payment_terms_id"`
-	PaymentTerms          app_core.LookupCode          `json:"payment_terms"`
 	PaymentDueDate        string                       `json:"payment_due_date"`
 	PrDate                string                       `json:"pr_date"`
 	ExpectedDeliveryDate  string                       `json:"expected_delivery_date"`
@@ -65,11 +67,9 @@ type PurchaseReturnsDTO struct {
 	AdditionalInformation orders.AdditionalInformation `json:"additional_information"`
 	PrPaymentDetails      PrPaymentDetails             `json:"pr_payment_details"`
 	Source_document_id    *uint                        `json:"source_document_id"`
-	Source_document       map[string]interface{}       `json:"source_documents"`
-	// AsnId                 uint                         `json:"asn_id"`
-	// GrnId                 uint                         `json:"grn_id"`
-	PurchaseReturnLines []PurchaseReturnLines `json:"purchase_return_lines"`
-	model_core.Model
+	SourceDocuments       map[string]interface{}       `json:"source_documents"`
+	PurchaseReturnLines   []PurchaseReturnLines        `json:"purchase_return_lines"`
+	TotalQuantity         int64                        `json:"total_quantity"`
 }
 
 type PurchaseReturnLines struct {
@@ -80,7 +80,7 @@ type PurchaseReturnLines struct {
 	InventoryId       uint64  `json:"inventory_id"`
 	UomId             uint    `json:"uom_id"`
 	QuantityPurchased int     `json:"quantity_purchased"`
-	QuantityReturned  int     `json:"quantity_returned"`
+	QuantityReturned  int64   `json:"quantity_returned"`
 	SerialNumber      string  `json:"serial_number"`
 	Rate              int     `json:"rate"`
 	LocationID        uint    `json:"location_id"`

@@ -1,12 +1,17 @@
 package auth
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
 
 	// "fermion/backend_core/pkg/util/helpers"
+	"fermion/backend_core/controllers/eda"
 	model_core "fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/pagination"
 
 	// "fermion/backend_core/pkg/util/helpers"
+	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
 	"github.com/labstack/echo/v4"
@@ -30,14 +35,16 @@ type handler struct {
 	service Service
 }
 
+var AuthHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
-
+	if AuthHandler != nil {
+		return AuthHandler
+	}
 	service := NewService()
-	return &handler{service}
-
-	// coreRepository := repository.NewCore()
-
-	// return &handler{service, coreRepository}
+	AuthHandler = &handler{service}
+	return AuthHandler
 }
 
 // Register godoc
@@ -109,6 +116,22 @@ func (h *handler) UserLogin(c echo.Context) error {
 	return res.RespSuccess(c, "success", response)
 }
 
+func (h *handler) UserLoginEda(request map[string]interface{}) {
+	request_data := request["data"].(map[string]interface{})
+	response, err := h.service.UserLogin(request_data)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = request["meta_data"]
+	if err != nil {
+		fmt.Println(err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.USER_LOGIN_ACK, *response_message)
+		return
+	}
+	response_message.Response = response
+	// eda.Produce(eda.USER_LOGIN_ACK, *response_message)
+	fmt.Println("UserLogin successful", response)
+}
+
 // VerifyOTP godoc
 // @Summary VerifyOTP
 // @Description VerifyOTP
@@ -130,6 +153,25 @@ func (h *handler) VerifyOTP(c echo.Context) error {
 	}
 	return res.RespSuccess(c, "success", response)
 }
+
+func (h *handler) VerifyOTPEda(request map[string]interface{}) {
+	var data VerifyOtpDTO
+	request_data := request["data"].(map[string]interface{})
+	helpers.JsonMarshaller(request_data, &data)
+	response_message := new(eda.ConsumerResponse)
+	response_message.MetaData = request["meta_data"]
+	response, err := h.service.VerifyOtp(data)
+	if err != nil {
+		fmt.Println(err)
+		response_message.ErrorMessage = err
+		// eda.Produce(eda.VERIFY_OTP_ACK, *response_message)
+		return
+	}
+	response_message.Response = response
+	// eda.Produce(eda.VERIFY_OTP_ACK, *response_message)
+	fmt.Println("Verify otp success", response)
+}
+
 func (h *handler) AssignTemplate(c echo.Context) (err error) {
 
 	ID := c.Param("id")
@@ -189,4 +231,40 @@ func (h *handler) GetUserById(c echo.Context) (err error) {
 		return res.RespErr(c, err)
 	}
 	return res.RespSuccess(c, "user details fetched successfully", result)
+}
+
+func (h *handler) UpdateUser(c echo.Context) (err error) {
+
+	var data = make(map[string]interface{}, 0)
+	var access_template model_core.CoreUsers
+	ID := c.Param("id")
+	id, _ := strconv.Atoi(ID)
+	c.Bind(&data)
+
+	dto, _ := json.Marshal(data)
+	_ = json.Unmarshal(dto, &access_template)
+
+	err = h.service.UpdateUser(uint(id), access_template)
+
+	if err != nil {
+		fmt.Println(err)
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "Roles details updates successfully", map[string]interface{}{"updated_id": id})
+}
+
+func (h *handler) GetAllUsers(c echo.Context) error {
+
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+
+	data, err := h.service.FindAllUsers(nil, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccessInfo(c, "User retrieved successfully", data, p)
+}
+
+func (h *handler) HealthCheck(c echo.Context) error {
+	return res.RespSuccess(c, "Valid user", map[string]interface{}{"status": true, "message": "Valid user"})
 }

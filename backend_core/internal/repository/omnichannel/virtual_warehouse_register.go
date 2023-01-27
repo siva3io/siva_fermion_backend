@@ -42,9 +42,16 @@ type virtual_warehouse struct {
 	db *gorm.DB
 }
 
+var virtualWarehouseRegisterRepository *virtual_warehouse //singleton object
+
+// singleton function
 func NewVirtualWarehouse() *virtual_warehouse {
+	if virtualWarehouseRegisterRepository != nil {
+		return virtualWarehouseRegisterRepository
+	}
 	db := db.DbManager()
-	return &virtual_warehouse{db}
+	virtualWarehouseRegisterRepository = &virtual_warehouse{db}
+	return virtualWarehouseRegisterRepository
 }
 
 func (r *virtual_warehouse) CreateVirtualWarehouse(data *omnichannel.User_Virtual_Warehouse_Registration) error {

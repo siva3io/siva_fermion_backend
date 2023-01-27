@@ -31,10 +31,16 @@ type handler struct {
 	// base_service module_base.ServiceBase
 }
 
+var AccessModuleHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if AccessModuleHandler != nil {
+		return AccessModuleHandler
+	}
 	service := NewService()
-	// base_service := module_base.NewServiceBase()
-	return &handler{service}
+	AccessModuleHandler = &handler{service}
+	return AccessModuleHandler
 }
 
 func (h *handler) RegisterModule(c echo.Context) (err error) {

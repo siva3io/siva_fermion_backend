@@ -30,7 +30,7 @@ type Partner struct {
 	CompanyName           string                `json:"company_name" gorm:""`
 	Properties            datatypes.JSON        `json:"properties,omitempty" gorm:"type:json"`
 	PrimaryEmail          string                `json:"primary_email" gorm:"not null;unique"`
-	PrimaryPhone          string                `json:"primary_phone" gorm:""`
+	PrimaryPhone          string                `json:"primary_phone"`
 	ParentId              *uint                 `json:"parent_id"`
 	Parent                *Partner              `json:"parent"`
 	ChildIds              []Partner             `json:"child_contacts" gorm:"foreignkey:ParentId"`
@@ -39,4 +39,5 @@ type Partner struct {
 	BillingDetails        datatypes.JSON        `json:"billing_details,omitempty" gorm:"type:json; default:'{}'"`
 	ProfileInfo           datatypes.JSON        `json:"profile_info,omitempty" gorm:"type:json; default:'{}'"`
 	AdditionalInformation datatypes.JSON        `json:"additional_information,omitempty" gorm:"type:json; default:'{}'"`
+	UserId                uint                  `json:"user_id" gorm:""`
 }

@@ -5,17 +5,17 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 
-	cache "fermion/backend_core/controllers/cache"
-	scheduler "fermion/backend_core/controllers/scheduler/app"
-	"fermion/backend_core/db"
-
+	// "fermion/backend_core/db"
 	cmiddleware "fermion/backend_core/middleware"
 	"fermion/backend_core/pkg/util"
 	"fermion/backend_core/pkg/util/helpers"
 	"fermion/integrations"
 	"fermion/route"
+
+	"fermion/backend_core/pkg/pkg_init"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v4"
@@ -77,7 +77,7 @@ func (t *TemplateRegistry) Render(w io.Writer, name string, data interface{}, c 
 // @license.name MIT License
 // @license.url https://opensource.org/licenses/MIT
 
-// @host siva3.io
+// @host dev-api.eunimart.com
 // @schemes https
 // @BasePath /
 func main() {
@@ -89,12 +89,18 @@ func main() {
 	)
 
 	// Init
-	db.Init()
-	db.NoSqlInit()
+	// db.CacheInit()
+	// db.Init()
+	// db.NoSqlInit()
+	pkg_init.Init()
 	// uncomment once you setup elasticsearch
 	// elastic.Init()
 	// log.Init()
 	e := echo.New()
+
+	// serve pprof endpoints with echo
+	// TODO: delete after job is done
+	e.GET("/debug/*", echo.WrapHandler(http.DefaultServeMux))
 
 	// Middleware
 	e.Use(
@@ -126,10 +132,6 @@ func main() {
 	// Routes
 	route.Init(e.Group(""))
 	integrations.UseSubrouteForIntegration(e.Group("integrations"))
-
-	scheduler.Init()
-	cache.Init()
-
 	// Start
 	e.Logger.Fatal(e.Start(":" + PORT))
 }

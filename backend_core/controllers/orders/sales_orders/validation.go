@@ -1,7 +1,6 @@
 package sales_orders
 
 import (
-	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -23,9 +22,30 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a SalesOrdersDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.CustomerBillingAddress, validation.Required),
+		validation.Field(&a.CustomerShippingAddress, validation.Required),
+		// validation.Field(&a.SalesOrderNumber, validation.Required),
+		validation.Field(&a.SoDate, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.SalesOrderLines, validation.Required),
+	)
+}
+func (a SalesOrderlines) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.ProductId, validation.Required),
+		validation.Field(&a.Quantity, validation.Required),
+		validation.Field(&a.Price, validation.Required),
+		validation.Field(&a.Discount, validation.Required),
+		validation.Field(&a.Tax, validation.Required),
+		validation.Field(&a.Amount, validation.Required),
+	)
+}
+
 func SalesOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(orders.SalesOrders)
+	var data = new(SalesOrdersDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {
@@ -33,7 +53,7 @@ func SalesOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
@@ -49,7 +69,7 @@ func SalesOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 func SalesOrdersUpdateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
-	var data = new(orders.SalesOrders)
+	var data = new(SalesOrdersDTO)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
 		if er != nil {

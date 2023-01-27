@@ -3,12 +3,13 @@ package shipping_orders_rto
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/shipping"
 	shipping_repo "fermion/backend_core/internal/repository/shipping"
 	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 )
 
@@ -27,48 +28,52 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateRTO(data *RTORequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateRTO(data *[]RTORequest, token_id string, access_template_id string) error
-	GetAllRTO(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.RTO, error)
-	GetRTO(id uint, token_id string, access_template_id string) (interface{}, error)
-	UpdateRTO(id uint, data RTORequest, token_id string, access_template_id string) error
-	DeleteRTO(id uint, user_id uint, token_id string, access_template_id string) error
+	CreateRTO(metaData core.MetaData, data *shipping.RTO) error
+	BulkCreateRTO(metaData core.MetaData, data *[]RTORequest) error
+	GetAllRTO(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetRTO(metaData core.MetaData) (interface{}, error)
+	UpdateRTO(metaData core.MetaData, data *shipping.RTO) error
+	DeleteRTO(metaData core.MetaData) error
 }
 
 type service struct {
 	rtoRepository shipping_repo.RTO
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	rtoRepository := shipping_repo.NewRTO()
-	return &service{rtoRepository}
+	newServiceObj = &service{rtoRepository}
+	return newServiceObj
 }
 
-func (s *service) CreateRTO(data *RTORequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "RTO", *token_user_id)
+func (s *service) CreateRTO(metaData core.MetaData, data *shipping.RTO) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "RTO", metaData.TokenUserId)
 	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create rto at view level")
+		return fmt.Errorf("you dont have access for create rto at view level")
 	}
 	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create rto at data level")
+		return fmt.Errorf("you dont have access for create rto at data level")
 	}
-	var RTOData shipping.RTO
-	dto, err := json.Marshal(*data)
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	err := s.rtoRepository.CreateRTO(data)
 	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
-	err = json.Unmarshal(dto, &RTOData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	id, err := s.rtoRepository.CreateRTO(&RTOData)
-	return id, err
+	return nil
 }
 
-func (s *service) BulkCreateRTO(data *[]RTORequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "RTO", *token_user_id)
+func (s *service) BulkCreateRTO(metaData core.MetaData, data *[]RTORequest) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "RTO", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create rto at view level")
 	}
@@ -88,81 +93,66 @@ func (s *service) BulkCreateRTO(data *[]RTORequest, token_id string, access_temp
 	return err
 }
 
-func (s *service) GetRTO(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "RTO", *token_user_id)
+func (s *service) GetRTO(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "RTO", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view rto at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view rto at data level")
 	}
-	result, err := s.rtoRepository.GetRTO(id)
+	response, err := s.rtoRepository.GetRTO(metaData.Query)
 	if err != nil {
-		return result, err
+		return response, err
 	}
-	return result, nil
+	return response, nil
 }
 
-func (s *service) GetAllRTO(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]shipping.RTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "RTO", *token_user_id)
+func (s *service) GetAllRTO(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "RTO", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list rto at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list rto at data level")
 	}
-	result, err := s.rtoRepository.GetAllRTO(p)
+	result, err := s.rtoRepository.GetAllRTO(metaData.Query, p)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
 	return result, nil
 }
 
-func (s *service) UpdateRTO(id uint, data RTORequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "RTO", *token_user_id)
+func (s *service) UpdateRTO(metaData core.MetaData, data *shipping.RTO) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "RTO", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update rto at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update rto at data level")
 	}
-	var RTOData shipping.RTO
-	dto, err := json.Marshal(data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &RTOData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	_, errmsg := s.rtoRepository.GetRTO(id)
-	if errmsg != nil {
-		return errmsg
-	}
-	err = s.rtoRepository.UpdateRTO(id, RTOData)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.rtoRepository.UpdateRTO(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *service) DeleteRTO(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "RTO", *token_user_id)
+func (s *service) DeleteRTO(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "RTO", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete rto at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete rto at data level")
 	}
-	_, errmsg := s.rtoRepository.GetRTO(id)
-	if errmsg != nil {
-		return errmsg
-	}
-	err := s.rtoRepository.DeleteRTO(id, user_id)
+	err := s.rtoRepository.DeleteRTO(metaData.Query)
 	if err != nil {
 		return err
 	}

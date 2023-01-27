@@ -6,6 +6,8 @@ import (
 	"strconv"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
 	orders_repo "fermion/backend_core/internal/repository/orders"
@@ -31,16 +33,18 @@ import (
 */
 
 type Service interface {
-	CreateSalesInvoice(data *SalesInvoiceRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateSalesInvoice(data *[]SalesInvoiceRequest, token_id string, access_template_id string) error
-	UpdateSalesInvoice(id uint, data *SalesInvoiceRequest, token_id string, access_template_id string) error
-	GetSalesInvoice(id uint, token_id string, access_template_id string) (interface{}, error)
-	GetAllSalesInvoice(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]accounting.SalesInvoice, error)
-	DeleteSalesInvoice(id uint, user_id uint, token_id string, access_template_id string) error
-	DeleteSalesInvoiceLines(query interface{}, token_id string, access_template_id string) error
+	CreateSalesInvoice(metaData core.MetaData, data *accounting.SalesInvoice) error
+	BulkCreateSalesInvoice(metaData core.MetaData, data *[]accounting.SalesInvoice) error
+	UpdateSalesInvoice(metaData core.MetaData, data *accounting.SalesInvoice) error
+	GetSalesInvoicePdf(query map[string]interface{}) (accounting.SalesInvoice, error)
+	GetSalesInvoice(metaData core.MetaData) (interface{}, error)
+	GetAllSalesInvoice(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	DeleteSalesInvoice(metaData core.MetaData) error
+	DeleteSalesInvoiceLines(metaData core.MetaData) error
+	ProcessTaxCalculation(*accounting.SalesInvoice)
 
-	SendMailSalesInvoice(q *SendMailSalesInvoice, token_id string, access_template_id string) error
-	GetSalesInvoiceTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	SendMailSalesInvoice(metaData core.MetaData, q *SendMailSalesInvoice) error
+	GetSalesInvoiceTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
@@ -48,66 +52,96 @@ type service struct {
 	creditNoteRepo         accounting_repo.CreditNotes
 	doRepository           orders_repo.DeliveryOrders
 	salesReturnRepository  returns_repo.SalesReturn
+	SalesOrdersRepository  orders_repo.SalesOrders
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	SalesInvoiceRepository := accounting_repo.NewSalesInvoice()
-	return &service{SalesInvoiceRepository, accounting_repo.NewCreditNote(), orders_repo.NewDo(), returns_repo.NewSalesReturn()}
+	newServiceObj = &service{
+		SalesInvoiceRepository,
+		accounting_repo.NewCreditNote(),
+		orders_repo.NewDo(),
+		returns_repo.NewSalesReturn(),
+		*orders_repo.NewSalesOrder(),
+	}
+	return newServiceObj
 }
 
-func (s *service) CreateSalesInvoice(data *SalesInvoiceRequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create sales invoice at view level")
+func (s *service) CreateSalesInvoice(metaData core.MetaData, data *accounting.SalesInvoice) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for create sales invoice at view level")
 	}
-	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create sales invoice at data level")
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for create sales invoice at data level")
 	}
-	var SalesInvoiceData accounting.SalesInvoice
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &SalesInvoiceData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
 
-	if data.AutoGenerateInvoiceNumber {
-		SalesInvoiceData.SalesInvoiceNumber = helpers.GenerateSequence("SALESINVOICE", token_id, "sales_invoices")
+	var requestData SalesInvoiceRequest
+	if requestData.AutoGenerateInvoiceNumber {
+		data.SalesInvoiceNumber = helpers.GenerateSequence("SALESINVOICE", fmt.Sprint(metaData.TokenUserId), "sales_invoices")
 	}
-	if data.AutoGenerateReferenceNumber {
-		SalesInvoiceData.ReferenceNumber = helpers.GenerateSequence("REF", token_id, "sales_invoices")
+	if requestData.AutoGenerateReferenceNumber {
+		data.ReferenceNumber = helpers.GenerateSequence("REF", fmt.Sprint(metaData.TokenUserId), "sales_invoices")
 	}
 	defaultStatus, err := helpers.GetLookupcodeId("SALES_INVOICE_STATUS", "DRAFT")
 	if err != nil {
-		return 0, err
+		return err
 	}
-	data.StatusID = defaultStatus
+	data.StatusID = &defaultStatus
 
-	id, err := s.salesInvoiceRepository.CreateSalesInvoice(&SalesInvoiceData, token_id)
-	return id, err
+	id, err := s.salesInvoiceRepository.CreateSalesInvoice(data)
+	if err != nil {
+		return res.BuildError(res.ErrUnprocessableEntity, err)
+	}
+	var so_data orders.SalesOrders
+	so_data.InvoiceId = id
+	err = s.SalesOrdersRepository.Update(map[string]interface{}{"id": metaData.Query["sales_order_id"]}, &so_data)
+	if err != nil {
+		return err
+	}
+	metaData.Query = map[string]interface{}{
+		"id": id,
+	}
+	datas, _ := s.GetSalesInvoice(metaData)
+
+	var si_data accounting.SalesInvoice
+	json_data, _ := json.Marshal(datas)
+	json.Unmarshal(json_data, &si_data)
+
+	s.ProcessTaxCalculation(&si_data)
+	s.UpdateSalesInvoice(metaData, &si_data)
+
+	return nil
 }
 
-func (s *service) BulkCreateSalesInvoice(data *[]SalesInvoiceRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) BulkCreateSalesInvoice(metaData core.MetaData, data *[]accounting.SalesInvoice) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create sales invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create sales invoice at data level")
 	}
 	bulk_data := []map[string]interface{}{}
+	var dtoData SalesInvoiceRequest
 	for index, value := range *data {
 		v := map[string]interface{}{}
 		count := helpers.GetCount("SELECT COUNT(*) FROM sales_invoices") + 1 + index
-		if value.AutoGenerateInvoiceNumber {
-			value.SalesInvoiceNumber = "SALESINVOICE/" + token_id + "/000" + strconv.Itoa(count)
+		if dtoData.AutoGenerateInvoiceNumber {
+			value.SalesInvoiceNumber = "SALESINVOICE/" + fmt.Sprint(metaData.TokenUserId) + "/000" + strconv.Itoa(count)
 		}
-		if value.AutoGenerateReferenceNumber {
-			value.ReferenceNumber = "REF/" + token_id + "/000" + strconv.Itoa(count)
+		if dtoData.AutoGenerateReferenceNumber {
+			value.ReferenceNumber = "REF/" + fmt.Sprint(metaData.TokenUserId) + "/000" + strconv.Itoa(count)
 		}
 
 		val, err := json.Marshal(value)
@@ -131,50 +165,47 @@ func (s *service) BulkCreateSalesInvoice(data *[]SalesInvoiceRequest, token_id s
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 
-	err = s.salesInvoiceRepository.BulkCreateSalesInvoice(&SalesInvoiceData, token_id)
+	err = s.salesInvoiceRepository.BulkCreateSalesInvoice(&SalesInvoiceData)
 	return err
 }
 
-func (s *service) UpdateSalesInvoice(id uint, data *SalesInvoiceRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdateSalesInvoice(metaData core.MetaData, data *accounting.SalesInvoice) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update sales invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update sales invoice at data level")
 	}
-	var SalesInvoiceData accounting.SalesInvoice
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	err = json.Unmarshal(dto, &SalesInvoiceData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	old_data, er := s.salesInvoiceRepository.GetSalesInvoice(id)
+	old_data, er := s.salesInvoiceRepository.GetSalesInvoice(metaData.Query)
 	if er != nil {
 		return er
 	}
 	old_status := old_data.StatusID
-	new_status := SalesInvoiceData.StatusID
-	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, SalesInvoiceData.StatusID)
-		SalesInvoiceData.StatusHistory = result
+	new_status := data.StatusID
+	if new_status != old_status && new_status != nil {
+		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, *data.StatusID)
+		data.StatusHistory = result
 	}
 
-	err = s.salesInvoiceRepository.UpdateSalesInvoice(id, &SalesInvoiceData)
-	for _, order_line := range SalesInvoiceData.SalesInvoiceLines {
+	err := s.salesInvoiceRepository.UpdateSalesInvoice(metaData.Query, data)
+	if err != nil {
+		return err
+	}
+	for _, order_line := range data.SalesInvoiceLines {
 		query := map[string]interface{}{
-			"sales_invoice_id": uint(id),
-			"product_id":       uint(order_line.ProductID),
+			"sales_invoice_id": old_data.ID,
+			"product_id":       order_line.ProductID,
 		}
+		order_line.UpdatedByID = &metaData.TokenUserId
 		count, er := s.salesInvoiceRepository.UpdateSalesInvoiceLines(query, order_line)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			order_line.SalesInvoiceID = id
+			order_line.SalesInvoiceID = order_line.ID
+			order_line.CreatedByID = &metaData.TokenUserId
+			order_line.CompanyId = metaData.CompanyId
 			e := s.salesInvoiceRepository.CreateSalesInvoiceLines(order_line)
 			if e != nil {
 				return e
@@ -184,93 +215,85 @@ func (s *service) UpdateSalesInvoice(id uint, data *SalesInvoiceRequest, token_i
 	return err
 }
 
-func (s *service) GetSalesInvoice(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetSalesInvoice(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view sales invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view sales invoice at data level")
 	}
-	result, er := s.salesInvoiceRepository.GetSalesInvoice(id)
+	result, er := s.salesInvoiceRepository.GetSalesInvoice(metaData.Query)
 	if er != nil {
 		return result, er
 	}
-	query := map[string]interface{}{
-		"sales_invoice_id": id,
-	}
-	result_order_lines, err := s.salesInvoiceRepository.GetSalesInvoiceLines(query)
-	result.SalesInvoiceLines = result_order_lines
-	if err != nil {
-		return result, err
-	}
+	// result_order_lines, err := s.salesInvoiceRepository.GetSalesInvoiceLines(metaData.Query)
+	// result.SalesInvoiceLines = result_order_lines
+	// if err != nil {
+	// 	return result, err
+	// }
 
 	return result, nil
 }
 
-func (s *service) GetAllSalesInvoice(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]accounting.SalesInvoice, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "SALES_INVOICE", *token_user_id)
-	fmt.Println("access data", access_module_flag, data_access)
-	if !access_module_flag {
+func (s *service) GetAllSalesInvoice(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list sales invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list sales invoice at data level")
 	}
-	result, err := s.salesInvoiceRepository.GetAllSalesInvoice(p)
+	result, err := s.salesInvoiceRepository.GetAllSalesInvoice(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) DeleteSalesInvoice(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
+func (s *service) DeleteSalesInvoice(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete sales invoice at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete sales invoice at data level")
 	}
-	_, er := s.salesInvoiceRepository.GetSalesInvoice(id)
-	if er != nil {
-		return er
+	err := s.salesInvoiceRepository.DeleteSalesInvoice(metaData.Query)
+	if err != nil {
+		return err
+	} else {
+		query := map[string]interface{}{"sales_invoice_id": metaData.Query["id"]}
+		er := s.salesInvoiceRepository.DeleteSalesInvoiceLines(query)
+		if er != nil {
+			return err
+		}
 	}
-	err := s.salesInvoiceRepository.DeleteSalesInvoice(id, user_id)
+	return nil
+
+}
+
+func (s *service) DeleteSalesInvoiceLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "SALES_INVOICE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for delete sales invoice at view level")
+	}
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for delete sales invoice at data level")
+	}
+	err := s.salesInvoiceRepository.DeleteSalesInvoiceLines(metaData.Query)
 	if err != nil {
 		return err
 	}
-	query := map[string]interface{}{"sales_invoice_id": id}
-	err1 := s.salesInvoiceRepository.DeleteSalesInvoiceLines(query)
-	return err1
+	return nil
 }
 
-func (s *service) DeleteSalesInvoiceLines(query interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SALES_INVOICE", *token_user_id)
-	if !access_module_flag {
-		return fmt.Errorf("you dont have access for delete sales invoice at view level")
-	}
-	if data_access == nil {
-		return fmt.Errorf("you dont have access for delete sales invoice at data level")
-	}
-	data, err := s.salesInvoiceRepository.GetSalesInvoiceLines(query)
-	if err != nil {
-		return err
-	}
-	if len(data) <= 0 {
-		return err
-	}
-	err = s.salesInvoiceRepository.DeleteSalesInvoiceLines(query)
-	return err
-}
-
-func (s *service) SendMailSalesInvoice(q *SendMailSalesInvoice, token_id string, access_template_id string) error {
-	id, _ := strconv.Atoi(q.ID)
-	result, er := s.salesInvoiceRepository.GetSalesInvoice(uint(id))
+func (s *service) SendMailSalesInvoice(metaData core.MetaData, q *SendMailSalesInvoice) error {
+	result, er := s.salesInvoiceRepository.GetSalesInvoice(metaData.Query)
 	if er != nil {
 		return er
 	}
@@ -279,22 +302,20 @@ func (s *service) SendMailSalesInvoice(q *SendMailSalesInvoice, token_id string,
 	return err
 }
 
-func (s *service) GetSalesInvoiceTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetSalesInvoiceTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "DELIVERY_ORDERS", *token_user_id)
-	if !access_module_flag {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "DELIVERY_ORDERS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view sales order at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view sales order at data level")
 	}
+	tab := metaData.AdditionalFields["tab"].(string)
+	salesInvoiceId := metaData.AdditionalFields["id"]
 
-	deliveryOrderId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
-
+	deliveryOrderId := salesInvoiceId
 	if tab == "credit_note" {
 
 		sourceDocumentId, _ := helpers.GetLookupcodeId("CREDIT_NOTE_SOURCE_DOCUMENT_TYPES", "SALES_INVOICE")
@@ -303,8 +324,8 @@ func (s *service) GetSalesInvoiceTab(id, tab string, page *pagination.Paginateva
 		fmt.Println(sourceDocumentId, deliveryOrderId)
 		deliveryOrdersPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, deliveryOrderId)
 		fmt.Println(deliveryOrdersPage)
-		query := make(map[string]interface{}, 0)
-		data, err := s.creditNoteRepo.FindAllCreditNote(query, deliveryOrdersPage)
+		var metaData core.MetaData
+		data, err := s.creditNoteRepo.FindAllCreditNote(metaData.Query, deliveryOrdersPage)
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +337,7 @@ func (s *service) GetSalesInvoiceTab(id, tab string, page *pagination.Paginateva
 
 		deliveryOrdersPage := page
 		deliveryOrdersPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, deliveryOrderId)
-		data, err := s.doRepository.AllDeliveryOrders(deliveryOrdersPage)
+		data, err := s.doRepository.AllDeliveryOrders(nil, deliveryOrdersPage)
 		if err != nil {
 			return nil, err
 		}
@@ -328,11 +349,66 @@ func (s *service) GetSalesInvoiceTab(id, tab string, page *pagination.Paginateva
 
 		salesReturnsPage := page
 		salesReturnsPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, deliveryOrderId)
-		data, err := s.salesReturnRepository.FindAll(salesReturnsPage)
+		data, err := s.salesReturnRepository.FindAll(nil, salesReturnsPage)
 		if err != nil {
 			return nil, err
 		}
 		return data, nil
 	}
 	return nil, nil
+}
+
+func (s *service) GetSalesInvoicePdf(query map[string]interface{}) (accounting.SalesInvoice, error) {
+	result, err := s.salesInvoiceRepository.GetSalesInvoice(query)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (s *service) ProcessTaxCalculation(data *accounting.SalesInvoice) {
+
+	billing_address := make([]map[string]interface{}, 0)
+	shipping_address := make([]map[string]interface{}, 0)
+
+	json.Unmarshal(data.BillingAddress, &billing_address)
+	json.Unmarshal(data.ShippingAddress, &shipping_address)
+
+	bill_add := billing_address[0]["state"]
+	ship_add := shipping_address[0]["state"]
+	data.SubTotalAmount = 0
+	var subTotal, tot_igst, tot_cgst, tot_sgst, igst_rate, cgst_rate, sgst_rate float64
+
+	for index, orderLines := range data.SalesInvoiceLines {
+		amtwithouttax := float64(orderLines.Price) * float64(orderLines.Quantity)
+		data.SalesInvoiceLines[index].TotalAmount = amtwithouttax
+		if bill_add != ship_add {
+
+			igst_rate = data.SalesInvoiceLines[index].Product.HSNCodesData.IGSTRate
+			tot_igst += igst_rate / 100 * (amtwithouttax)
+
+		} else {
+
+			cgst_rate = data.SalesInvoiceLines[index].Product.HSNCodesData.CGSTRate
+			sgst_rate = data.SalesInvoiceLines[index].Product.HSNCodesData.SGSTRate
+			tot_sgst += sgst_rate / 100 * (amtwithouttax)
+			tot_cgst += cgst_rate / 100 * (amtwithouttax)
+
+		}
+
+		amtwithouttax = amtwithouttax - (float64(orderLines.Discount) / 100 * (amtwithouttax))
+		subTotal += amtwithouttax
+		data.SalesInvoiceLines[index].TotalAmount = amtwithouttax
+		data.SalesInvoiceLines[index].IGSTRate = igst_rate
+		data.SalesInvoiceLines[index].SGSTRate = sgst_rate
+		data.SalesInvoiceLines[index].CGSTRate = cgst_rate
+
+	}
+
+	data.SubTotalAmount += subTotal
+	data.IgstAmt = tot_igst
+	data.CgstAmt = tot_cgst
+	data.SgstAmt = tot_sgst
+	data.TotalAmount = tot_cgst + tot_igst + tot_sgst + data.SubTotalAmount
+
 }

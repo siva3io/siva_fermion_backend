@@ -154,6 +154,7 @@ type (
 // Get all Inventory Adjustments response
 type (
 	InvAdjGetAll struct {
+		model_core.Model
 		ReasonID                    uint                                  `json:"reason_id"`
 		Reason                      model_core.Lookupcode                 `json:"reason"`
 		AdjustmentTypeID            uint                                  `json:"adjustment_type_id"`

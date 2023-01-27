@@ -31,10 +31,16 @@ type handler struct {
 	service Services
 }
 
+var AccessViewHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if AccessViewHandler != nil {
+		return AccessViewHandler
+	}
 	service := NewService()
-	// base_service := view_base.NewServiceBase()
-	return &handler{service}
+	AccessViewHandler = &handler{service}
+	return AccessViewHandler
 }
 
 //----------------------------------Views--------------------------------------------------

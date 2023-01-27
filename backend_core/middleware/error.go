@@ -29,6 +29,8 @@ func ErrorHandler(err error, c echo.Context) {
 	}
 
 	switch report.Code {
+	case http.StatusMethodNotAllowed:
+		err = res.BuildError(res.ErrMethodNotAllowed, err)
 	case http.StatusNotFound:
 		err = res.BuildError(res.ErrDataNotFound, err)
 	case http.StatusInternalServerError:

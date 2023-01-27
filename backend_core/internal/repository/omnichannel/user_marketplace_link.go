@@ -42,9 +42,16 @@ type marketplacedetails struct {
 	Db *gorm.DB
 }
 
+var marketplaceDetailsRepository *marketplacedetails //singleton object
+
+// singleton function
 func NewMarketPlaceDetails() *marketplacedetails {
+	if marketplaceDetailsRepository != nil {
+		return marketplaceDetailsRepository
+	}
 	db := db.DbManager()
-	return &marketplacedetails{db}
+	marketplaceDetailsRepository = &marketplacedetails{db}
+	return marketplaceDetailsRepository
 }
 
 func (r *marketplacedetails) CreateMarketplaceDetail(data *omnichannel.User_Marketplace_Link) error {

@@ -1,6 +1,7 @@
 package shipping
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -28,38 +29,49 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type ShippingOrder interface {
-	Create(data *shipping.ShippingOrder) (*shipping.ShippingOrder, error)
+	Create(data *shipping.ShippingOrder) error
 	AddProduct(data shipping.ShippingOrderLines) error
-	List(page *pagination.Paginatevalue) ([]shipping.ShippingOrder, error)
-	Get(id uint) (shipping.ShippingOrder, error)
-	Delete(id uint, user_id uint) error
-	Update(id uint, data *shipping.ShippingOrder) error
+	List(query map[string]interface{}, page *pagination.Paginatevalue) ([]shipping.ShippingOrder, error)
+	Get(query map[string]interface{}) (shipping.ShippingOrder, error)
+	Delete(query map[string]interface{}) error
+	Update(query map[string]interface{}, data *shipping.ShippingOrder) error
 	UpdateProductList(query interface{}, data shipping.ShippingOrderLines) (int64, error)
-	DeleteOrderLine(query interface{}) error
-	CreateBulkOrder(data *[]shipping.ShippingOrder, userID string) error
+	DeleteOrderLine(query map[string]interface{}) error
+	CreateBulkOrder(data *[]shipping.ShippingOrder) error
 }
 
 type shippingorder struct {
 	db *gorm.DB
 }
 
+var shippingOrderRepository *shippingorder //singleton object
+
+// singleton function
 func NewShippingOrder() *shippingorder {
+	if shippingOrderRepository != nil {
+		return shippingOrderRepository
+	}
 	db := db.DbManager()
-	return &shippingorder{db}
+	shippingOrderRepository = &shippingorder{db}
+	return shippingOrderRepository
 }
 
-func (r *shippingorder) Create(data *shipping.ShippingOrder) (*shipping.ShippingOrder, error) {
+func (r *shippingorder) Create(data *shipping.ShippingOrder) error {
 	var scode uint
 	err := r.db.Raw("SELECT lookupcodes.id FROM lookuptypes,lookupcodes WHERE lookuptypes.id = lookupcodes.lookup_type_id AND lookuptypes.lookup_type = 'SHIPPING_ORDER_STATUS' AND lookupcodes.lookup_code = 'PICKUP_SCHEDULED'").First(&scode).Error
 	if err != nil {
-		return nil, err
+		return err
 	}
-	data.ShippingStatusId = scode
-	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.ShippingStatusId)
+	data.ShippingStatusId = &scode
+	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, *data.ShippingStatusId)
 	data.StatusHistory = result
-	res := r.db.Model(&shipping.ShippingOrder{}).Create(data)
-	response, _ := r.Get(data.ID)
-	return &response, res.Error
+	err = r.db.Model(&shipping.ShippingOrder{}).Create(data).Error
+	if err != nil {
+		return err
+	}
+	return nil
+	// response, _ := r.Get(data.ID)
+	// return &response, res.Error
 }
 
 func (r *shippingorder) AddProduct(data shipping.ShippingOrderLines) error {
@@ -67,35 +79,54 @@ func (r *shippingorder) AddProduct(data shipping.ShippingOrderLines) error {
 	return res.Error
 }
 
-func (r *shippingorder) List(page *pagination.Paginatevalue) ([]shipping.ShippingOrder, error) {
+func (r *shippingorder) List(query map[string]interface{}, page *pagination.Paginatevalue) ([]shipping.ShippingOrder, error) {
 	var data []shipping.ShippingOrder
-	result := r.db.Scopes(helpers.Paginate(&shipping.ShippingOrder{}, page, r.db)).Preload("ShippingOrderLines.ProductVariant").Preload("ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Where("is_active = true").Find(&data)
-	return data, result.Error
-}
-
-func (r *shippingorder) Get(id uint) (shipping.ShippingOrder, error) {
-	var data shipping.ShippingOrder
-	result := r.db.Model(&shipping.ShippingOrder{}).Preload("ShippingOrderLines.ProductVariant").Preload("ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Where("id", id).First(&data)
-	if result.Error != nil {
-		return data, result.Error
+	err := r.db.Scopes(helpers.Paginate(&shipping.ShippingOrder{}, page, r.db)).Preload("ShippingOrderLines.ProductVariant").Preload("ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Preload("CreatedBy.Company").Where("is_active = true").Find(&data).Error
+	if err != nil {
+		return data, err
 	}
 	return data, nil
 }
 
-func (r *shippingorder) Delete(id uint, user_id uint) error {
+func (r *shippingorder) Get(query map[string]interface{}) (shipping.ShippingOrder, error) {
+	var data shipping.ShippingOrder
+	err := r.db.Model(&shipping.ShippingOrder{}).Preload("ShippingOrderLines.ProductVariant").Preload("ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return data, err.Error
+	}
+	return data, nil
+}
+
+func (r *shippingorder) Delete(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&shipping.ShippingOrder{}).Where("id", id).Updates(data)
-	return res.Error
+	delete(query, "user_id")
+	err := r.db.Model(&shipping.ShippingOrder{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }
 
-func (r *shippingorder) Update(id uint, data *shipping.ShippingOrder) error {
-	res := r.db.Model(&shipping.ShippingOrder{}).Where("id", id).Updates(data)
-	return res.Error
+func (r *shippingorder) Update(query map[string]interface{}, data *shipping.ShippingOrder) error {
+	err := r.db.Model(&shipping.ShippingOrder{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }
 
 func (r *shippingorder) UpdateProductList(query interface{}, data shipping.ShippingOrderLines) (int64, error) {
@@ -103,13 +134,13 @@ func (r *shippingorder) UpdateProductList(query interface{}, data shipping.Shipp
 	return res.RowsAffected, res.Error
 }
 
-func (r *shippingorder) DeleteOrderLine(query interface{}) error {
+func (r *shippingorder) DeleteOrderLine(query map[string]interface{}) error {
 	var data shipping.ShippingOrderLines
 	res := r.db.Model(&shipping.ShippingOrderLines{}).Where(query).Delete(&data)
 	return res.Error
 }
 
-func (r *shippingorder) CreateBulkOrder(data *[]shipping.ShippingOrder, userID string) error {
+func (r *shippingorder) CreateBulkOrder(data *[]shipping.ShippingOrder) error {
 	res := r.db.Model(&shipping.ShippingOrder{}).Create(&data)
 	return res.Error
 }

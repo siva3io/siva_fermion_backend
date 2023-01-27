@@ -3,20 +3,21 @@ package products
 import (
 	"encoding/json"
 	"errors"
-	core_dto "fermion/backend_core/controllers/cores"
-	core_service "fermion/backend_core/controllers/cores"
-	mdm_pricing_service "fermion/backend_core/controllers/mdm/pricing"
-	"fermion/backend_core/internal/model/mdm"
-	"fermion/backend_core/internal/model/pagination"
-	"fermion/backend_core/internal/repository"
-	mdm_repo "fermion/backend_core/internal/repository/mdm"
-	ipaas_utils "fermion/backend_core/ipaas_core/utils"
-	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 	"fmt"
 	"strconv"
 
-	"github.com/google/uuid"
+	core "fermion/backend_core/controllers/cores"
+	eda "fermion/backend_core/controllers/eda"
+	location_service "fermion/backend_core/controllers/mdm/locations"
+	model_core "fermion/backend_core/internal/model/core"
+	mdm "fermion/backend_core/internal/model/mdm"
+	pagination "fermion/backend_core/internal/model/pagination"
+	core_repo "fermion/backend_core/internal/repository"
+	mdm_repo "fermion/backend_core/internal/repository/mdm"
+	ipaas_utils "fermion/backend_core/ipaas_core/utils"
+	access_checker "fermion/backend_core/pkg/util/access"
+	helpers "fermion/backend_core/pkg/util/helpers"
+
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -76,7 +77,7 @@ type Service interface {
 	GetAllSelectedAttributeValue(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]ProductSelectedAttributesValuesRequestAndResponseeDTO, error)
 
 	//---------------------Product Template-------------------------------------------------------------------------------------
-	CreateTemplate(data CreateProductTemplatePayload, token_id string, access_template_id string, query map[string]interface{}, host string, scheme string, user_token string) (interface{}, error)
+	CreateTemplate(data CreateProductTemplatePayload, query map[string]interface{}, host string, scheme string, user_token string) (interface{}, error)
 	UpdateTemplate(data CreateProductTemplatePayload, query map[string]interface{}, token_id string, access_template_id string, query2 map[string]interface{}, host string, scheme string, user_token string) error
 	DeleteTemplate(query map[string]interface{}, token_id string, access_template_id string) error
 	GetTemplateView(templateQuery map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
@@ -102,33 +103,48 @@ type Service interface {
 	BulkCreateProduct(data *[]mdm.ProductTemplate, token_id string, access_template_id string) error
 
 	//---------------------Product UpsertAPi's--------------------------------------------------------------------------------------
-	UpsertProductTemplate(data []interface{}, TokenUserId string) (interface{}, error)
-	UpsertProductVariant(data []interface{}, TokenUserId string) (interface{}, error)
+	UpsertProductTemplate(data []interface{}, meta_data map[string]interface{}) (interface{}, error)
+	UpsertProductVariant(data []interface{}, meta_data map[string]interface{}) (interface{}, error)
 	GetAllChannelProducts(p *pagination.Paginatevalue, queryParams QueryParamsDTO, token_id string, access_template_id string, access_action string) ([]ChannelMapResponseDTO, error)
 
 	//--------------------------Filter Tabs---------------------------------------------------------------------------------------------------
 	GetProductVariantTab(product_variant_id string, tab_name string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+
+	// -------------------------------hsn------------------------------
+	CreateHsn(data mdm.HSNCodesData) (map[string]interface{}, error)
+	GetAllHsn(page *pagination.Paginatevalue) ([]mdm.HSNCodesData, error)
+	GetOneHsn(query map[string]interface{}) (mdm.HSNCodesData, error)
+	UpdateHsn(query map[string]interface{}, data mdm.HSNCodesData) error
+	DeleteHsn(query map[string]interface{}) error
 }
 
 type service struct {
 	productRepository   mdm_repo.Products
 	vendorRepository    mdm_repo.Vendors
 	inventoryRepository mdm_repo.BasicInventory
-	pricingService      mdm_pricing_service.Service
 	pricingRepository   mdm_repo.Pricing
-	userRepository      repository.User
-	coreService         core_service.Service
+	userRepository      core_repo.User
+	coreService         core.Service
+	location_service    location_service.Service
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	productRepository := mdm_repo.NewProducts()
 	vendorRepository := mdm_repo.NewVendors()
-	pricingService := mdm_pricing_service.NewService()
 	inventoryService := mdm_repo.NewBasicInventory()
 	pricingRepository := mdm_repo.NewPricing()
-	userRepository := repository.NewUser()
-	coreService := core_service.NewService()
-	return &service{productRepository, vendorRepository, inventoryService, pricingService, pricingRepository, userRepository, coreService}
+	userRepository := core_repo.NewUser()
+	coreService := core.NewService()
+	location_service := location_service.NewService()
+
+	newServiceObj = &service{productRepository, vendorRepository, inventoryService, pricingRepository, userRepository, coreService, location_service}
+	return newServiceObj
 }
 
 // ------------------Product Brand--------------------------------------------------------------------------------------------------
@@ -650,26 +666,21 @@ func (s *service) GetAllSelectedAttributeValue(p *pagination.Paginatevalue, toke
 //====================================TEMPLATE & VARIANT=====================================================================================================
 
 // ---------------------Product Template-------------------------------------------------------------------------------------------------------------
-func (s *service) CreateTemplate(data CreateProductTemplatePayload, token_id string, access_template_id string, query map[string]interface{}, host string, scheme string, user_token string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PRODUCTS", *token_user_id)
-	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create products at view level")
-	}
-	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create products at data level")
-	}
+func (s *service) CreateTemplate(data CreateProductTemplatePayload, query map[string]interface{}, host string, scheme string, user_token string) (interface{}, error) {
 	// ================ finding company preference for the user =================
 	result, _ := s.userRepository.FindUser(query)
 	var user_companyId = make(map[string]interface{})
 	serviceProvider := "LOCAL"
-	if *result.CompanyId > 0 {
-		user_companyId["id"] = result.CompanyId
-		company, _ := s.coreService.GetCompanyPreferences(user_companyId)
-		if company.FilePreferenceID != nil && *company.FilePreferenceID > 0 {
-			serviceProvider, _ = helpers.GetLookupcodeName(int(*company.FilePreferenceID))
+	if result.CompanyId != nil {
+		if *result.CompanyId > 0 {
+			user_companyId["id"] = result.CompanyId
+			company, _ := s.coreService.GetCompanyPreferences(user_companyId)
+			if company.FilePreferenceID != nil && *company.FilePreferenceID > 0 {
+				serviceProvider, _ = helpers.GetLookupcodeName(int(*company.FilePreferenceID))
+			}
 		}
 	}
+
 	var Template mdm.ProductTemplate
 	dto, err := json.Marshal(data)
 	if err != nil {
@@ -699,6 +710,11 @@ func (s *service) CreateTemplate(data CreateProductTemplatePayload, token_id str
 		response, _ := ipaas_utils.UploadFile(data.ImageOptions, data.Name, data.SKUCode, uint(*data.CreatedByID), scheme, host, ipaas_utils.AWS, "MDM", "Products", ".png", ipaas_utils.BASE64, user_token)
 		mdata, _ := json.Marshal(&response)
 		json.Unmarshal(mdata, &Template.ImageOptions)
+	} else {
+		response := helpers.BASE64optimization(data.ImageOptions)
+
+		mdata, _ := json.Marshal(&response)
+		json.Unmarshal(mdata, &Template.ImageOptions)
 	}
 
 	//=====================variant section ================================
@@ -713,6 +729,10 @@ func (s *service) CreateTemplate(data CreateProductTemplatePayload, token_id str
 		} else if serviceProvider != "LOCAL" {
 			// ========== based on file prefernces updated product variant image ===============
 			response, _ := ipaas_utils.UploadFile(Template.ProductVariantIds[index].ImageOptions, Template.ProductVariantIds[index].ProductName, Template.ProductVariantIds[index].SkuId, uint(*data.CreatedByID), scheme, host, ipaas_utils.AWS, "MDM", "Products", ".png", ipaas_utils.BASE64, user_token)
+			mdata, _ := json.Marshal(&response)
+			json.Unmarshal(mdata, &Template.ProductVariantIds[index].ImageOptions)
+		} else {
+			response := helpers.BASE64optimization(Template.ProductVariantIds[index].ImageOptions)
 			mdata, _ := json.Marshal(&response)
 			json.Unmarshal(mdata, &Template.ProductVariantIds[index].ImageOptions)
 		}
@@ -730,29 +750,47 @@ func (s *service) CreateTemplate(data CreateProductTemplatePayload, token_id str
 		if Template.ProductVariantIds[index].ProductPricingDetails.SalesPrice == 0 {
 			Template.ProductVariantIds[index].ProductPricingDetails.SalesPrice = Template.ProductPricingDetails.SalesPrice
 		}
+		Template.ProductVariantIds[index].CreatedByID = Template.CreatedByID
+		Template.ProductVariantIds[index].CompanyId = Template.CompanyId
+		Template.ProductVariantIds[index].Location = Template.Location
+		Template.ProductVariantIds[index].DeliverySlaDetails = Template.DeliverySlaDetails
+		Template.ProductVariantIds[index].ProductCancellationTerms = Template.ProductCancellationTerms
+		Template.ProductVariantIds[index].ProductReturnTerms = Template.ProductReturnTerms
+		Template.ProductVariantIds[index].ProductReplacementTerms = Template.ProductReplacementTerms
+		Template.ProductVariantIds[index].FoodItemDetails = Template.FoodItemDetails
+		Template.ProductVariantIds[index].InventoryDetail = Template.InventoryDetail
+		Template.ProductVariantIds[index].ManufacturerDetails = Template.ManufacturerDetails
+		Template.ProductVariantIds[index].ProductCriticalDetails = Template.ProductCriticalDetails
+		Template.ProductVariantIds[index].AdditivesInformation = Template.AdditivesInformation
+		Template.ProductVariantIds[index].ShortDescription = Template.ShortDescription
+		Template.ProductVariantIds[index].DomainId = Template.DomainId
+		Template.ProductVariantIds[index].Channel = Template.Channel
 	}
-	fmt.Println("11111111111111111111111111")
 	err = s.productRepository.CreateTemplate(&Template)
-
 	if err != nil {
-		id := uuid.New().String()
-		fmt.Println("2222222222222222222")
-		defaultStatus, err := helpers.GetLookupcodeId("PRODUCT_STATUS", "REJECTED")
-		if err != nil {
-			return nil, err
-		}
-		Template.StatusId = &defaultStatus
-		Template.SkuCode = Template.SkuCode + "_InValid" + id
-		for index, _ := range Template.ProductVariantIds {
-			Template.ProductVariantIds[index].SkuId = Template.ProductVariantIds[index].SkuId + "_InValid" + id
-			Template.ProductVariantIds[index].StatusId = &defaultStatus
-		}
-		err = s.productRepository.CreateTemplate(&Template)
-		if err != nil {
-			return nil, err
-		}
-
+		return nil, err
 	}
+
+	// if err != nil {
+	// 	id := uuid.New().String()
+	// 	defaultStatus, err := helpers.GetLookupcodeId("PRODUCT_STATUS", "REJECTED")
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	Template.StatusId = &defaultStatus
+	// 	SkuCode := strings.Split(Template.SkuCode, "_InValid")[0]
+	// 	Template.SkuCode = SkuCode + "_InValid" + id
+	// 	productVariantCount := len(Template.ProductVariantIds)
+	// 	for index := 0; productVariantCount > index; index++ {
+	// 		VariantSkuCode := strings.Split(Template.ProductVariantIds[index].SkuId, "_InValid")[0]
+	// 		Template.ProductVariantIds[index].SkuId = VariantSkuCode + "_InValid" + id
+	// 		Template.ProductVariantIds[index].StatusId = &defaultStatus
+	// 	}
+	// 	err = s.productRepository.CreateTemplate(&Template)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// }
 
 	//================attribute section ==================================
 	for _, attribute := range data.AttributeKeyValues {
@@ -790,15 +828,20 @@ func (s *service) UpdateTemplate(data CreateProductTemplatePayload, query map[st
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update products at data level")
 	}
-	serviceProvider := "LOCAL"
 	var Template mdm.ProductTemplate
 	// ================ finding company preference for the user =================
 	result, _ := s.userRepository.FindUser(query2)
 	var user_companyId = make(map[string]interface{})
-	user_companyId["id"] = result.CompanyId
-	company, _ := s.coreService.GetCompanyPreferences(user_companyId)
-	if company.FilePreferenceID != nil && *company.FilePreferenceID > 0 {
-		serviceProvider, _ = helpers.GetLookupcodeName(int(*company.FilePreferenceID))
+	serviceProvider := "LOCAL"
+
+	if result.CompanyId != nil {
+		if *result.CompanyId > 0 {
+			user_companyId["id"] = result.CompanyId
+			company, _ := s.coreService.GetCompanyPreferences(user_companyId)
+			if company.FilePreferenceID != nil && *company.FilePreferenceID > 0 {
+				serviceProvider, _ = helpers.GetLookupcodeName(int(*company.FilePreferenceID))
+			}
+		}
 	}
 
 	dto, err := json.Marshal(data)
@@ -814,6 +857,10 @@ func (s *service) UpdateTemplate(data CreateProductTemplatePayload, query map[st
 		response, _ := ipaas_utils.UploadFile(data.ImageOptions, data.Name, data.SKUCode, uint(*data.CreatedByID), scheme, host, ipaas_utils.AWS, "MDM", "Products", ".png", ipaas_utils.BASE64, user_token)
 		mdata, _ := json.Marshal(&response)
 		json.Unmarshal(mdata, &Template.ImageOptions)
+	} else {
+		response := helpers.BASE64optimization(data.ImageOptions)
+		mdata, _ := json.Marshal(&response)
+		json.Unmarshal(mdata, &data.ImageOptions)
 	}
 
 	//=================template Update =================================
@@ -834,6 +881,7 @@ func (s *service) UpdateTemplate(data CreateProductTemplatePayload, query map[st
 		Template.ProductVariantIds[index].ProductPricingDetails.CostPrice = Template.ProductPricingDetails.CostPrice
 		Template.ProductVariantIds[index].ProductPricingDetails.CurrencyId = Template.ProductPricingDetails.CurrencyId
 		Template.ProductVariantIds[index].ProductPricingDetails.MRP = Template.ProductPricingDetails.MRP
+		Template.ProductVariantIds[index].UpdatedByID = Template.UpdatedByID
 
 		if serviceProvider != "LOCAL" && Template.ProductVariantIds[index].ImageOptions != nil {
 			var imageLinkArray = make([]map[string]interface{}, 0)
@@ -842,6 +890,10 @@ func (s *service) UpdateTemplate(data CreateProductTemplatePayload, query map[st
 			mdata, _ := json.Marshal(&response)
 			json.Unmarshal(mdata, &Template.ProductVariantIds[index].ImageOptions)
 
+		} else {
+			response := helpers.BASE64optimization(Template.ProductVariantIds[index].ImageOptions)
+			mdata, _ := json.Marshal(&response)
+			json.Unmarshal(mdata, &Template.ProductVariantIds[index].ImageOptions)
 		}
 
 		if Template.ProductVariantIds[index].ProductPricingDetails.SalesPrice == 0 {
@@ -863,7 +915,6 @@ func (s *service) UpdateTemplate(data CreateProductTemplatePayload, query map[st
 			}
 		}
 	}
-
 	return nil
 }
 func (s *service) DeleteTemplate(query map[string]interface{}, token_id string, access_template_id string) error {
@@ -961,7 +1012,7 @@ func (s *service) GetTemplateView(templateQuery map[string]interface{}, token_id
 		if variant.VendorPriceListIds != nil {
 			for _, price_list_id := range variant.VendorPriceListIds {
 				query := map[string]interface{}{"id": price_list_id}
-				vendorPriceList, err := s.vendorRepository.FindOneVendorPriceList(query)
+				vendorPriceList, err := s.vendorRepository.FindOnePriceList(query)
 				if err != nil {
 					return nil, err
 				}
@@ -1030,7 +1081,7 @@ func (s *service) GetTemplateView(templateQuery map[string]interface{}, token_id
 	if response.VendorPriceListIds != nil {
 		for _, price_list_id := range response.VendorPriceListIds {
 			query := map[string]interface{}{"id": price_list_id}
-			vendorPriceList, err := s.vendorRepository.FindOneVendorPriceList(query)
+			vendorPriceList, err := s.vendorRepository.FindOnePriceList(query)
 			if err != nil {
 				return nil, err
 			}
@@ -1197,7 +1248,7 @@ func (s *service) GetVariantView(query map[string]interface{}, token_id string, 
 	if response.VendorPriceListIds != nil {
 		for _, price_list_id := range response.VendorPriceListIds {
 			query := map[string]interface{}{"id": price_list_id}
-			vendorPriceList, err := s.vendorRepository.FindOneVendorPriceList(query)
+			vendorPriceList, err := s.vendorRepository.FindOnePriceList(query)
 			if err != nil {
 				return nil, err
 			}
@@ -1235,6 +1286,17 @@ func (s *service) GetAllVariant(p *pagination.Paginatevalue, token_id string, ac
 	var response []VariantResponseDTO
 	mdata, _ := json.Marshal(result)
 	json.Unmarshal(mdata, &response)
+
+	for index, value := range response {
+		query := map[string]interface{}{
+			"id": value.ProductTemplateId,
+		}
+		template, _ := s.productRepository.FindTemplate(query)
+		response[index].BrandID = template.BrandID
+		helpers.JsonMarshaller(template.Brand, &response[index].Brand)
+		response[index].HSNCODE = template.HSNCODE
+		response[index].HSNCodesData = template.HSNCodesData
+	}
 
 	return response, nil
 }
@@ -1418,9 +1480,11 @@ func (s *service) BulkCreateProduct(data *[]mdm.ProductTemplate, token_id string
 }
 
 // ---------------------Product UpsertAPi's----------------------------------------------------------------------------------------------------------------------
-func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) (interface{}, error) {
+func (s *service) UpsertProductTemplate(data []interface{}, meta_data map[string]interface{}) (interface{}, error) {
 	var success []interface{}
 	var failures []interface{}
+
+	token_id := helpers.ConvertStringToUint(meta_data["token_id"].(string))
 
 	for index, payload := range data {
 		product_payload := payload.(map[string]interface{})["product"]
@@ -1442,7 +1506,7 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 			continue
 		}
 
-		templatePayload.UpdatedByID = helpers.ConvertStringToUint(TokenUserId)
+		templatePayload.UpdatedByID = token_id
 
 		dto, err := json.Marshal(templatePayload)
 		if err != nil {
@@ -1472,6 +1536,7 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 
 		res, _ := s.productRepository.FindChannelProductMap(channelProductLinkQuery)
 		if res.TemplateSku != "" {
+			//=============== update ===========================================
 			templateQuery := map[string]interface{}{"sku_code": Template.SkuCode}
 			err = s.productRepository.UpdateChannelProductMap(&channelProductLink, channelProductLinkQuery)
 			if err != nil {
@@ -1492,26 +1557,10 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 				json.Unmarshal(mdata, &variantdata)
 			}
 
-			//-------------------default variant for each template------------------------------------------------
+			//===================default variant for template==============================================
 
 			defaultVariant := map[string]interface{}{}
-
 			defaultVariant["sku_id"] = templatePayload.SKUCode
-			defaultVariant["parent_sku_id"] = templatePayload.SKUCode
-			defaultVariant["product_name"] = templatePayload.Name
-			defaultVariant["image_options"] = templatePayload.ImageOptions
-			defaultVariant["description"] = templatePayload.Description
-			defaultVariant["category_id"] = templatePayload.PrimaryCategoryID
-			defaultVariant["leaf_category_id"] = templatePayload.SecondaryCategoryID
-			defaultVariant["product_pricing_details"] = templatePayload.ProductPricingDetails
-			defaultVariant["shipping_options"] = templatePayload.ShippingOptions
-			defaultVariant["package_dimensions"] = templatePayload.PackageDimensions
-			defaultVariant["package_material_options"] = templatePayload.PackageMaterialOptions
-			defaultVariant["channel_code"] = templatePayload.ChannelCode
-			defaultVariant["external_id"] = templatePayload.ExternalId
-			defaultVariant["external_details"] = templatePayload.ExternalDetails
-			defaultVariant["status_id"] = templatePayload.StatusId
-
 			DefaultProductVariant := map[string]interface{}{
 				"product":   defaultVariant,
 				"pricing":   pricing_payload,
@@ -1523,12 +1572,35 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 
 			Template, _ := s.productRepository.FindTemplate(templateQuery)
 			for index := range variantdata {
-				variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["parent_sku_id"] = Template.SkuCode
-				variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["product_template_id"] = Template.ID
-				variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["status_id"] = Template.StatusId
+				var variant CreateProductVariantDTO
+				helpers.JsonMarshaller(variantdata[index].(map[string]interface{})["product"], &variant)
+				variant.ParentSKUId = Template.SkuCode
+				variant.ChannelCode = templatePayload.ChannelCode
+				variant.ProductTemplateId = Template.ID
+				variant.StatusId = Template.StatusId
+				var images []interface{}
+				helpers.JsonMarshaller(variant.ImageOptions, &images)
+				if variant.ImageOptions == nil || len(images) == 0 {
+					variant.ImageOptions = Template.ImageOptions
+				}
+				if variant.Description == nil {
+					variant.Description = Template.Description
+				}
+				variant.CategoryID = Template.PrimaryCategoryID
+				variant.LeafCategoryID = Template.SecondaryCategoryID
+				variant.ShippingOptions = Template.ShippingOptions
+				variant.PackageDimensions = Template.PackageDimensions
+				variant.PackageMaterialOptions = Template.PackageMaterialOptions
+				variant.ProductPricingDetails.CostPrice = Template.ProductPricingDetails.CostPrice
+				variant.ProductPricingDetails.MRP = Template.ProductPricingDetails.MRP
+				if variant.ProductPricingDetails.SalesPrice == 0 {
+					variant.ProductPricingDetails.SalesPrice = Template.ProductPricingDetails.SalesPrice
+				}
+
+				variantdata[index].(map[string]interface{})["product"] = variant
 			}
 
-			res, err := s.UpsertProductVariant(variantdata, TokenUserId)
+			res, err := s.UpsertProductVariant(variantdata, meta_data)
 			if err != nil {
 				failures = append(failures, map[string]interface{}{"sku_code": Template.SkuCode, "status": false, "serial_number": index + 1, "msg": "product_variant_error", "product_variants": err})
 				continue
@@ -1544,38 +1616,24 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 			continue
 		}
 
+		//=========== create ================================
 		var variantdata []interface{}
 		variants := product_payload.(map[string]interface{})["product_variant_ids"]
 		if variants != nil && len(variants.([]interface{})) > 0 {
-			mdata, _ := json.Marshal(variants)
-			json.Unmarshal(mdata, &variantdata)
+			helpers.JsonMarshaller(variants, &variantdata)
 		}
 
 		defaultStatus, err := helpers.GetLookupcodeId("PRODUCT_STATUS", "DRAFT")
 		if err != nil {
 			return nil, err
 		}
-		templatePayload.StatusId = &defaultStatus
+		if templatePayload.StatusId == nil {
+			templatePayload.StatusId = &defaultStatus
+		}
 
-		//-------------------default variant for each template------------------------------------------------
+		//===================default variant for template==============================================
 		defaultVariant := map[string]interface{}{}
-
 		defaultVariant["sku_id"] = templatePayload.SKUCode
-		defaultVariant["parent_sku_id"] = templatePayload.SKUCode
-		defaultVariant["product_name"] = templatePayload.Name
-		defaultVariant["image_options"] = templatePayload.ImageOptions
-		defaultVariant["description"] = templatePayload.Description
-		defaultVariant["category_id"] = templatePayload.PrimaryCategoryID
-		defaultVariant["leaf_category_id"] = templatePayload.SecondaryCategoryID
-		defaultVariant["product_pricing_details"] = templatePayload.ProductPricingDetails
-		defaultVariant["shipping_options"] = templatePayload.ShippingOptions
-		defaultVariant["package_dimensions"] = templatePayload.PackageDimensions
-		defaultVariant["package_material_options"] = templatePayload.PackageMaterialOptions
-		defaultVariant["channel_code"] = templatePayload.ChannelCode
-		defaultVariant["external_id"] = templatePayload.ExternalId
-		defaultVariant["external_details"] = templatePayload.ExternalDetails
-		defaultVariant["status_id"] = templatePayload.StatusId
-
 		DefaultProductVariant := map[string]interface{}{
 			"product":   defaultVariant,
 			"pricing":   pricing_payload,
@@ -1585,8 +1643,9 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 			variantdata = append(variantdata, DefaultProductVariant)
 		}
 
+		//============create or update product template===========================
 		Template.ProductVariantIds = nil
-		Template.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
+		Template.CreatedByID = token_id
 		TemplateFindQuery := map[string]interface{}{"sku_code": Template.SkuCode}
 		TemplateResponse, _ := s.productRepository.FindTemplate(TemplateFindQuery)
 		if TemplateResponse.SkuCode != "" {
@@ -1602,30 +1661,47 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 				continue
 			}
 		}
+
+		//===============create product_channel_map===================
 		channelProductLink.ProductTemplateId = Template.ID
-		channelProductLink.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
+		channelProductLink.CreatedByID = token_id
 		err = s.productRepository.CreateChannelProductMap(&channelProductLink)
 		if err != nil {
 			failures = append(failures, map[string]interface{}{"sku_code": Template.SkuCode, "status": false, "serial_number": index + 1, "msg": err})
 			continue
 		}
 		for index := range variantdata {
-			variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["parent_sku_id"] = Template.SkuCode
-			variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["product_template_id"] = Template.ID
-			variantdata[index].(map[string]interface{})["product"].(map[string]interface{})["status_id"] = Template.StatusId
+			var variant CreateProductVariantDTO
+			helpers.JsonMarshaller(variantdata[index].(map[string]interface{})["product"], &variant)
+			variant.ParentSKUId = Template.SkuCode
+			variant.ChannelCode = templatePayload.ChannelCode
+			variant.ProductTemplateId = Template.ID
+			variant.StatusId = Template.StatusId
+			var images []interface{}
+			helpers.JsonMarshaller(variant.ImageOptions, &images)
+			if variant.ImageOptions == nil || len(images) == 0 {
+				variant.ImageOptions = Template.ImageOptions
+			}
+			if variant.Description == nil {
+				variant.Description = Template.Description
+			}
+			variant.CategoryID = Template.PrimaryCategoryID
+			variant.LeafCategoryID = Template.SecondaryCategoryID
+			variant.ShippingOptions = Template.ShippingOptions
+			variant.PackageDimensions = Template.PackageDimensions
+			variant.PackageMaterialOptions = Template.PackageMaterialOptions
+			variant.ProductPricingDetails.CostPrice = Template.ProductPricingDetails.CostPrice
+			variant.ProductPricingDetails.MRP = Template.ProductPricingDetails.MRP
+			if variant.ProductPricingDetails.SalesPrice == 0 {
+				variant.ProductPricingDetails.SalesPrice = Template.ProductPricingDetails.SalesPrice
+			}
+			variantdata[index].(map[string]interface{})["product"] = variant
 		}
 
 		var jsonvariantPayload []interface{}
-		data, err := json.Marshal(variantdata)
-		if err != nil {
-			return nil, err
-		}
-		err = json.Unmarshal(data, &jsonvariantPayload)
-		if err != nil {
-			return nil, err
-		}
+		helpers.JsonMarshaller(variantdata, &jsonvariantPayload)
 
-		variant_response, err := s.UpsertProductVariant(jsonvariantPayload, TokenUserId)
+		variant_response, err := s.UpsertProductVariant(jsonvariantPayload, meta_data)
 		if err != nil {
 			failures = append(failures, map[string]interface{}{"sku_code": Template.SkuCode, "status": false, "serial_number": index + 1, "msg": "product_variant_error", "product_variants": err})
 			continue
@@ -1645,9 +1721,11 @@ func (s *service) UpsertProductTemplate(data []interface{}, TokenUserId string) 
 	}
 	return response, nil
 }
-func (s *service) UpsertProductVariant(data []interface{}, TokenUserId string) (interface{}, error) {
+func (s *service) UpsertProductVariant(data []interface{}, meta_data map[string]interface{}) (interface{}, error) {
+
 	var success []interface{}
 	var failures []interface{}
+	token_id := helpers.ConvertStringToUint(meta_data["token_id"].(string))
 
 	for index, payload := range data {
 		product_payload := payload.(map[string]interface{})["product"]
@@ -1657,35 +1735,28 @@ func (s *service) UpsertProductVariant(data []interface{}, TokenUserId string) (
 		var Variant mdm.ProductVariant
 		var channelProductLink mdm.ProductToChannelMap
 
-		jsonPayloadByteArray, err := json.MarshalIndent(product_payload, "", "\t")
+		//=============== marshal payload to both Variant & ChannelProductLink ===================================================
+		err := helpers.JsonMarshaller(product_payload, &Variant)
 		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "cannot proceed with this payload"})
+			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "cannot proceed with this payload", "error": err})
+			continue
+		}
+		err = helpers.JsonMarshaller(product_payload, &channelProductLink)
+		if err != nil {
+			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "cannot proceed with this payload", "error": err})
 			continue
 		}
 
-		//--------variant--------------------------
-		err = json.Unmarshal(jsonPayloadByteArray, &Variant)
-		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "cannot proceed with this payload"})
-			continue
-		}
-		Variant.UpdatedByID = helpers.ConvertStringToUint(TokenUserId)
-
-		//--------product to channel map--------------------------
-		err = json.Unmarshal(jsonPayloadByteArray, &channelProductLink)
-		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "cannot proceed with this payload"})
-			continue
-		}
 		channelProductLink.TemplateSku = Variant.ParentSkuId
 		channelProductLink.ProductVariantSku = Variant.SkuId
 
-		//-----------check  template and variant sku are available or not--------------------------------
+		//================= check template and variant sku are available or not ===================================================
 		if Variant.ParentSkuId == "" || Variant.SkuId == "" || channelProductLink.ChannelCode == "" {
 			failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": "parent_sku_id and variant sku_id and channel_code are required"})
 			continue
 		}
 
+		//================ find the product_template from product_to_channel_map using channel_product_link_query =============================
 		channelProductLinkQuery := map[string]interface{}{"product_template_id": channelProductLink.ProductTemplateId, "channel_code": channelProductLink.ChannelCode, "product_variant_id": 0}
 		res, _ := s.productRepository.FindChannelProductMap(channelProductLinkQuery)
 		if res.TemplateSku == "" {
@@ -1693,69 +1764,38 @@ func (s *service) UpsertProductVariant(data []interface{}, TokenUserId string) (
 			continue
 		}
 
-		if res.TemplateSku != "" {
-			var pricingResponse interface{}
-			var inventoryResponse interface{}
+		var pricingResponse interface{}
+		var inventoryResponse interface{}
 
-			channelProductLinkQuery = map[string]interface{}{"product_variant_sku": channelProductLink.ProductVariantSku, "channel_code": channelProductLink.ChannelCode}
-			res, _ = s.productRepository.FindChannelProductMap(channelProductLinkQuery)
-			if Variant.ProductName == "" {
-				query := map[string]interface{}{"id": Variant.ProductTemplateId}
-				result, err := s.productRepository.FindTemplate(query)
-				if err != nil {
-					failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
-					continue
-				}
-				Variant.ProductName = result.Name
-			}
-			if res.ProductVariantSku != "" {
-				err = s.productRepository.UpdateChannelProductMap(&channelProductLink, channelProductLinkQuery)
-				if err != nil {
-					failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
-					continue
-				}
-				VariantQuery := map[string]interface{}{"sku_id": Variant.SkuId}
-				err = s.productRepository.UpdateVariant(&Variant, VariantQuery)
-				if err != nil {
-					failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
-					continue
-				}
-
-				findQuery := map[string]interface{}{"sku_id": Variant.SkuId}
-				VariantInformation, _ := s.productRepository.FindVariant(findQuery)
-
-				pricingResponse, inventoryResponse, err = s.UpsertPricingAndInventory(VariantInformation, pricing_payload, inventory_payload, TokenUserId)
-				if err != nil {
-					failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
-				}
-				success = append(success, map[string]interface{}{
-					"sku_id":        Variant.SkuId,
-					"status":        true,
-					"serial_number": index + 1,
-					"msg":           "updated",
-					"pricing":       pricingResponse,
-					"inventory":     inventoryResponse,
-				})
+		channelProductLinkQuery = map[string]interface{}{"product_variant_sku": channelProductLink.ProductVariantSku, "channel_code": channelProductLink.ChannelCode}
+		res, _ = s.productRepository.FindChannelProductMap(channelProductLinkQuery)
+		if Variant.ProductName == "" {
+			query := map[string]interface{}{"id": Variant.ProductTemplateId}
+			result, err := s.productRepository.FindTemplate(query)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
 				continue
 			}
-
-			//-----------Create Product Variant--------------------------
-			Variant.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
-			err = s.productRepository.CreateVariant(&Variant)
+			Variant.ProductName = result.Name
+		}
+		if res.ProductVariantSku != "" {
+			Variant.UpdatedByID = token_id
+			err = s.productRepository.UpdateChannelProductMap(&channelProductLink, channelProductLinkQuery)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
+				continue
+			}
+			VariantQuery := map[string]interface{}{"sku_id": Variant.SkuId}
+			err = s.productRepository.UpdateVariant(&Variant, VariantQuery)
 			if err != nil {
 				failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
 				continue
 			}
 
-			//-----------Create Product to channel Map---------------------------
-			channelProductLink.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
-			channelProductLink.ProductVariantId = Variant.ID
-			err = s.productRepository.CreateChannelProductMap(&channelProductLink)
-			if err != nil {
-				failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
-				continue
-			}
-			pricingResponse, inventoryResponse, err := s.UpsertPricingAndInventory(Variant, pricing_payload, inventory_payload, TokenUserId)
+			findQuery := map[string]interface{}{"sku_id": Variant.SkuId}
+			VariantInformation, _ := s.productRepository.FindVariant(findQuery)
+
+			pricingResponse, inventoryResponse, err = s.UpsertPricingAndInventory(VariantInformation, pricing_payload, inventory_payload, meta_data)
 			if err != nil {
 				failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
 			}
@@ -1763,28 +1803,60 @@ func (s *service) UpsertProductVariant(data []interface{}, TokenUserId string) (
 				"sku_id":        Variant.SkuId,
 				"status":        true,
 				"serial_number": index + 1,
-				"msg":           "created",
+				"msg":           "updated",
 				"pricing":       pricingResponse,
 				"inventory":     inventoryResponse,
 			})
+			continue
 		}
+
+		//====================== create product variant ========================================
+		Variant.CreatedByID = token_id
+		err = s.productRepository.CreateVariant(&Variant)
+		if err != nil {
+			failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
+			continue
+		}
+
+		//===================== create product_to_channel_map ===================================
+		channelProductLink.CreatedByID = token_id
+		channelProductLink.ProductVariantId = Variant.ID
+		err = s.productRepository.CreateChannelProductMap(&channelProductLink)
+		if err != nil {
+			failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
+			continue
+		}
+
+		pricingResponse, inventoryResponse, err = s.UpsertPricingAndInventory(Variant, pricing_payload, inventory_payload, meta_data)
+		if err != nil {
+			failures = append(failures, map[string]interface{}{"sku_id": Variant.SkuId, "status": false, "serial_number": index + 1, "msg": err})
+		}
+		success = append(success, map[string]interface{}{
+			"sku_id":        Variant.SkuId,
+			"status":        true,
+			"serial_number": index + 1,
+			"msg":           "created",
+			"pricing":       pricingResponse,
+			"inventory":     inventoryResponse,
+		})
 	}
+
 	response := map[string]interface{}{
 		"success":  success,
 		"failures": failures,
 	}
 	return response, nil
 }
-func (s *service) UpsertPricingAndInventory(VariantInformation mdm.ProductVariant, pricing_payload interface{}, inventory_payload interface{}, TokenUserId string) (interface{}, interface{}, error) {
+func (s *service) UpsertPricingAndInventory(VariantInformation mdm.ProductVariant, pricing_payload interface{}, inventory_payload interface{}, meta_data map[string]interface{}) (interface{}, interface{}, error) {
 
+	var metaData model_core.MetaData
 	pricingPayload := map[string]interface{}{}
 	inventoryPayload := map[string]interface{}{}
 	salesPriceList := map[string]interface{}{}
 	pricingPayloadFlag := true
 	var ok bool
 
-	// --------------Pricing Upsert-----------------------------
-
+	//===============Pricing=================================================================================
 	if pricing_payload == nil {
 		pricingPayloadFlag = false
 	}
@@ -1843,69 +1915,44 @@ func (s *service) UpsertPricingAndInventory(VariantInformation mdm.ProductVarian
 		}
 		pricingPayload["sales_price_list"] = salesPriceList
 	}
-	input := []interface{}{pricingPayload}
-	pricingResponse, err := s.pricingService.ChannelSalesPriceUpsert(input, TokenUserId)
-	if err != nil {
-		return nil, nil, err
+	var pricing_request_payload_data []interface{}
+	pricing_request_payload_data = append(pricing_request_payload_data, pricingPayload)
+	pricing_request_payload := map[string]interface{}{
+		"meta_data": meta_data,
+		"data":      pricing_request_payload_data,
 	}
+	eda.Produce(eda.UPSERT_SALES_PRICE_LIST, pricing_request_payload)
 
-	//-------------Inventory Upsert--------------------------------------
+	//=============== Inventory =================================================================================
 	if inventory_payload != nil {
 		inventoryPayload = inventory_payload.(map[string]interface{})
 	}
 	inventoryPayload["product_variant_id"] = VariantInformation.ID
 
-	input = []interface{}{inventoryPayload}
-	inventoryResponse, err := s.UpsertInventoryTemplate(input, TokenUserId)
-	if err != nil {
-		return nil, nil, err
+	virtual_type_id, _ := helpers.GetLookupcodeId("LOCATION_TYPE", "VIRTUAL_LOCATION")
+
+	p := new(pagination.Paginatevalue)
+	p.Filters = fmt.Sprintf("[[\"name\",\"=\",\"Default Location\"],[\"location_type_id\",\"=\",\"%v\"],[\"company_id\",\"=\",\"%v\"]]", virtual_type_id, meta_data["company_id"])
+	metaData.ModuleAccessAction = "LIST"
+	location_data, _ := s.location_service.GetLocationList(metaData, p)
+	if location_data != nil {
+		location_arr := location_data.([]location_service.LocationListResponseDTO)
+		if len(location_arr) > 0 {
+			inventoryPayload["physical_location_id"] = location_arr[0].ID
+		}
 	}
 
-	return pricingResponse, inventoryResponse, nil
+	var inventory_request_payload_data []interface{}
+	inventory_request_payload_data = append(inventory_request_payload_data, inventoryPayload)
+	inventory_request_payload := map[string]interface{}{
+		"meta_data": meta_data,
+		"data":      inventory_request_payload_data,
+	}
+	eda.Produce(eda.UPSERT_DECENTRALIZED_INVENTORY, inventory_request_payload)
+
+	return "Inprogress", "Inprogress", nil
 }
-func (s *service) UpsertInventoryTemplate(data []interface{}, TokenUserId string) (interface{}, error) {
-	var success []interface{}
-	var failures []interface{}
-	for index, payload := range data {
-		var DeCentralizedBasicInventory mdm.DecentralizedBasicInventory
-		jsonPayloadByteArray, err := json.Marshal(payload)
-		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
-			continue
-		}
-		err = json.Unmarshal(jsonPayloadByteArray, &DeCentralizedBasicInventory)
-		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
-			continue
-		}
-		DeCentralizedBasicInventory.UpdatedByID = helpers.ConvertStringToUint(TokenUserId)
 
-		InventoryQuery := map[string]interface{}{"product_variant_id": DeCentralizedBasicInventory.ProductVariantId, "channel_code": DeCentralizedBasicInventory.ChannelCode}
-		res, _ := s.inventoryRepository.FindOneDecentralizedInventory(InventoryQuery)
-		if res.ProductVariantId != 0 {
-			err = s.inventoryRepository.UpdateDecentralizedInventory(InventoryQuery, &DeCentralizedBasicInventory)
-			if err != nil {
-				failures = append(failures, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": false, "serial_number": index + 1, "msg": err})
-				continue
-			}
-			success = append(success, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": true, "serial_number": index + 1, "msg": "updated"})
-			continue
-		}
-		DeCentralizedBasicInventory.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
-		err = s.inventoryRepository.DecentralizedInventorySave(&DeCentralizedBasicInventory)
-		if err != nil {
-			failures = append(failures, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": false, "serial_number": index + 1, "msg": err})
-			continue
-		}
-
-		success = append(success, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": true, "serial_number": index + 1, "msg": "created"})
-	}
-	response := map[string]interface{}{
-		"success":  success,
-		"failures": failures,
-	}
-	return response, nil
-}
 func (s *service) GetAllChannelProducts(p *pagination.Paginatevalue, queryParams QueryParamsDTO, token_id string, access_template_id string, access_action string) ([]ChannelMapResponseDTO, error) {
 
 	token_user_id := helpers.ConvertStringToUint(token_id)
@@ -2100,6 +2147,7 @@ func (s *service) GetAllChannelProducts(p *pagination.Paginatevalue, queryParams
 
 func (s *service) GetProductVariantTab(product_variant_id string, tab_name string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
 	token_user_id := helpers.ConvertStringToUint(token_id)
+	// var metaData core_model.MetaData
 	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SALES_ORDERS", *token_user_id)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view product variant at view level")
@@ -2117,12 +2165,14 @@ func (s *service) GetProductVariantTab(product_variant_id string, tab_name strin
 		var priceListTabResponse PriceListTabResponse
 		var salesPriceListTabResponse []SalesPriceListTab
 		var purchasePriceListTabResponse []PurchasePriceListTab
+		query := map[string]interface{}{}
 
-		//--------------------sales line items---------------------------
-		page.Filters = "[[\"product_id\",\"=\",\"" + product_variant_id + "\"]]"
+		helpers.AddMandatoryFilters(page, "product_variant_id", "=", product_variant_id)
 		page.Per_page = 50
+		//--------------------sales line items---------------------------
+		// page.Filters = "[[\"product_variant_id\",\"=\",\"" + product_variant_id + "\"]]"
 
-		salesLineItemResponse, err := s.pricingRepository.ListSalesPiceLineItems(page)
+		salesLineItemResponse, err := s.pricingRepository.ListSalesPiceLineItems(query, page)
 		if err != nil {
 			return nil, err
 		}
@@ -2137,19 +2187,19 @@ func (s *service) GetProductVariantTab(product_variant_id string, tab_name strin
 			if err != nil {
 				return nil, err
 			}
-			salesPriceListTabResponse[index].Price_list_name = res.Price_list_name
-			salesPriceListTabResponse[index].Add_channel_of_sale_id = res.SalesPriceList.Add_channel_of_sale_id
-			jsondata, _ := json.Marshal(res.SalesPriceList.Add_channel_of_sale)
-			var channel_of_sale core_dto.LookupCodesDTO
+			salesPriceListTabResponse[index].Price_list_name = res.PriceListName
+			salesPriceListTabResponse[index].Add_channel_of_sale_id = res.SalesPriceList.AddChannelOfSaleId
+			jsondata, _ := json.Marshal(res.SalesPriceList.AddChannelOfSale)
+			var channel_of_sale core.LookupCodesDTO
 			json.Unmarshal(jsondata, &channel_of_sale)
 			salesPriceListTabResponse[index].Add_channel_of_sale = channel_of_sale
 		}
 
 		//------------------purchase line Items------------------------------
-		page.Filters = "[[\"product_id\",\"=\",\"" + product_variant_id + "\"]]"
-		page.Per_page = 50
+		// page.Filters = "[[\"product_id\",\"=\",\"" + product_variant_id + "\"]]"
+		// page.Per_page = 50
 
-		PurchaseLineItemResponse, err := s.pricingRepository.ListPurchasePriceListLineItems(page)
+		PurchaseLineItemResponse, err := s.pricingRepository.ListPurchasePriceListLineItems(query, page)
 		if err != nil {
 			return nil, err
 		}
@@ -2164,8 +2214,8 @@ func (s *service) GetProductVariantTab(product_variant_id string, tab_name strin
 			if err != nil {
 				return nil, err
 			}
-			purchasePriceListTabResponse[index].Price_list_name = res.Price_list_name
-			purchasePriceListTabResponse[index].VendorName = res.PurchasePriceList.Vendor_name.Name
+			purchasePriceListTabResponse[index].Price_list_name = res.PriceListName
+			purchasePriceListTabResponse[index].VendorName = res.PurchasePriceList.VendorDetails.Name
 		}
 		priceListTabResponse.SalesPriceList = salesPriceListTabResponse
 		priceListTabResponse.PurchasePriceList = purchasePriceListTabResponse
@@ -2200,4 +2250,43 @@ func (s *service) GetProductVariantTab(product_variant_id string, tab_name strin
 		return bundleTabResponse, nil
 	}
 	return nil, nil
+}
+
+func (s *service) CreateHsn(data mdm.HSNCodesData) (map[string]interface{}, error) {
+	err := s.productRepository.SaveHsn(data)
+	if err != nil {
+		return map[string]interface{}{"success": "false"}, err
+	}
+	return map[string]interface{}{"success": "true"}, nil
+}
+
+func (s *service) GetAllHsn(page *pagination.Paginatevalue) ([]mdm.HSNCodesData, error) {
+	result, err := s.productRepository.FindAllHsn(page)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (s *service) GetOneHsn(query map[string]interface{}) (mdm.HSNCodesData, error) {
+	result, err := s.productRepository.FindOneHsn(query)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+
+}
+func (s *service) UpdateHsn(query map[string]interface{}, data mdm.HSNCodesData) error {
+	err := s.productRepository.UpdateHsn(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (s *service) DeleteHsn(query map[string]interface{}) error {
+	err := s.productRepository.DeleteHsn(query)
+	if err != nil {
+		return err
+	}
+	return nil
 }

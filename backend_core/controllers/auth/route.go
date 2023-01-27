@@ -33,4 +33,7 @@ func (h *handler) Route(g *echo.Group) {
 	g.POST("/update_profile", h.UpdateProfile, UpdateProfilerValidator)
 	g.GET("/:id/get_user", h.GetUserById)
 	g.GET("/me", h.GetUserProfile, cmiddleware.Authorization)
+	g.POST("/:id/update_user", h.UpdateUser)
+	g.GET("/get_all_users", h.GetAllUsers, cmiddleware.Authorization)
+	g.GET("/user_health_check", h.HealthCheck, cmiddleware.Authorization)
 }

@@ -1,6 +1,8 @@
 package delivery_orders
 
 import (
+	"fmt"
+
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -28,6 +30,7 @@ func (a DeliveryOrderRequest) Validate() error {
 		validation.Field(&a.DeliveryOrdersDetails, validation.Required),
 		validation.Field(&a.DeliveryAddressDetails, validation.Required),
 		validation.Field(&a.BillingAddressDetails, validation.Required),
+		validation.Field(&a.DeliveryOrderLines, validation.Required),
 	)
 }
 
@@ -39,6 +42,7 @@ func (o DeliveryOrdersDetails) Validate() error {
 			validation.When(!o.AutoCreateDoNumber, validation.Required),
 		),
 		validation.Field(&o.Do_currency, validation.Required),
+		validation.Field(&o.Delivery_order_date, validation.Required),
 	)
 }
 
@@ -49,7 +53,7 @@ func (o DeliveryOrderLines) Validate() error {
 		validation.Field(&o.Uom_id, validation.Required),
 		validation.Field(&o.Rate, validation.Required),
 		validation.Field(&o.Discount, validation.Required),
-		validation.Field(&o.Amount, validation.Required),
+		//validation.Field(&o.Amount, validation.Required),
 		validation.Field(&o.Product_qty, validation.Required),
 	)
 }
@@ -59,6 +63,7 @@ func DeliveryOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 	var data = new(DeliveryOrderRequest)
 	return func(c echo.Context) error {
 		er := c.Bind(data)
+		fmt.Println(er)
 		if er != nil {
 			validation_err := helpers.BindErrorStructure(er)
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)

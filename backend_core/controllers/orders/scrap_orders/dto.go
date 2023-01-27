@@ -6,6 +6,7 @@ import (
 	products "fermion/backend_core/controllers/mdm/products"
 	mdm_UOM "fermion/backend_core/controllers/mdm/uom"
 	"fermion/backend_core/controllers/shipping/shipping_orders"
+	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/pkg/util/response"
 )
@@ -38,6 +39,7 @@ type (
 		CreatedByID                 *uint                                `json:"created_by"`
 		UpdatedByID                 *uint                                `json:"updated_by"`
 		DeletedByID                 *uint                                `json:"deleted_by"`
+		CompanyId                   uint                                 `json:"company_id"`
 		Scrap_order_number          string                               `json:"scrap_order_no"`
 		Schedule_scrap_date         string                               `json:"schedule_scrap_date"`
 		AutoCreateScrapNumber       bool                                 `json:"auto_create_scrap_number"`
@@ -53,13 +55,19 @@ type (
 		PickupDateAndTime           SO_PickupDateAndTime                 `json:"pickup_date_time"`
 		Scraping_status             string                               `json:"scraping_status"`
 		Grn_status                  *bool                                `json:"grn_status"`
+		GrnStatusId                 *uint                                `json:"grn_status_id"`
+		GrnStatus                   model_core.Lookupcode                `json:"Grn_status"`
 		SourceDocuments             map[string]interface{}               `json:"source_documents"`
 		SourceDocumentTypeId        *uint                                `json:"source_document_type_id"`
-		Status_id                   uint                                 `json:"status_id"`
+		Status_id                   *uint                                `json:"status_id"`
+		Status                      model_core.Lookupcode                `json:"status"`
 		Status_history              map[string]interface{}               `json:"status_history"`
 		ShippingOrderId             *uint                                `json:"shipping_order_id" `
 		Shipping_details            shipping_orders.ShippingOrderRequest `json:"shipping_details"`
 		IsShipping                  *bool                                `json:"is_shipping"`
+		ExpectedShippingDate        string                               `json:"expected_shipping_date"`
+		Shipping_mode_id            *uint                                `json:"shipping_mode_id"`
+		Shipping_Mode               model_core.Lookupcode                `json:"shipping_mode"`
 		//ShippingOrder               core_dto.LookupCodesDTO `json:"shipping_order"`
 	}
 
@@ -145,11 +153,16 @@ type (
 		SourceDocumentType       core_dto.LookupCodeDTO        `json:"source_document"`
 		SourceDocuments          map[string]interface{}        `json:"source_documents"`
 		SourceDocumentTypeId     *uint                         `json:"source_document_type_id"`
-		Status_id                uint                          `json:"status_id"`
+		Status_id                *uint                         `json:"status_id"`
 		Status                   core_dto.LookupCodeDTO        `json:"status"`
 		Status_history           map[string]interface{}        `json:"status_history"`
 		ShippingOrderId          *uint                         `json:"shipping_order_id" `
 		IsShipping               *bool                         `json:"is_shipping"`
+		ExpectedShippingDate     string                        `json:"expected_shipping_date"`
+		Shipping_mode_id         *uint                         `json:"shipping_mode_id"`
+		Shipping_Mode            core_dto.LookupCodeDTO        `json:"shipping_mode"`
+		GrnStatusId              *uint                         `json:"grn_status_id"`
+		GrnStatus                core_dto.LookupCodeDTO        `json:"Grn_status"`
 		//ShippingOrder        core_dto.LookupCodesDTO               `json:"shipping_order"`
 	}
 	ScrapOrderLinesResponseDTO struct {
@@ -165,7 +178,7 @@ type (
 		Price               float64                     `json:"price"`
 	}
 
-	ScraOrderGetAllResponse struct {
+	ScrapOrderGetAllResponse struct {
 		Body struct {
 			Meta response.MetaResponse
 			Data []ScrapOrdersResponseDTO

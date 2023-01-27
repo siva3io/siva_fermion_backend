@@ -51,9 +51,8 @@ type CurrencyDTO struct {
 }
 
 type PurchasePriceListDTO struct {
-	CreatedByID              *uint                                                `json:"created_by_id"`
-	UpdatedByID              *uint                                                `json:"updated_by_id"`
-	DeletedByID              *uint                                                `json:"deleted_by_id"`
+	UpdatedByID              *uint                                                `json:"updated_by"`
+	CreatedByID              *uint                                                `json:"created_by"`
 	Price_list_id            uint                                                 `json:"price_list_id"`
 	Vendor_name_id           *uint                                                `json:"vendor_name_id"`
 	PurchaseLineItems        []PurchaseLineItemsDTO                               `json:"purchase_line_items"`
@@ -73,9 +72,8 @@ type PurchaseLineItemsDTO struct {
 	LeadTime             string                 `json:"lead_time"`
 }
 type SalesPriceListDTO struct {
-	CreatedByID            *uint               `json:"created_by_id"`
-	UpdatedByID            *uint               `json:"updated_by_id"`
-	DeletedByID            *uint               `json:"deleted_by_id"`
+	CreatedByID            *uint               `json:"created_by"`
+	UpdatedByID            *uint               `json:"updated_by"`
 	Enter_Manually         *bool               `json:"enter_manually" `
 	Add_channel_of_sale_id *uint               `json:"add_channel_of_sale_id" `
 	Add_channel_of_sale    app_core.LookupCode `json:"add_channel_of_sale"`
@@ -116,9 +114,8 @@ type UomDTO struct {
 	ConversionFactor float64               `json:"conversion_factor"`
 }
 type TransferPriceListDTO struct {
-	CreatedByID              *uint                                       `json:"created_by_id"`
-	UpdatedByID              *uint                                       `json:"updated_by_id"`
-	DeletedByID              *uint                                       `json:"deleted_by_id"`
+	CreatedByID              *uint                                       `json:"created_by"`
+	UpdatedByID              *uint                                       `json:"updated_by"`
 	Currency_id              uint                                        `json:"currency_id"`
 	Price_list_id            uint                                        `json:"price_list_id"`
 	ContractDetails          shared_pricing_and_location.ContractDetails `json:"contract_details"`

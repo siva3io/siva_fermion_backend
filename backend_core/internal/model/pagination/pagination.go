@@ -19,9 +19,12 @@ type Paginatevalue struct {
 	Per_page   int    `json:"per_page,omitempty" query:"per_page"`
 	Page_no    int    `json:"page_no,omitempty" query:"page_no"`
 	Sort       string `json:"sort,omitempty" query:"sort"`
+	FilterType string `json:"filter_type,omitempty" query:"filter_type"`
 	TotalRows  int64  `json:"total_rows"`
 	TotalPages int    `json:"total_pages"`
 }
+
+var BasePaginatevalue = Paginatevalue{Filters: "", Per_page: 10, Page_no: 1, Sort: "", TotalRows: 0, TotalPages: 0}
 
 func (p *Paginatevalue) GetPage() int {
 	if p.Page_no == 0 {

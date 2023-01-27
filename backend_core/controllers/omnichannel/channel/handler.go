@@ -33,10 +33,17 @@ type handler struct {
 	coreRepository repository.Core
 }
 
+var ChannelsHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ChannelsHandler != nil {
+		return ChannelsHandler
+	}
 	service := NewService()
 	coreRepository := repository.NewCore()
-	return &handler{service, coreRepository}
+	ChannelsHandler = &handler{service, coreRepository}
+	return ChannelsHandler
 }
 
 // CreateChannel godoc
@@ -73,10 +80,9 @@ func (h *handler) CreateChannel(c echo.Context) error {
 			resp, err = h.service.CreateMarketplace(*data)
 		} else if lookupcode[0].LookupCode == "WEBSTORE" {
 			resp, err = h.service.CreateWebstore(*data)
+		} else if lookupcode[0].LookupCode == "CORE" {
+			resp, err = h.service.CreateChannel(*data)
 		}
-	}
-	if external_value == uint(0) {
-		resp, err = h.service.CreateChannel(*data)
 	}
 	if err != nil {
 		return res.RespErr(c, err)

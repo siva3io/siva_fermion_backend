@@ -22,11 +22,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type NDR struct {
 	model_core.Model
-	ShippingOrderId     uint          `json:"shipping_order_id"` // Reference,awb,shipping_id,pickup address,destination address,customer details,product details,payment,channel
-	ShippingOrder       ShippingOrder `json:"shipping_order" gorm:"foreignKey:ShippingOrderId;references:ID"`
-	Amount              float64       `gorm:"type:double precision" json:"amount"`
-	NDRLines            []NDRLines    `json:"ndr_lines" gorm:"foreignKey:Non_delivery_request_id; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	DeliveryAttemptLeft uint          `json:"delivery_attempt_left" gorm:"type:integer"`
+	ShippingOrderId         *uint          `json:"shipping_order_id"` // Reference,awb,shipping_id,pickup address,destination address,customer details,product details,payment,channel
+	ShippingOrder           *ShippingOrder `json:"shipping_order" gorm:"foreignKey:ShippingOrderId;references:ID"`
+	Amount                  float64        `gorm:"type:double precision" json:"amount"`
+	NDRLines                []NDRLines     `json:"ndr_lines" gorm:"foreignKey:Non_delivery_request_id; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	DeliveryAttemptLeft     uint           `json:"delivery_attempt_left" gorm:"type:integer"`
+	LastDeliveryAttemptDate time.Time      `gorm:"type:time" json:"last_delivery_attempt_date"`
+	FailureReason           string         `json:"failure_reason" gorm:"type:varchar"`
 }
 
 type NDRLines struct {

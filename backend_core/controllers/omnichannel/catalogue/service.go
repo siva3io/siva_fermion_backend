@@ -24,14 +24,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type Service interface {
 
 	//catalogue
-	GetCatalogue(category int, marketplace int, variant_id int) (interface{}, error)
+	GetCatalogue(query map[string]interface{}) (interface{}, error)
 
 	//catalogue template
-	GetCatalogueTemplate(category int, marketplace int) (omnichannel.CatalogueTemplate, error)
+	GetCatalogueTemplate(query map[string]interface{}) (omnichannel.CatalogueTemplate, error)
 	UpsertCatalogueTemplate(data *omnichannel.CatalogueTemplate) error
 
 	//catalogue template data
-	GetCatalogueData(category int, marketplace int, variant_id int) (omnichannel.CatalogueTemplateData, error)
+	GetCatalogueData(query map[string]interface{}) (omnichannel.CatalogueTemplateData, error)
 	UpsertCatalogueTemplateData(data *omnichannel.CatalogueTemplateData) error
 }
 
@@ -39,13 +39,24 @@ type service struct {
 	catalogueRepository omnichannel_repo.Catalogue
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	catalogeRepository := omnichannel_repo.NewCatalogue()
-	return &service{catalogeRepository}
+	newServiceObj = &service{catalogeRepository}
+	return newServiceObj
 }
 
 func (s *service) UpsertCatalogueTemplate(data *omnichannel.CatalogueTemplate) error {
-	res, _ := s.catalogueRepository.GetCatalogue(int(data.CategoryId), int(data.ChannelId))
+	query := map[string]interface{}{
+		"category_id": data.CategoryId,
+		"channel_id":  data.ChannelId,
+	}
+	res, _ := s.catalogueRepository.GetCatalogue(query)
 	if res.CategoryId == 0 && res.ChannelId == 0 {
 		err := s.catalogueRepository.CreateCatalogue(data)
 		if err != nil {
@@ -56,35 +67,37 @@ func (s *service) UpsertCatalogueTemplate(data *omnichannel.CatalogueTemplate) e
 	var resDto CatalogueDTO
 	mdata, _ := json.Marshal(data)
 	json.Unmarshal(mdata, &resDto)
-	query := map[string]interface{}{
+	query1 := map[string]interface{}{
 		"id":   res.ID,
 		"data": resDto,
 	}
-	resp := s.catalogueRepository.UpdateCatalogue(query)
+	resp := s.catalogueRepository.UpdateCatalogue(query1)
 	return resp
 }
 
-func (s *service) GetCatalogueTemplate(category int, marketplace int) (omnichannel.CatalogueTemplate, error) {
-	res, err := s.catalogueRepository.GetCatalogue(category, marketplace)
+func (s *service) GetCatalogueTemplate(query map[string]interface{}) (omnichannel.CatalogueTemplate, error) {
+	res, err := s.catalogueRepository.GetCatalogue(query)
 	if err != nil {
 		return res, err
 	}
 	return res, nil
 }
 
-func (s *service) GetCatalogueData(category int, marketplace int, variant_id int) (omnichannel.CatalogueTemplateData, error) {
-	res, err := s.catalogueRepository.GetCatalogueData(category, marketplace, variant_id)
+func (s *service) GetCatalogueData(query map[string]interface{}) (omnichannel.CatalogueTemplateData, error) {
+	res, err := s.catalogueRepository.GetCatalogueData(query)
 	if err != nil {
 		return res, err
 	}
 	return res, nil
 }
 
-func (s *service) GetCatalogue(category int, marketplace int, variant_id int) (interface{}, error) {
+func (s *service) GetCatalogue(query map[string]interface{}) (interface{}, error) {
 	var response map[string]interface{}
-	template_data, er := s.GetCatalogueData(category, marketplace, variant_id)
+	template_data, er := s.GetCatalogueData(query)
+	delete(query, "variant_id")
+	delete(query, "company_id")
 	if er != nil {
-		template, err := s.GetCatalogueTemplate(category, marketplace)
+		template, err := s.GetCatalogueTemplate(query)
 		byte_template, _ := json.Marshal(template)
 		json.Unmarshal(byte_template, &response)
 		return response, err
@@ -95,8 +108,14 @@ func (s *service) GetCatalogue(category int, marketplace int, variant_id int) (i
 }
 
 func (s *service) UpsertCatalogueTemplateData(data *omnichannel.CatalogueTemplateData) error {
-	res, _ := s.catalogueRepository.GetCatalogueData(int(data.CategoryId), int(data.ChannelId), int(data.VariantId))
-	if res.CategoryId == 0 && res.ChannelId == 0 {
+	query := map[string]interface{}{
+		"category_id": data.CategoryId,
+		"channel_id":  data.ChannelId,
+		"variant_id":  data.VariantId,
+		"company_id":  data.CompanyId,
+	}
+	res, _ := s.catalogueRepository.GetCatalogueData(query)
+	if res.CategoryId == 0 && res.ChannelId == 0 && res.CompanyId == 0 {
 		err := s.catalogueRepository.CreateCatalogueData(data)
 		if err != nil {
 			return err
@@ -106,10 +125,10 @@ func (s *service) UpsertCatalogueTemplateData(data *omnichannel.CatalogueTemplat
 	var resDto CatalogueDTO
 	mdata, _ := json.Marshal(data)
 	json.Unmarshal(mdata, &resDto)
-	query := map[string]interface{}{
+	query1 := map[string]interface{}{
 		"id":   res.ID,
 		"data": resDto,
 	}
-	resp := s.catalogueRepository.UpdateCatalogueData(query)
+	resp := s.catalogueRepository.UpdateCatalogueData(query1)
 	return resp
 }

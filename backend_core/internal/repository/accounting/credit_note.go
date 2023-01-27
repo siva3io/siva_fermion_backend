@@ -34,29 +34,31 @@ type CreditNotes interface {
 	UpdateCreditNote(query map[string]interface{}, data *accounting.CreditNote) error
 	DeleteCreditNote(query map[string]interface{}) error
 	FindOneCreditNote(query map[string]interface{}) (accounting.CreditNote, error)
-	FindAllCreditNote(query interface{}, p *pagination.Paginatevalue) ([]accounting.CreditNote, error)
+	FindAllCreditNote(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.CreditNote, error)
 	//SearchCreditNote(query string) ([]accounting.CreditNote, error)
 
 	SaveCreditLines(accounting.CreditNoteLineItems) error
-	UpdateCreditLines(map[string]interface{}, accounting.CreditNoteLineItems) (int64, error)
-	DeleteCreditLine(map[string]interface{}) error
-	FindCreditLines(map[string]interface{}) (accounting.CreditNoteLineItems, error)
+	UpdateCreditLines(query map[string]interface{}, data accounting.CreditNoteLineItems) (int64, error)
+	DeleteCreditLine(query map[string]interface{}) error
+	FindCreditLines(query map[string]interface{}) (accounting.CreditNoteLineItems, error)
 }
 type credit_note struct {
 	db *gorm.DB
 }
 
+var creditNoteRepository *credit_note //singleton object
+
+// singleton function
 func NewCreditNote() *credit_note {
+	if creditNoteRepository != nil {
+		return creditNoteRepository
+	}
 	db := db.DbManager()
-	return &credit_note{db}
+	creditNoteRepository = &credit_note{db}
+	return creditNoteRepository
 }
 
 func (r *credit_note) SaveCreditNote(data *accounting.CreditNote) error {
-
-	// err := tx.Model(&accounting.CreditNote{}).Create(data).Error
-	// if err != nil {
-	// 	fmt.Println(err)
-	// }
 	err := r.db.Model(&accounting.CreditNote{}).Create(data).Error
 	if err != nil {
 		return err
@@ -65,21 +67,27 @@ func (r *credit_note) SaveCreditNote(data *accounting.CreditNote) error {
 }
 func (r *credit_note) UpdateCreditNote(query map[string]interface{}, data *accounting.CreditNote) error {
 
-	err := r.db.Model(&accounting.CreditNote{}).Where(query).Updates(data).Error
+	err := r.db.Model(&accounting.CreditNote{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if err != nil {
-		return err
+		return err.Error
 	}
 	return nil
 }
 func (r *credit_note) DeleteCreditNote(query map[string]interface{}) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
 	delete(query, "user_id")
 	res := r.db.Model(&accounting.CreditNote{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}
@@ -89,18 +97,18 @@ func (r *credit_note) FindOneCreditNote(query map[string]interface{}) (accountin
 	var data accounting.CreditNote
 	err := r.db.Preload(clause.Associations).Model(&accounting.CreditNote{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
 	}
 	return data, nil
 }
-func (r *credit_note) FindAllCreditNote(query interface{}, p *pagination.Paginatevalue) ([]accounting.CreditNote, error) {
+func (r *credit_note) FindAllCreditNote(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.CreditNote, error) {
 	var data []accounting.CreditNote
-	err := r.db.Preload(clause.Associations).Model(&accounting.CreditNote{}).Scopes(helpers.Paginate(&accounting.CreditNote{}, p, r.db)).Where(query).Find(&data).Error
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Model(&accounting.CreditNote{}).Scopes(helpers.Paginate(&accounting.CreditNote{}, p, r.db)).Where(query).Find(&data)
 	if err != nil {
-		return data, err
+		return data, err.Error
 	}
 	return data, nil
 }
@@ -131,7 +139,9 @@ func (r *credit_note) FindCreditLines(query map[string]interface{}) (accounting.
 	var result accounting.CreditNoteLineItems
 	fmt.Println(query)
 	res := r.db.Model(&accounting.CreditNoteLineItems{}).Where(query).First(&result)
-
+	if res.RowsAffected == 0 {
+		return result, errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return result, res.Error
 	}
@@ -141,7 +151,9 @@ func (r *credit_note) FindCreditLines(query map[string]interface{}) (accounting.
 
 func (r *credit_note) UpdateCreditLines(query map[string]interface{}, data accounting.CreditNoteLineItems) (int64, error) {
 	res := r.db.Model(&accounting.CreditNoteLineItems{}).Where(query).Updates(&data)
-	fmt.Println(data)
+	if res.RowsAffected == 0 {
+		return res.RowsAffected, errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 
 		return res.RowsAffected, res.Error
@@ -153,7 +165,9 @@ func (r *credit_note) UpdateCreditLines(query map[string]interface{}, data accou
 
 func (r *credit_note) DeleteCreditLine(query map[string]interface{}) error {
 	res := r.db.Model(&accounting.CreditNoteLineItems{}).Where(query).Delete(&accounting.CreditNoteLineItems{})
-
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}

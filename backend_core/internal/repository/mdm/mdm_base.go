@@ -55,9 +55,16 @@ type mdmBase struct {
 	db *gorm.DB
 }
 
+var mdmBaseRepository *mdmBase //singleton object
+
+// singleton function
 func NewMdmBase() *mdmBase {
-	database := db.DbManager()
-	return &mdmBase{database}
+	if mdmBaseRepository != nil {
+		return mdmBaseRepository
+	}
+	db := db.DbManager()
+	mdmBaseRepository = &mdmBase{db}
+	return mdmBaseRepository
 
 }
 

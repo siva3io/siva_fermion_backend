@@ -1,11 +1,14 @@
 package purchase_returns
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
 	"fermion/backend_core/controllers/accounting/debitnote"
 	inv_service "fermion/backend_core/controllers/mdm/basic_inventory"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/returns"
 	"fermion/backend_core/internal/repository/orders"
@@ -30,15 +33,16 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreatePurchaseReturn(data *returns.PurchaseReturns, access_template_id string, token_id string) error
-	ListPurchaseReturns(page *pagination.Paginatevalue, access_template_id string, token_id string, access_action string) (interface{}, error)
-	ViewPurchaseReturn(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error)
-	UpdatePurchaseReturn(query map[string]interface{}, data *returns.PurchaseReturns, access_template_id string, token_id string) error
-	DeletePurchaseReturn(query map[string]interface{}, access_template_id string, token_id string) error
-	DeletePurchaseReturnLines(query map[string]interface{}, access_template_id string, token_id string) error
+	CreatePurchaseReturn(metaData core.MetaData, data *PurchaseReturnsDTO) error
+	ListPurchaseReturns(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	ViewPurchaseReturn(metaData core.MetaData) (interface{}, error)
+	UpdatePurchaseReturn(metaData core.MetaData, data *PurchaseReturnsDTO) error
+	DeletePurchaseReturn(metaData core.MetaData) error
+	DeletePurchaseReturnLines(metaData core.MetaData) error
 	SearchPurchaseReturns(query string, access_template_id string, token_id string) (interface{}, error)
-	GetPurchaseReturnsHistory(productId uint, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
-	GetPurchaseReturnTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	GetPurchaseReturnsHistory(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	GetPurchaseReturnTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	ProcessPurchaseReturnCalculation(data *PurchaseReturnsDTO) *PurchaseReturnsDTO
 }
 
 type service struct {
@@ -48,53 +52,60 @@ type service struct {
 	purchaseOrderRepositary  orders.Purchase
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	purchaseReturnRepository := returns_repo.NewPurchaseReturn()
 	basicInventoryService := inv_service.NewService()
 	purchaseOrderRepositary := orders.NewPurchaseOrder()
-	return &service{purchaseReturnRepository, basicInventoryService, debitnote.NewService(), purchaseOrderRepositary}
+	newServiceObj = &service{purchaseReturnRepository, basicInventoryService, debitnote.NewService(), purchaseOrderRepositary}
+	return newServiceObj
 }
 
-func (s *service) CreatePurchaseReturn(data *returns.PurchaseReturns, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) CreatePurchaseReturn(metaData core.MetaData, data *PurchaseReturnsDTO) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "CREATE", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create purchase return at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create purchase return at data level")
 	}
-	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusId)
-	data.StatusHistory = result
-	temp := data.CreatedByID
-	user_id := strconv.Itoa(int(*temp))
-	data.PurchaseReturnNumber = helpers.GenerateSequence("PR", user_id, "purchase_returns")
 
-	err := s.purchaseReturnRepository.Save(data)
+	data = s.ProcessPurchaseReturnCalculation(data)
+	var prData *returns.PurchaseReturns
+	helpers.JsonMarshaller(data, &prData)
+	prData.StatusHistory, _ = helpers.UpdateStatusHistory(prData.StatusHistory, prData.StatusId)
+	prData.PurchaseReturnNumber = helpers.GenerateSequence("PR", fmt.Sprint(metaData.TokenUserId), "purchase_returns")
+	defaultStatus, _ := helpers.GetLookupcodeId("RETURN_STATUS", "DRAFT")
+	prData.StatusId = defaultStatus
+	prData.CompanyId = metaData.CompanyId
+	prData.CreatedByID = &metaData.TokenUserId
 
+	err := s.purchaseReturnRepository.Save(prData)
 	if err != nil {
-		fmt.Println("error", err.Error())
-		return res.BuildError(res.ErrUnprocessableEntity, err)
+		return err
 	}
 
-	data_inv := map[string]interface{}{
-		"id":            data.ID,
-		"order_lines":   data.PurchaseReturnLines,
+	dataInv := map[string]interface{}{
+		"id":            prData.ID,
+		"order_lines":   prData.PurchaseReturnLines,
 		"order_type":    "purchase_return",
 		"is_update_inv": true,
 		"is_credit":     false,
 	}
-
-	//updating the inventory & Committed Stock
-	go s.basicInventoryService.UpdateInventory(data_inv, token_id, access_template_id)
-
+	//updating the inventory Committed Stock
+	go s.basicInventoryService.UpdateTransactionInventory(metaData, dataInv)
 	return nil
 }
 
-func (s *service) ListPurchaseReturns(page *pagination.Paginatevalue, access_template_id string, token_id string, access_action string) (interface{}, error) {
+func (s *service) ListPurchaseReturns(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "PURCHASE_RETURNS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), metaData.ModuleAccessAction, "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list purchase return at view level")
 	}
@@ -102,67 +113,57 @@ func (s *service) ListPurchaseReturns(page *pagination.Paginatevalue, access_tem
 		return nil, fmt.Errorf("you dont have access for list purchase return at data level")
 	}
 
-	data, err := s.purchaseReturnRepository.FindAll(page)
-
+	data, err := s.purchaseReturnRepository.FindAll(metaData.Query, page)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
 }
 
-func (s *service) ViewPurchaseReturn(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) ViewPurchaseReturn(metaData core.MetaData) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view purchase return at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view purchase return at data level")
 	}
-	data, err := s.purchaseReturnRepository.FindOne(query)
-
-	if err != nil && err.Error() == "record not found" {
-		return nil, res.BuildError(res.ErrDataNotFound, err)
-	}
-
+	data, err := s.purchaseReturnRepository.FindOne(metaData.Query)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
 }
 
-func (s *service) UpdatePurchaseReturn(query map[string]interface{}, data *returns.PurchaseReturns, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) UpdatePurchaseReturn(metaData core.MetaData, data *PurchaseReturnsDTO) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "UPDATE", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update purchase return at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update purchase return at data level")
 	}
-	var find_query = map[string]interface{}{
-		"id": query["id"],
-	}
 
-	found_data, er := s.purchaseReturnRepository.FindOne(find_query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
+	data = s.ProcessPurchaseReturnCalculation(data)
+	var PrData returns.PurchaseReturns
+	helpers.JsonMarshaller(data, &PrData)
+	old_data, err := s.purchaseReturnRepository.FindOne(metaData.Query)
+	if err != nil {
+		return err
 	}
-
-	old_data := found_data.(returns.PurchaseReturns)
 
 	old_status := old_data.StatusId
-	new_status := data.StatusId
+	new_status := PrData.StatusId
 
 	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusId)
-		data.StatusHistory = result
+		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, PrData.StatusId)
+		PrData.StatusHistory = result
 		final_status, _ := helpers.GetLookupcodeId("RETURN_STATUS", "FULLY_RETURNED")
 		partial_status, _ := helpers.GetLookupcodeId("RETURN_STATUS", "PARTIALLY_RETURNED")
-		if data.StatusId == final_status || data.StatusId == partial_status {
-			data_inv := map[string]interface{}{
+		if PrData.StatusId == final_status || PrData.StatusId == partial_status {
+			dataInv := map[string]interface{}{
 				"id":            data.ID,
 				"order_lines":   data.PurchaseReturnLines,
 				"order_type":    "purchase_return",
@@ -171,24 +172,24 @@ func (s *service) UpdatePurchaseReturn(query map[string]interface{}, data *retur
 			}
 
 			//updating the Committed Stock
-			go s.basicInventoryService.UpdateInventory(data_inv, token_id, access_template_id)
+			go s.basicInventoryService.UpdateTransactionInventory(metaData, dataInv)
 		}
 	}
-
-	err := s.purchaseReturnRepository.Update(query, data)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+	data.UpdatedByID = &metaData.TokenUserId
+	err = s.purchaseReturnRepository.Update(metaData.Query, &PrData)
+	if err != nil {
+		return err
 	}
-	for _, return_line := range data.PurchaseReturnLines {
+	for _, return_line := range PrData.PurchaseReturnLines {
 		update_query := map[string]interface{}{
 			"product_id": return_line.ProductId,
-			"pr_id":      uint(query["id"].(int)),
+			"pr_id":      metaData.Query["id"],
 		}
 		count, err1 := s.purchaseReturnRepository.UpdateReturnLines(update_query, return_line)
 		if err1 != nil {
 			return err1
 		} else if count == 0 {
-			return_line.PrId = uint(query["id"].(int))
+			return_line.PrId = uint(metaData.Query["id"].(float64))
 			e := s.purchaseReturnRepository.SaveReturnLines(return_line)
 			if e != nil {
 				return e
@@ -198,54 +199,43 @@ func (s *service) UpdatePurchaseReturn(query map[string]interface{}, data *retur
 	return nil
 }
 
-func (s *service) DeletePurchaseReturn(query map[string]interface{}, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) DeletePurchaseReturn(metaData core.MetaData) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete purchase return at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete purchase return at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.purchaseReturnRepository.FindOne(q)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.purchaseReturnRepository.Delete(query)
+	err := s.purchaseReturnRepository.Delete(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	} else {
-		query := map[string]interface{}{"id": query["id"]}
-		er := s.purchaseReturnRepository.DeleteReturnLine(query)
-		if er != nil {
-			return res.BuildError(res.ErrDataNotFound, er)
+		query := map[string]interface{}{
+			"pr_id": metaData.Query["id"],
+		}
+		err = s.purchaseReturnRepository.DeleteReturnLine(query)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (s *service) DeletePurchaseReturnLines(query map[string]interface{}, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) DeletePurchaseReturnLines(metaData core.MetaData) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete purchase return at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete purchase return at data level")
 	}
-	_, er := s.purchaseReturnRepository.FindReturnLines(query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.purchaseReturnRepository.DeleteReturnLine(query)
-
+	err := s.purchaseReturnRepository.DeleteReturnLine(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	}
-
 	return nil
 }
 
@@ -267,34 +257,34 @@ func (s *service) SearchPurchaseReturns(query string, access_template_id string,
 	return data, nil
 }
 
-func (s *service) GetPurchaseReturnsHistory(productId uint, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "PURCHASE_RETURNS", *token_user_id)
+func (s *service) GetPurchaseReturnsHistory(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "LIST", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list purchase return at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list purchase return at data level")
 	}
-	data, err := s.purchaseReturnRepository.GetPurchaseReturnsHistory(productId, page)
-
+	data, err := s.purchaseReturnRepository.GetPurchaseReturnsHistory(metaData.Query, page)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
 }
-func (s *service) GetPurchaseReturnTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetPurchaseReturnTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "SALES_RETURNS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "PURCHASE_RETURNS", metaData.TokenUserId)
 	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list sales return at view level")
+		return nil, fmt.Errorf("you dont have access for list purhase return at view level")
 	}
 	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list sales return at data level")
+		return nil, fmt.Errorf("you dont have access for list purchase return at data level")
 	}
 
+	id := metaData.Query["id"].(string)
+	tab := metaData.Query["tab"].(string)
+	// token_id := fmt.Sprint(metaData.TokenUserId)
+	// access_template_id := fmt.Sprint(metaData.AccessTemplateId)
 	purchaseReturnId, err := strconv.Atoi(id)
 	if err != nil {
 		return nil, err
@@ -306,9 +296,9 @@ func (s *service) GetPurchaseReturnTab(id, tab string, page *pagination.Paginate
 
 		debitNotePage := page
 		debitNotePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, purchaseReturnId)
-		var query = make(map[string]interface{}, 0)
+		// var query = make(map[string]interface{}, 0)
 
-		debitNoteData, err := s.debitNoteService.GetDebitNoteList(query, debitNotePage, token_id, access_template_id, "LIST")
+		debitNoteData, err := s.debitNoteService.GetDebitNoteList(metaData, debitNotePage)
 		if err != nil {
 			return nil, err
 		}
@@ -316,16 +306,50 @@ func (s *service) GetPurchaseReturnTab(id, tab string, page *pagination.Paginate
 	}
 
 	if tab == "purchase_orders" {
-
-		sourceDocumentId, _ := helpers.GetLookupcodeId("PURCHASE_RETURNS_SOURCE_DOCUMENT_TYPES", "PURCHASE_ORDERS")
-
-		debitNotePage := page
-		debitNotePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, purchaseReturnId)
-		debitNoteData, err := s.purchaseOrderRepositary.FindAll(page)
+		purchaseReturnPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("PURCHASE_RETURNS_SOURCE_DOCUMENT_TYPES", "PURCHASE_ORDERS")
+		purchaseReturnPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_id\",\"=\",%v]]", purchaseReturnId, source_document_type_id)
+		purchaseReturn_order_interface, err := s.ListPurchaseReturns(core.MetaData{}, purchaseReturnPagination)
 		if err != nil {
 			return nil, err
 		}
-		return debitNoteData, nil
+
+		purchaseReturn_order := purchaseReturn_order_interface.([]returns.PurchaseReturns)
+		if len(purchaseReturn_order) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var purchaseReturnOrderSourceDoc map[string]interface{}
+		purchaseReturnOrderSourceDocJson := purchaseReturn_order[0].SourceDocuments
+		dto, err := json.Marshal(purchaseReturnOrderSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &purchaseReturnOrderSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		purchaseReturnOrderSourceDocId := purchaseReturnOrderSourceDoc["id"]
+		if purchaseReturnOrderSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+		purchaseOrderPage := page
+		purchaseOrderPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", purchaseReturnOrderSourceDoc["id"])
+		data, err := s.purchaseOrderRepositary.FindAll(nil, page)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
 	return nil, nil
+}
+func (s *service) ProcessPurchaseReturnCalculation(data *PurchaseReturnsDTO) *PurchaseReturnsDTO {
+	var totalQuantity int64 = 0
+
+	for _, returnLines := range data.PurchaseReturnLines {
+		totalQuantity = totalQuantity + returnLines.QuantityReturned
+	}
+	data.TotalQuantity = totalQuantity
+	return data
 }

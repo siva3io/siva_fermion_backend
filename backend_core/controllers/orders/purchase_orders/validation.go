@@ -23,6 +23,27 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
+func (a PurchaseOrdersDTO) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.VendorDetails, validation.Required),
+		validation.Field(&a.BillingAddress, validation.Required),
+		validation.Field(&a.DeliveryAddress, validation.Required),
+		//validation.Field(&a.PurchaseOrderNumber, validation.Required),
+		validation.Field(&a.DateAndTime, validation.Required),
+		validation.Field(&a.CurrencyId, validation.Required),
+		validation.Field(&a.PurchaseOrderlines, validation.Required),
+	)
+}
+func (a PurchaseOrderLines) Validate() error {
+	return validation.ValidateStruct(&a,
+		validation.Field(&a.ProductId, validation.Required),
+		validation.Field(&a.Quantity, validation.Required),
+		validation.Field(&a.Price, validation.Required),
+		validation.Field(&a.Discount, validation.Required),
+		validation.Field(&a.Tax, validation.Required),
+		validation.Field(&a.Amount, validation.Required),
+	)
+}
 func PurchaseOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 
 	var data = new(PurchaseOrdersDTO)
@@ -33,7 +54,7 @@ func PurchaseOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := validation.ValidateStruct(data)
+		err := validation.Validate(data)
 
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)

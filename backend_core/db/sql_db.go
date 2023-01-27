@@ -8,16 +8,17 @@ import (
 	"time"
 
 	scheduler "fermion/backend_core/controllers/scheduler/model"
-	"fermion/backend_core/internal/model"
 	"fermion/backend_core/internal/model/accounting"
 	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/inventory_tasks"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/mdm/shared_pricing_and_location"
+	"fermion/backend_core/internal/model/offers"
 	"fermion/backend_core/internal/model/omnichannel"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/payments"
+	"fermion/backend_core/internal/model/rating"
 	"fermion/backend_core/internal/model/returns"
 	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util"
@@ -80,6 +81,7 @@ func Init() {
 	seedTD := flag.Bool("seedTD", false, "a bool")
 	migrateDB := flag.Bool("migrateDB", false, "a bool")
 	seedMeta := flag.String("seedMeta", "all", "a string")
+	// migrateDBVersion := flag.Bool("migrateDBVersion", false, "migrate version")
 	flag.Parse()
 	if *clearDB {
 		fmt.Println("Deleting all data from database...")
@@ -88,8 +90,13 @@ func Init() {
 		fmt.Println("Successfully deleted all data from database...")
 	}
 	if *migrateDB {
+
+		// reset redis-db
+		RedisClient := RedisManager()
+		RedisClient.FlushAllAsync()
+		fmt.Println("Successfully deleted all data from cache...")
+
 		db.AutoMigrate(model_core.Tables...)
-		db.AutoMigrate(model.SampleTables...)
 		db.AutoMigrate(model_core.CoreUsersTables...)
 		db.AutoMigrate(mdm.MdmTables...)
 		db.AutoMigrate(shared_pricing_and_location.SharedLocationandPricingTables...)
@@ -104,6 +111,9 @@ func Init() {
 		db.AutoMigrate(scheduler.SchedulerTables...)
 		db.AutoMigrate(model_core.AccessTables...)
 		db.AutoMigrate(payments.PaymentsTables...)
+		db.AutoMigrate(rating.RatingTables...)
+		db.AutoMigrate(&util.MigrationVersionControl{})
+		db.AutoMigrate(offers.OffersTables...)
 		util.SeedMetaTable(db, seedMeta)
 	}
 	if *seedMD {
@@ -112,9 +122,12 @@ func Init() {
 	if *seedTD {
 		util.SeedTestData(db)
 	}
-	if !*clearDB && (*seedMeta != "" && !*migrateDB) {
-		util.SeedMetaTable(db, seedMeta)
-	}
+	// if *migrateDBVersion {
+	util.Migrate(db)
+	// }
+	// if !*clearDB && (*seedMeta != "" && !*migrateDB) {
+	// 	util.SeedMetaTable(db, seedMeta)
+	// }
 }
 
 func DbManager() *gorm.DB {

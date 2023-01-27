@@ -2,7 +2,6 @@ package util
 
 import (
 	"os"
-	"regexp"
 	"strconv"
 
 	"github.com/joho/godotenv"
@@ -23,8 +22,6 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
-const projectDirName = "fermion"
-
 type Env interface {
 	GetString(name string) string
 }
@@ -40,9 +37,8 @@ func NewEnv() *env {
 }
 
 func (e *env) Load(env string) {
-	re := regexp.MustCompile(`^(.*` + projectDirName + `)`)
+
 	cwd, _ := os.Getwd()
-	rootPath := re.Find([]byte(cwd))
 
 	var envFile string
 	switch env {
@@ -54,7 +50,7 @@ func (e *env) Load(env string) {
 		envFile = "development"
 	}
 
-	err := godotenv.Load(string(rootPath) + `/.env.` + envFile)
+	err := godotenv.Load(cwd + `/.env.` + envFile)
 	if err != nil {
 		logrus.WithFields(logrus.Fields{
 			"cause": err,

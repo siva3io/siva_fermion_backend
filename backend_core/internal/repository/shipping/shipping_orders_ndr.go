@@ -1,6 +1,7 @@
 package shipping
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -28,31 +29,41 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type NDR interface {
-	CreateNDR(data *shipping.NDR) (uint, error)
+	CreateNDR(data *shipping.NDR) error
 	BulkCreateNDR(data *[]shipping.NDR) error
-	GetAllNDR(p *pagination.Paginatevalue) ([]shipping.NDR, error)
-	GetNDR(id uint) (shipping.NDR, error)
-	UpdateNDR(id uint, data shipping.NDR) error
-	DeleteNDR(id uint, user_id uint) error
+	GetAllNDR(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.NDR, error)
+	GetNDR(query map[string]interface{}) (shipping.NDR, error)
+	UpdateNDR(query map[string]interface{}, data *shipping.NDR) error
+	DeleteNDR(query map[string]interface{}) error
 
 	CreateNDRLines(data shipping.NDRLines) error
-	GetNDRLines(query interface{}) ([]shipping.NDRLines, error)
-	UpdateNDRLines(query interface{}, data shipping.NDRLines) (int64, error)
-	DeleteNDRLines(query interface{}) error
+	GetNDRLines(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.NDRLines, error)
+	UpdateNDRLines(query map[string]interface{}, data *shipping.NDRLines) (int64, error)
+	DeleteNDRLines(query map[string]interface{}) error
 }
 
 type ndr struct {
 	db *gorm.DB
 }
 
+var ndrRepository *ndr //singleton object
+
+// singleton function
 func NewNDR() *ndr {
+	if ndrRepository != nil {
+		return ndrRepository
+	}
 	db := db.DbManager()
-	return &ndr{db}
+	ndrRepository = &ndr{db}
+	return ndrRepository
 }
 
-func (r *ndr) CreateNDR(data *shipping.NDR) (uint, error) {
-	res := r.db.Model(&shipping.NDR{}).Create(&data)
-	return data.ID, res.Error
+func (r *ndr) CreateNDR(data *shipping.NDR) error {
+	err := r.db.Model(&shipping.NDR{}).Create(&data).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ndr) BulkCreateNDR(data *[]shipping.NDR) error {
@@ -60,31 +71,40 @@ func (r *ndr) BulkCreateNDR(data *[]shipping.NDR) error {
 	return res.Error
 }
 
-func (r *ndr) GetNDR(id uint) (shipping.NDR, error) {
+func (r *ndr) GetNDR(query map[string]interface{}) (shipping.NDR, error) {
 	var data shipping.NDR
-	result := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.NDR{}).Where("id", id).First(&data)
-	if result.Error != nil {
-		return data, result.Error
+	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.NDR{}).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return data, err.Error
 	}
 	return data, nil
 }
 
-func (r *ndr) GetAllNDR(p *pagination.Paginatevalue) ([]shipping.NDR, error) {
+func (r *ndr) GetAllNDR(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.NDR, error) {
 	var data []shipping.NDR
 
-	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.NDR{}).Scopes(helpers.Paginate(&shipping.NDR{}, p, r.db)).Where("is_active = true").Find(&data).Error
+	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations + "." + clause.Associations).Model(&shipping.NDR{}).Scopes(helpers.Paginate(&shipping.NDR{}, p, r.db)).Where("is_active = true").Find(&data).Error
 	if err != nil {
 		return data, err
 	}
 	return data, nil
 }
 
-func (r *ndr) UpdateNDR(id uint, data shipping.NDR) error {
-	res := r.db.Model(&shipping.NDR{}).Where("id", id).Updates(&data)
-	return res.Error
+func (r *ndr) UpdateNDR(query map[string]interface{}, data *shipping.NDR) error {
+	err := r.db.Model(&shipping.NDR{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }
 
-func (r *ndr) UpdateNDRLines(query interface{}, data shipping.NDRLines) (int64, error) {
+func (r *ndr) UpdateNDRLines(query map[string]interface{}, data *shipping.NDRLines) (int64, error) {
 	result := r.db.Model(&shipping.NDRLines{}).Where(query).Updates(&data)
 	return result.RowsAffected, result.Error
 }
@@ -94,24 +114,25 @@ func (r *ndr) CreateNDRLines(data shipping.NDRLines) error {
 	return result.Error
 }
 
-func (r *ndr) DeleteNDR(id uint, user_id uint) error {
+func (r *ndr) DeleteNDR(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&shipping.NDR{}).Where("id", id).Updates(data)
+	delete(query, "user_id")
+	res := r.db.Model(&shipping.NDR{}).Where(query).Updates(data)
 	return res.Error
 }
 
-func (r *ndr) GetNDRLines(query interface{}) ([]shipping.NDRLines, error) {
+func (r *ndr) GetNDRLines(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.NDRLines, error) {
 	var data []shipping.NDRLines
 	result := r.db.Model(&shipping.NDRLines{}).Where(query).Find(&data)
 	return data, result.Error
 }
 
-func (r *ndr) DeleteNDRLines(query interface{}) error {
+func (r *ndr) DeleteNDRLines(query map[string]interface{}) error {
 	var data shipping.NDRLines
 	result := r.db.Model(&shipping.NDRLines{}).Where(query).Delete(&data)
 	return result.Error

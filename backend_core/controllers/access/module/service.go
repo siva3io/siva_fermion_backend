@@ -38,9 +38,15 @@ type service struct {
 	moduleRepository access_repo.Module
 }
 
-func NewService() *service {
-	return &service{access_repo.NewModule()}
+var newServiceObj *service //singleton object
 
+// singleton function
+func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{access_repo.NewModule()}
+	return newServiceObj
 }
 func (s *service) RegisterModule(data *model_core.AccessModuleAction) error {
 

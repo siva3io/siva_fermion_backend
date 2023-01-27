@@ -23,8 +23,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.ListWallets, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewWallet, cmiddleware.Authorization)
-	g.POST("/create", h.CreateWallet, cmiddleware.Authorization, WalletCreateValidate)
-	g.POST("/:id/update", h.UpdateWallet, cmiddleware.Authorization, WalletUpdateValidate)
+	g.POST("/create", h.CreateWalletEvent, cmiddleware.Authorization, WalletCreateValidate)
+	g.POST("/:id/update", h.UpdateWalletEvent, cmiddleware.Authorization, WalletUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteWallet, cmiddleware.Authorization)
 	g.GET("/get_wallet", h.GetWallet, cmiddleware.Authorization)
 	g.POST("/add_money", h.AddMoney, cmiddleware.Authorization, WalletUpdateValidate)

@@ -24,15 +24,15 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.FindAllScrapOrders, cmiddleware.Authorization)
 	g.GET("/dropdown", h.FindAllScrapOrdersDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.ScrapOrdersByid, cmiddleware.Authorization)
-	g.POST("/create", h.CreateScrapOrder, cmiddleware.Authorization, ScrapOrdersCreateValidate)
-	g.POST("/:id/update", h.UpdateScrapOrder, cmiddleware.Authorization, ScrapOrdersUpdateValidate)
+	g.POST("/create", h.CreateScrapOrderEvent, cmiddleware.Authorization, ScrapOrdersCreateValidate)
+	g.POST("/:id/update", h.UpdateScrapOrderEvent, cmiddleware.Authorization, ScrapOrdersUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteScrapOrder, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_product", h.DeleteScrapOrderLines, cmiddleware.Authorization)
 	g.POST("/bulkcreate", h.BulkCreateScrapOrder, cmiddleware.Authorization)
 
 	g.POST("/:id/send_email", h.SendEmailScrapOrders, cmiddleware.Authorization)
 	g.POST("/:id/download_pdf", h.DownloadScrapOrdersPDF, cmiddleware.Authorization)
-	g.POST("/:id/generate_pdf", h.GenerateScrapOrdersPDF, cmiddleware.Authorization)
+	g.GET("/:id/generate_pdf", h.GenerateScrapOrdersPDF, cmiddleware.Authorization)
 
 	g.POST("/:id/favourite", h.FavouriteScrapOrder, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouriteScrapOrder, cmiddleware.Authorization)

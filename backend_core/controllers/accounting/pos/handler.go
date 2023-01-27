@@ -28,9 +28,16 @@ type handler struct {
 	service Service
 }
 
+var PosHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if PosHandler != nil {
+		return PosHandler
+	}
 	service := NewService()
-	return &handler{service}
+	PosHandler = &handler{service}
+	return PosHandler
 }
 
 func (h *handler) CreatePos(c echo.Context) (err error) {
@@ -40,12 +47,18 @@ func (h *handler) CreatePos(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	s := c.Get("TokenUserID").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(s)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	data.CreatedByID = helpers.ConvertStringToUint(token_id)
 	err = h.service.CreatePos(&data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdatePosLinkInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "pos created successfully", map[string]interface{}{"created_id": data.ID})
 }
 
@@ -60,10 +73,11 @@ func (h *handler) UpdatePos(c echo.Context) (err error) {
 	idString := c.Param("id")
 	id, _ := strconv.Atoi(idString)
 
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+	user_id, _ := strconv.Atoi(token_id)
 
-	data.UpdatedByID = helpers.ConvertStringToUint(s)
+	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
 
 	query := map[string]interface{}{
 		"id":         id,
@@ -74,6 +88,9 @@ func (h *handler) UpdatePos(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdatePosLinkInCache(token_id, access_template_id)
 
 	return res.RespSuccess(c, "pos created successfully", map[string]interface{}{"updated_id": id})
 }

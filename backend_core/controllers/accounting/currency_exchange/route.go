@@ -21,8 +21,8 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreateExchangePair, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdateExchangePair, cmiddleware.Authorization)
+	g.POST("/create", h.CreateExchangePairEvent, cmiddleware.Authorization, CurrencyExchangeCreateValidate)
+	g.POST("/:id/update", h.UpdateExchangePairEvent, cmiddleware.Authorization, CurrencyExchangeUpdateValidate)
 	g.GET("", h.GetExchangePair, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetExchangePairDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.GetExchangePairData, cmiddleware.Authorization)

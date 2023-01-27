@@ -1,4 +1,4 @@
-
+# build stage
 # Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
 # All rights reserved.
 # This program is free software: you can redistribute it and/or modify
@@ -12,7 +12,6 @@
 # You should have received a copy of the GNU Lesser General Public License v3.0
 # along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 
-# build stage
 FROM golang:1.14-alpine AS builder
 WORKDIR /app
 COPY . .

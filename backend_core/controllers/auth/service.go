@@ -13,9 +13,15 @@ import (
 	"strings"
 
 	// core_service "fermion/backend_core/controllers/cores"
-	mdm_service "fermion/backend_core/controllers/mdm/contacts"
+	template_service "fermion/backend_core/controllers/access/template"
+	"fermion/backend_core/controllers/eda"
+	contact_service "fermion/backend_core/controllers/mdm/contacts"
+	location_service "fermion/backend_core/controllers/mdm/locations"
+	"fermion/backend_core/internal/model/core"
 	model_core "fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/mdm"
 	mdm_model "fermion/backend_core/internal/model/mdm"
+	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/repository"
 	mdm_repo "fermion/backend_core/internal/repository/mdm"
 	"fermion/backend_core/pkg/util/helpers"
@@ -53,23 +59,35 @@ type Service interface {
 	UpdateProfile(data UpdateProfileDTO) error
 	GetUser(id string, access_template_id string) (UserResponseDTO, error)
 	GetUserById(id uint) (UserVisitDTO, error)
+	UpdateUser(id uint, data model_core.CoreUsers) error
+	FindAllUsers(query map[string]interface{}, p *pagination.Paginatevalue) ([]model_core.CoreUsers, error)
 	// UpdateUserProfile(query map[string]interface{}, data *model_core.CoreUsers) error
 }
 
 type service struct {
-	userRepository    repository.User
-	coreRepository    repository.Core
-	contactRepository mdm_repo.Contacts
-	contactService    mdm_service.Service
+	userRepository        repository.User
+	coreRepository        repository.Core
+	contactRepository     mdm_repo.Contacts
+	contactService        contact_service.Service
+	locationService       location_service.Service
+	accessTemplateService template_service.Services
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	userRepository := repository.NewUser()
-	// coreService := core_service.NewService()
 	coreRepository := repository.NewCore()
 	contactRepository := mdm_repo.NewContacts()
-	contactService := mdm_service.NewService()
-	return &service{userRepository, coreRepository, contactRepository, contactService}
+	contactService := contact_service.NewService()
+	locationService := location_service.NewService()
+	accessTemplateService := template_service.NewService()
+	newServiceObj = &service{userRepository, coreRepository, contactRepository, contactService, locationService, accessTemplateService}
+	return newServiceObj
 }
 
 // -------------------Basic Auth----------------------------------------------------------------
@@ -152,6 +170,9 @@ func (s *service) UserLogin(login map[string]interface{}) (map[string]interface{
 		companyResponse, _ := s.coreRepository.FindCompany(query)
 		if companyResponse.Name == "" {
 			data, err := s.coreRepository.FindCompany(map[string]interface{}{"name": "Eunimart Ltd"})
+			if err != nil {
+				return nil, err
+			}
 			json_data, _ := json.Marshal(data.CompanyDefaults)
 			json.Unmarshal(json_data, &company.CompanyDefaults)
 			company.FilePreferenceID = data.FilePreferenceID
@@ -175,9 +196,35 @@ func (s *service) UserLogin(login map[string]interface{}) (map[string]interface{
 		if otp_err != nil {
 			return nil, otp_err
 		}
+		//------------------create default location-------------------------------------------------
+		var virtual_location location_service.LocationRequestDTO
+		virtual_location.LocationTypeId, _ = helpers.GetLookupcodeId("LOCATION_TYPE", "VIRTUAL_LOCATION")
+		virtual_location.Name = "Default Location"
+		virtual_location.CompanyId = resp.CompanyId
+
+		//-----fetching company admin access id-------------------
+		p := new(pagination.Paginatevalue)
+		p.Filters = "[[\"name\",\"=\",\"COMPANY_ADMIN\"]]"
+		access_template_list, _ := s.accessTemplateService.GetAllTemplateList(p)
+
+		//creating location
+		var metaData core.MetaData
+		if len(access_template_list) > 0 {
+			metaData.AccessTemplateId = access_template_list[0].ID
+		}
+		metaData.TokenUserId = resp.ID
+		metaData.CompanyId = company.ID
+
+		request_payload := map[string]interface{}{
+			"meta_data": metaData,
+			"data":      virtual_location,
+		}
+		eda.Produce(eda.CREATE_LOCATION, request_payload)
+		fmt.Println("--------------------->>> Default Location Creation InProgress  <<<-----------------------------")
 
 		return map[string]interface{}{"id": resp.ID, "status": "user_created", "new_user": true, "otp_sent": true}, nil
 	}
+	// location_id := location_data.(shared_pricing_and_location.Locations).ID
 
 	//---------If user is already existing then send OTP directly---------------------------------
 	otp_err := s.SendOtp(resp)
@@ -221,7 +268,7 @@ func (s *service) VerifyOtp(dto VerifyOtpDTO) (interface{}, error) {
 	}
 	var auth model_core.Auth
 	var resp VerifyOtpResponse
-	var user UserObject
+	var user UserResponseDTO
 
 	value, _ := json.Marshal(response)
 	_ = json.Unmarshal(response.Auth, &auth)
@@ -242,7 +289,10 @@ func (s *service) VerifyOtp(dto VerifyOtpDTO) (interface{}, error) {
 				var access_ids []interface{}
 				value, _ := json.Marshal(response.AccessIds)
 				json.Unmarshal(value, &access_ids)
-				access_id := fmt.Sprintf("%v", access_ids[0])
+				var access_id string
+				if len(access_ids) > 0 {
+					access_id = fmt.Sprintf("%v", access_ids[0])
+				}
 				dto.AccessTemplateId = *helpers.ConvertStringToUint(access_id)
 			}
 			resp.Token, _ = response.GenerateToken(dto.AccessTemplateId, 72)
@@ -358,7 +408,7 @@ func (s *service) UpdateProfile(data UpdateProfileDTO) error {
 	//=================create contact===============================================
 	var contact mdm_model.Partner
 	query = map[string]interface{}{"primary_email": data.Email}
-	contactResponse, _ := s.contactRepository.FindOneContact(query)
+	contactResponse, _ := s.contactRepository.FindOne(query)
 	if contactResponse.ID == 0 {
 
 		defaultContactTypeID, err := helpers.GetLookupcodeId("CONTACT_TYPE", "INDIVIDUAL")
@@ -374,8 +424,9 @@ func (s *service) UpdateProfile(data UpdateProfileDTO) error {
 		contact.FirstName = data.FirstName
 		contact.LastName = data.LastName
 		contact.ImageOptions = data.Profile
+		contact.UserId = data.ID
 
-		err = s.contactRepository.SaveContact(&contact)
+		err = s.contactRepository.Create(&contact)
 		if err != nil {
 			return err
 		}
@@ -387,35 +438,38 @@ func (s *service) UpdateProfile(data UpdateProfileDTO) error {
 func (s *service) GetUser(id string, access_template_id string) (UserResponseDTO, error) {
 	var UserResponse UserResponseDTO
 	ID, _ := strconv.Atoi(id)
+	accessTemplateId, _ := strconv.Atoi(access_template_id)
+
 	response, err := s.userRepository.FindUser(map[string]interface{}{"id": uint(ID)})
 	if err != nil {
 		return UserResponse, err
 	}
-	dto, err := json.Marshal(&response)
-	if err != nil {
-		return UserResponse, err
-	}
-	json.Unmarshal(dto, &UserResponse)
-	result, err := s.contactService.GetContact(map[string]interface{}{"primary_email": UserResponse.Email}, id, access_template_id)
-	jsonresult, err := json.Marshal(&result)
-	if err != nil {
-		return UserResponse, err
-	}
-	var contactDetails map[string]interface{}
-	json.Unmarshal(jsonresult, &contactDetails)
-	defaultAddress, _ := json.Marshal(contactDetails["default_address"])
-	UserResponse.AddressDetails = defaultAddress
+	helpers.JsonMarshaller(response, &UserResponse)
 
-	if contactDetails["parent"] != nil {
-		parentDetails := contactDetails["parent"].(map[string]interface{})
-		if parentDetails["first_name"] != nil {
-			UserResponse.TeamHead = parentDetails["first_name"].(string)
-		}
-		if parentDetails["last_name"] != nil {
-			UserResponse.TeamHead = UserResponse.TeamHead + " " + parentDetails["last_name"].(string)
+	//============ fetch address details from contacts ========================
+	var metaData model_core.MetaData
+	metaData.TokenUserId = uint(ID)
+	metaData.AccessTemplateId = uint(accessTemplateId)
+	metaData.Query = make(map[string]interface{})
+	metaData.Query["user_id"] = UserResponse.ID
+
+	result, _ := s.contactService.FindOne(metaData)
+
+	var contactDetails mdm.Partner
+	helpers.JsonMarshaller(result, &contactDetails)
+	var addressDetails []map[string]interface{}
+	helpers.JsonMarshaller(contactDetails.AddressDetails, &addressDetails)
+	for _, address := range addressDetails {
+		if address["mark_default_address"] != nil && address["mark_default_address"] == true {
+			UserResponse.AddressDetails, _ = json.Marshal(address)
+			break
 		}
 	}
+	if contactDetails.ParentId != nil && *contactDetails.ParentId != 0 {
+		UserResponse.TeamHead = contactDetails.Parent.FirstName + " " + contactDetails.Parent.LastName
+	}
 
+	UserResponse.Token, _ = response.GenerateToken(uint(UserResponse.AccessIds[0]), 72)
 	return UserResponse, nil
 }
 func (s *service) GetUserById(id uint) (UserVisitDTO, error) {
@@ -430,4 +484,35 @@ func (s *service) GetUserById(id uint) (UserVisitDTO, error) {
 	}
 	json.Unmarshal(dto, &UserResponse)
 	return UserResponse, nil
+}
+
+func (s *service) UpdateUser(id uint, data model_core.CoreUsers) error {
+	// _, er := s.templateRepository.FindByidRoles(id)
+
+	// if er != nil {
+	// 	return er
+	// }
+
+	count, err := s.userRepository.UpdateUserDetails(id, data)
+	if err != nil {
+		return err
+	} else if count == 0 {
+		return fmt.Errorf("no data gets updated")
+	}
+
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) FindAllUsers(query map[string]interface{}, p *pagination.Paginatevalue) ([]model_core.CoreUsers, error) {
+	data, err := s.userRepository.FindAllCoreUser(query, p)
+	if err != nil {
+		return data, err
+	}
+	return data, nil
+
 }

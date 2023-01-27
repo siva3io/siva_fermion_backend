@@ -1,8 +1,6 @@
 package sales_invoice
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -34,115 +32,27 @@ func (c SalesInvoiceRequest) Validate() error {
 			&c.ReferenceNumber,
 			validation.When(!c.AutoGenerateReferenceNumber, validation.Required),
 		),
-		validation.Field(
-			&c.CurrencyID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.SalesOrderIds,
-			validation.Required,
-		),
-		validation.Field(
-			&c.CustomerID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.ChannelID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.PaymentTypeID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.PaymentTermsID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.SalesInvoiceLines,
-			validation.Required,
-		),
-		validation.Field(
-			&c.SubTotalAmount,
-			validation.Required,
-		),
-		validation.Field(
-			&c.ShippingAmount,
-			validation.Required,
-		),
-		validation.Field(
-			&c.TaxAmount,
-			validation.Required,
-		),
-		validation.Field(
-			&c.Adjustments,
-			validation.Required,
-		),
-		validation.Field(
-			&c.CustomerCreditsAmount,
-			validation.Required,
-		),
-		validation.Field(
-			&c.TotalAmount,
-			validation.Required,
-		),
-		validation.Field(
-			&c.BillingAddress,
-			validation.Required,
-		),
-		validation.Field(
-			&c.DeliveryAddress,
-			validation.Required,
-		),
-		validation.Field(
-			&c.ShippingAddress,
-			validation.Required,
-		),
+		validation.Field(&c.CustomerID, validation.Required),
+		validation.Field(&c.CurrencyID, validation.Required),
+		validation.Field(&c.SalesInvoiceDate, validation.Required),
+		validation.Field(&c.BillingAddress, validation.Required),
+		validation.Field(&c.DeliveryAddress, validation.Required),
+		validation.Field(&c.SalesInvoiceLines, validation.Required),
+		validation.Field(&c.AvailableCustomerCredits, validation.Required),
 	)
 }
 
 func (d SalesInvoiceLines) Validate() error {
 	return validation.ValidateStruct(&d,
-		validation.Field(
-			&d.ProductID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.ProductVariantID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.WarehouseID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.InventoryID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.Quantity,
-			validation.Required,
-		),
-		validation.Field(
-			&d.UomID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.DiscountTypeID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.TaxTypeID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.PaymentTermsID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.TotalAmount,
-			validation.Required,
-		),
+		//validation.Field(&d.ProductID, validation.Required),
+		validation.Field(&d.ProductVariantID, validation.Required),
+		validation.Field(&d.Discount, validation.Required),
+		validation.Field(&d.Tax, validation.Required),
+		validation.Field(&d.Quantity, validation.Required),
+		validation.Field(&d.DiscountTypeID, validation.Required),
+		validation.Field(&d.TaxTypeID, validation.Required),
+		validation.Field(&d.TotalAmount, validation.Required),
+		validation.Field(&d.Price, validation.Required),
 	)
 }
 
@@ -156,11 +66,12 @@ func SalesInvoiceCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
+
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("invalid payload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

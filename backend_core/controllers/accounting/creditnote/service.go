@@ -8,8 +8,11 @@ import (
 
 	"fermion/backend_core/controllers/accounting/sales_invoice"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
+	orders_repo "fermion/backend_core/internal/repository/orders"
+	returns_repo "fermion/backend_core/internal/repository/returns"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -30,93 +33,105 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateCreditNote(data *accounting.CreditNote, token_id string, access_template_id string) error
-	UpdateCreditNote(query map[string]interface{}, data *CreditNoteDTO, token_id string, access_template_id string) error
-	DeleteCreditNote(query map[string]interface{}, token_id string, access_template_id string) error
-	GetCreditNote(query map[string]interface{}, token_id string, access_template_id string) (CreditNoteResponseDTO, error)
-	GetCreditNoteList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]CreditNoteResponseDTO, error)
-	GetCreditNoteTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	CreateCreditNote(metaData core.MetaData, data *accounting.CreditNote) error
+	UpdateCreditNote(metaData core.MetaData, data *accounting.CreditNote) error
+	GetCreditNote(metaData core.MetaData) (interface{}, error)
+	GetCreditNoteList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	DeleteCreditNote(metaData core.MetaData) error
+	GetCreditNoteTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 
 	//SearchCreditNote(query string) ([]PartnersObjDTO, error)
 }
 
 type service struct {
-	credit_note_repository accounting_repo.CreditNotes
-	salesInvoiceService    sales_invoice.Service
+	creditNoteRepository  accounting_repo.CreditNotes
+	salesInvoiceService   sales_invoice.Service
+	salesReturnRepository returns_repo.SalesReturn
+	salesorderRepository  orders_repo.Sales
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	credit_note_repository := accounting_repo.NewCreditNote()
-	return &service{credit_note_repository, sales_invoice.NewService()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	//credit_note_repository := accounting_repo.NewCreditNote()
+	newServiceObj = &service{
+		accounting_repo.NewCreditNote(),
+		sales_invoice.NewService(),
+		returns_repo.NewSalesReturn(),
+		orders_repo.NewSalesOrder()}
+	return newServiceObj
 }
 
-func (s *service) CreateCreditNote(data *accounting.CreditNote, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
+// ============================ CRUD services =================================================================
+
+func (s *service) CreateCreditNote(metaData core.MetaData, data *accounting.CreditNote) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create credit note at view level")
 	}
-	if data_access == nil {
+
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create credit note at data level")
 	}
-	//data.CreditNoteID = strings.ToLower(data.PrimaryEmail)
-	query := map[string]interface{}{
-		"credit_note_id": data.CreditNoteID,
+
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+
+	var dtoData CreditNoteDTO
+	seqCredit := helpers.GenerateSequence("Cred", fmt.Sprint(metaData.TokenUserId), "credit_notes")
+	seqRef := helpers.GenerateSequence("Ref", fmt.Sprint(metaData.TokenUserId), "credit_notes")
+	if dtoData.GenerateCreditNoteId {
+		dtoData.CreditNoteID = seqCredit
+	}
+	if dtoData.GenerateReferenceId {
+		dtoData.ReferenceId = seqRef
 	}
 	defaultStatus, err := helpers.GetLookupcodeId("CREDIT_NOTE_STATUS", "DRAFT")
 	if err != nil {
 		return err
 	}
 	data.StatusId = defaultStatus
-	_, err = s.credit_note_repository.FindOneCreditNote(query)
-	if err == nil {
-		return res.BuildError(res.ErrDuplicate, errors.New("oops! Record already Exists"))
-	} else {
-		err := s.credit_note_repository.SaveCreditNote(data)
-		if err != nil {
-			return res.BuildError(res.ErrUnprocessableEntity, err)
-		}
+	err = s.creditNoteRepository.SaveCreditNote(data)
+	if err != nil {
+		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
+
 	return nil
 }
 
-func (s *service) UpdateCreditNote(query map[string]interface{}, data *CreditNoteDTO, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdateCreditNote(metaData core.MetaData, data *accounting.CreditNote) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update credit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update credit note at data level")
 	}
-	_, err := s.credit_note_repository.FindOneCreditNote(query)
-	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
-	}
-	var res accounting.CreditNote
-	dto, err := json.Marshal(data)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.creditNoteRepository.UpdateCreditNote(metaData.Query, data)
 	if err != nil {
 		return err
 	}
-	err = json.Unmarshal(dto, &res)
-	if err != nil {
-		return err
-	}
-	err = s.credit_note_repository.UpdateCreditNote(query, &res)
-	if err != nil {
-		return err
-	}
-	for _, order_line := range res.CreditNoteLineItems {
+	for _, orderLine := range data.CreditNoteLineItems {
+
 		query := map[string]interface{}{
-			"credit_note_id":     int(query["id"].(int)),
-			"product_variant_id": uint(order_line.ProductVariantId),
+			"credit_note_id":     helpers.ConvertStringToUint(metaData.Query["id"].(string)),
+			"product_variant_id": uint(orderLine.ProductVariantId),
 		}
-		count, er := s.credit_note_repository.UpdateCreditLines(query, order_line)
+		orderLine.UpdatedByID = &metaData.TokenUserId
+		count, er := s.creditNoteRepository.UpdateCreditLines(query, orderLine)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			order_line.CreditNoteId = uint(query["credit_note_id"].(int))
-			e := s.credit_note_repository.SaveCreditLines(order_line)
+			orderLine.CreditNoteId = uint(metaData.Query["id"].(int))
+			e := s.creditNoteRepository.SaveCreditLines(orderLine)
 			if e != nil {
 				return e
 			}
@@ -125,85 +140,155 @@ func (s *service) UpdateCreditNote(query map[string]interface{}, data *CreditNot
 	return nil
 }
 
-func (s *service) DeleteCreditNote(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
+func (s *service) DeleteCreditNote(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete credit note at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete credit note at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.credit_note_repository.FindOneCreditNote(q)
-	if er != nil {
-		return er
-	}
-	err := s.credit_note_repository.DeleteCreditNote(query)
+	err := s.creditNoteRepository.DeleteCreditNote(metaData.Query)
 	if err != nil {
 		return err
+	} else {
+		query := map[string]interface{}{"credit_note_id": metaData.Query["id"]}
+		er := s.creditNoteRepository.DeleteCreditLine(query)
+		if er != nil {
+			return er
+		}
 	}
 	return nil
 }
 
-func (s *service) GetCreditNote(query map[string]interface{}, token_id string, access_template_id string) (CreditNoteResponseDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
-		return CreditNoteResponseDTO{}, fmt.Errorf("you dont have access for view credit note at view level")
+func (s *service) GetCreditNote(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return nil, fmt.Errorf("you dont have access for view credit note at view level")
 	}
-	if data_access == nil {
-		return CreditNoteResponseDTO{}, fmt.Errorf("you dont have access for view credit note at data level")
+	if dataAccess == nil {
+		return nil, fmt.Errorf("you dont have access for view credit note at data level")
 	}
-
-	var res CreditNoteResponseDTO
-	result, _ := s.credit_note_repository.FindOneCreditNote(query)
-
-	sdata, _ := json.Marshal(result)
-	json.Unmarshal(sdata, &res)
-	return res, nil
-}
-func (s *service) GetCreditNoteList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]CreditNoteResponseDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list credit note at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list credit note at data level")
-	}
-	var resultdto []CreditNoteResponseDTO
-	result, _ := s.credit_note_repository.FindAllCreditNote(query, p)
-	mdata, _ := json.Marshal(result)
-	json.Unmarshal(mdata, &resultdto)
-	return resultdto, nil
-}
-
-func (s *service) GetCreditNoteTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
-
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "CREDIT_NOTE", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list credit note at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list credit note at data level")
-	}
-
-	creditNoteId, err := strconv.Atoi(id)
+	result, err := s.creditNoteRepository.FindOneCreditNote(metaData.Query)
 	if err != nil {
-		return nil, err
+		return result, err
 	}
+	return result, nil
+}
 
+func (s *service) GetCreditNoteList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return nil, fmt.Errorf("you dont have access for list credit note at view level")
+	}
+	if dataAccess == nil {
+		return nil, fmt.Errorf("you dont have access for list credit note at data level")
+	}
+	result, err := s.creditNoteRepository.FindAllCreditNote(metaData.Query, p)
+	if err != nil {
+		return result, err
+	}
+	return result, nil
+
+}
+
+func (s *service) GetCreditNoteTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "LIST", "CREDIT_NOTE", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return nil, fmt.Errorf("you dont have access for list credit note at view level")
+	}
+	if dataAccess == nil {
+		return nil, fmt.Errorf("you dont have access for list credit note at data level")
+	}
+	tab := metaData.AdditionalFields["tab"]
+	creditNoteId := metaData.AdditionalFields["id"]
 	if tab == "sales_invoice" {
 
 		sourceDocumentId, _ := helpers.GetLookupcodeId("SALES_INVOICE_SOURCE_DOCUMENT_TYPES", "CREDIT_NOTE")
 
 		salesInvoicePage := page
 		salesInvoicePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, creditNoteId)
-		data, err := s.salesInvoiceService.GetAllSalesInvoice(salesInvoicePage, token_id, access_template_id, "LIST")
+		data, err := s.salesInvoiceService.GetAllSalesInvoice(metaData, salesInvoicePage)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+
+	if tab == "sales_returns" {
+		creditNotePagination := new(pagination.Paginatevalue)
+
+		source_document_type_id, _ := helpers.GetLookupcodeId("CREDIT_NOTE_SOURCE_DOCUMENT_TYPES", "SALES_RETURNS")
+		creditNotePagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", creditNoteId, source_document_type_id)
+		sales_returns_interface, err := s.GetCreditNoteList(metaData, creditNotePagination)
+		if err != nil {
+			return nil, err
+		}
+		sales_returns := sales_returns_interface.([]accounting.CreditNote)
+		if len(sales_returns) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var CreditNoteSourceDoc map[string]interface{}
+		CreditNoteSourceDocJson := sales_returns[0].SourceDocuments
+		dto, err := json.Marshal(CreditNoteSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &CreditNoteSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		CreditNoteSourceDocId := CreditNoteSourceDoc["id"]
+		if CreditNoteSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+		salesReturnsPage := page
+		salesReturnsPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", CreditNoteSourceDoc["id"])
+		data, err := s.salesReturnRepository.FindAll(nil, page)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	if tab == "sales_orders" {
+		creditNotePagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("CREDIT_NOTE_SOURCE_DOCUMENT_TYPES", "SALES_ORDERS")
+		creditNotePagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", creditNoteId, source_document_type_id)
+		sales_orders_interface, err := s.GetCreditNoteList(metaData, creditNotePagination)
+		if err != nil {
+			return nil, err
+		}
+		sales_orders := sales_orders_interface.([]accounting.CreditNote)
+		if len(sales_orders) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var CreditNoteSourceDoc map[string]interface{}
+		CreditNoteSourceDocJson := sales_orders[0].SourceDocuments
+		dto, err := json.Marshal(CreditNoteSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &CreditNoteSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		CreditNoteSourceDocId := CreditNoteSourceDoc["id"]
+		if CreditNoteSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+		salesOrdersPage := page
+		salesOrdersPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", CreditNoteSourceDoc["id"])
+		data, err := s.salesorderRepository.FindAll(nil, page)
 		if err != nil {
 			return nil, err
 		}

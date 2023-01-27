@@ -1,8 +1,6 @@
 package asn
 
 import (
-	"errors"
-
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -27,59 +25,27 @@ import (
 
 func (c AsnRequest) Validate() error {
 	return validation.ValidateStruct(&c,
-		validation.Field(
-			&c.AsnNumber,
-			validation.When(!c.AutoCreateAsnNumber, validation.Required),
-		),
-		validation.Field(
-			&c.ReferenceNumber,
-			validation.When(!c.AutoGenerateReferenceNumber, validation.Required),
-		),
-		validation.Field(
-			&c.WarehouseID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.ShippingModeID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.LinkPurchaseOrderID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.SourceDocumentTypeID,
-			validation.Required,
-		),
-		validation.Field(
-			&c.AsnOrderLines,
-			validation.Required,
-		),
-		validation.Field(
-			&c.DestinationLocationDetails,
-			validation.Required,
-		),
-		validation.Field(
-			&c.DispatchLocationDetails,
-			validation.Required,
-		),
+		validation.Field(&c.AsnNumber, validation.When(!c.AutoCreateAsnNumber, validation.Required)),
+		validation.Field(&c.ReferenceNumber, validation.When(!c.AutoGenerateReferenceNumber, validation.Required)),
+		validation.Field(&c.WarehouseID, validation.Required),
+		validation.Field(&c.ShippingModeID, validation.Required),
+		validation.Field(&c.LinkPurchaseOrderID, validation.Required),
+		validation.Field(&c.SourceDocumentTypeID, validation.Required),
+		validation.Field(&c.AsnOrderLines, validation.Required),
+		validation.Field(&c.DestinationLocationDetails, validation.Required),
+		validation.Field(&c.DispatchLocationDetails, validation.Required),
 	)
 }
 
 func (d AsnLines) Validate() error {
 	return validation.ValidateStruct(&d,
-		validation.Field(
-			&d.ProductID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.ProductVariantID,
-			validation.Required,
-		),
-		validation.Field(
-			&d.PackageTypeID,
-			validation.Required,
-		),
+		validation.Field(&d.ProductVariantID, validation.Required),
+		validation.Field(&d.PackageLength, validation.Required),
+		validation.Field(&d.PackageWidth, validation.Required),
+		validation.Field(&d.PackageHeight, validation.Required),
+		validation.Field(&d.PackageWeight, validation.Required),
+		validation.Field(&d.PackageTypeID, validation.Required),
+		validation.Field(&d.NumberOfBoxes, validation.Required),
 	)
 }
 
@@ -93,11 +59,11 @@ func AsnCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		err := data.Validate()
+		err := validation.Validate(data)
 		if err != nil {
 			validation_err := helpers.ValidationErrorStructure(err)
 			if validation_err != nil {
-				return res.RespError(c, res.BuildError(res.ErrValidation, errors.New("invalid payload")))
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 			}
 		}
 

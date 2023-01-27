@@ -2,7 +2,6 @@ package omnichannel
 
 import (
 	"fermion/backend_core/db"
-	"fermion/backend_core/internal/model/omnichannel"
 	channel "fermion/backend_core/internal/model/omnichannel"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -35,9 +34,16 @@ type database struct {
 	db *gorm.DB
 }
 
+var channelRepository *database //singleton object
+
+// singleton function
 func NewChannel() *database {
+	if channelRepository != nil {
+		return channelRepository
+	}
 	db := db.DbManager()
-	return &database{db}
+	channelRepository = &database{db}
+	return channelRepository
 }
 
 func (r *database) CreateChannel(data *channel.Channel) (interface{}, error) {
@@ -79,7 +85,7 @@ func (r *database) DeleteChannel(query map[string]interface{}, user_id uint) err
 
 func (r *database) FindAllChannels(p *pagination.Paginatevalue) ([]channel.Channel, error) {
 	var data []channel.Channel
-	err := r.db.Model(&channel.Channel{}).Order("sequence").Scopes(helpers.Paginate(&omnichannel.Channel{}, p, r.db)).Find(&data).Error
+	err := r.db.Model(&channel.Channel{}).Order("sequence").Scopes(helpers.Paginate(&channel.Channel{}, p, r.db)).Find(&data).Error
 	if err != nil {
 		return data, err
 	}

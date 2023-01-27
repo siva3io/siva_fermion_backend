@@ -22,8 +22,8 @@ import (
 */
 
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreatePaymentTerm, cmiddleware.Authorization)
-	g.POST("/:id/update", h.UpdatePaymentTerm, cmiddleware.Authorization)
+	g.POST("/create", h.CreatePaymentTermEvent, cmiddleware.Authorization)
+	g.POST("/:id/update", h.UpdatePaymentTermEvent, cmiddleware.Authorization)
 	g.GET("", h.GetAllPaymentTerm, cmiddleware.Authorization)
 	g.GET("/dropdown", h.GetAllPaymentTermDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.GetPaymentTerm, cmiddleware.Authorization)

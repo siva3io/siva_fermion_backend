@@ -42,9 +42,16 @@ type serviceBase struct {
 	omnichannelRepository omnichannel_repo.OmnichannelBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	omnichannelRepository := omnichannel_repo.NewmarketPlaceBase()
-	return &serviceBase{omnichannelRepository}
+	newServiceObj = &serviceBase{omnichannelRepository}
+	return newServiceObj
 
 }
 

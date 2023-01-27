@@ -41,9 +41,16 @@ type module struct {
 	db *gorm.DB
 }
 
+var ModuleRepository *module //singleton object
+
+// singleton function
 func NewModule() *module {
+	if ModuleRepository != nil {
+		return ModuleRepository
+	}
 	db := db.DbManager()
-	return &module{db}
+	ModuleRepository = &module{db}
+	return ModuleRepository
 }
 
 func (r *module) CreateModule(data *model_core.AccessModuleAction) error {

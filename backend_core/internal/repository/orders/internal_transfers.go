@@ -2,7 +2,6 @@ package orders
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -31,159 +30,143 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type InternalTransfers interface {
 	Save(data *orders.InternalTransfers) error
-	FindAll(page *pagination.Paginatevalue) (interface{}, error)
-	FindOne(query map[string]interface{}) (interface{}, error)
+	SaveOrderLines(data *orders.InternalTransferLines) error
+
 	Update(query map[string]interface{}, data *orders.InternalTransfers) error
+	UpdateOrderLines(query map[string]interface{}, data *orders.InternalTransferLines) error
+
 	Delete(query map[string]interface{}) error
+	DeleteOrderLine(query map[string]interface{}) error
 
-	SaveOrderLines(orders.InternalTransferLines) error
-	UpdateOrderLines(map[string]interface{}, orders.InternalTransferLines) (int64, error)
-	DeleteOrderLine(map[string]interface{}) error
-	FindOrderLines(map[string]interface{}) (orders.InternalTransferLines, error)
+	FindOne(query map[string]interface{}) (orders.InternalTransfers, error)
 
-	Search(query string) (interface{}, error)
+	FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.InternalTransfers, error)
+
+	FindOrderLines(query map[string]interface{}) (orders.InternalTransferLines, error)
 }
 
 type internal_transfers struct {
 	db *gorm.DB
 }
 
+var internalTransfersRepository *internal_transfers //singleton object
+
+// singleton function
 func NewInternalTransfer() *internal_transfers {
-	db := db.DbManager()
-	return &internal_transfers{db}
+	if internalTransfersRepository != nil {
+		return internalTransfersRepository
+	}
+	internalTransfersRepository = &internal_transfers{
+		db.DbManager(),
+	}
+	return internalTransfersRepository
 
 }
 
 func (r *internal_transfers) Save(data *orders.InternalTransfers) error {
-	err := r.db.Model(&orders.InternalTransfers{}).Create(data).Error
 
-	if err != nil {
-
-		return err
-
+	err := r.db.Model(&orders.InternalTransfers{}).Create(data)
+	if err.Error != nil {
+		return err.Error
 	}
-
 	return nil
 }
 
-func (r *internal_transfers) FindAll(page *pagination.Paginatevalue) (interface{}, error) {
+func (r *internal_transfers) FindAll(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.InternalTransfers, error) {
+
 	var data []orders.InternalTransfers
-
-	err := r.db.Model(&orders.InternalTransfers{}).Scopes(helpers.Paginate(&orders.InternalTransfers{}, page, r.db)).Preload(clause.Associations).Find(&data)
-
+	err := r.db.Model(&orders.InternalTransfers{}).Preload(clause.Associations).Scopes(helpers.Paginate(&orders.InternalTransfers{}, page, r.db)).Where(query).Find(&data)
 	if err.Error != nil {
 		return nil, err.Error
 	}
-
 	return data, nil
 }
 
-func (r *internal_transfers) FindOne(query map[string]interface{}) (interface{}, error) {
+func (r *internal_transfers) FindOne(query map[string]interface{}) (orders.InternalTransfers, error) {
+
 	var data orders.InternalTransfers
-
-	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
-
+	err := r.db.Model(&orders.InternalTransfers{}).Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return nil, errors.New("record not found")
+		return data, errors.New("record not found")
 	}
-
 	if err.Error != nil {
-		return nil, err.Error
+		return data, err.Error
 	}
-
 	return data, nil
 }
 
 func (r *internal_transfers) Update(query map[string]interface{}, data *orders.InternalTransfers) error {
-	res := r.db.Model(&orders.InternalTransfers{}).Where(query).Updates(data)
 
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.InternalTransfers{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
+	if err.Error != nil {
+		return err.Error
+	}
 	return nil
 }
 
 func (r *internal_transfers) Delete(query map[string]interface{}) error {
+
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
-	res := r.db.Model(&orders.InternalTransfers{}).Where(query).Updates(data)
-
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.InternalTransfers{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
+	if err.Error != nil {
+		return err.Error
+	}
 	return nil
 }
 
-func (r *internal_transfers) SaveOrderLines(data orders.InternalTransferLines) error {
+func (r *internal_transfers) SaveOrderLines(data *orders.InternalTransferLines) error {
 
-	res := r.db.Model(&orders.InternalTransferLines{}).Create(&data)
-
-	if res.Error != nil {
-
-		return res.Error
-
+	err := r.db.Model(&orders.InternalTransferLines{}).Create(data)
+	if err.Error != nil {
+		return err.Error
 	}
-
 	return nil
 }
 
 func (r *internal_transfers) FindOrderLines(query map[string]interface{}) (orders.InternalTransferLines, error) {
-	var result orders.InternalTransferLines
-	fmt.Println(query)
-	res := r.db.Model(&orders.InternalTransferLines{}).Where(query).First(&result)
-
-	if res.Error != nil {
-		return result, res.Error
+	var data orders.InternalTransferLines
+	err := r.db.Model(&orders.InternalTransferLines{}).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("record not found")
 	}
-
-	return result, nil
+	if err.Error != nil {
+		return data, err.Error
+	}
+	return data, nil
 }
 
-func (r *internal_transfers) UpdateOrderLines(query map[string]interface{}, data orders.InternalTransferLines) (int64, error) {
-	res := r.db.Model(&orders.InternalTransferLines{}).Where(query).Updates(&data)
+func (r *internal_transfers) UpdateOrderLines(query map[string]interface{}, data *orders.InternalTransferLines) error {
 
-	if res.Error != nil {
-
-		return res.RowsAffected, res.Error
-
+	err := r.db.Model(&orders.InternalTransferLines{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
-	return res.RowsAffected, nil
-}
-
-func (r *internal_transfers) DeleteOrderLine(query map[string]interface{}) error {
-	res := r.db.Model(&orders.InternalTransferLines{}).Where(query).Delete(&orders.InternalTransferLines{})
-
-	if res.Error != nil {
-		return res.Error
+	if err.Error != nil {
+		return err.Error
 	}
-
 	return nil
 }
 
-func (r *internal_transfers) Search(query string) (interface{}, error) {
-	var data []orders.InternalTransfers
+func (r *internal_transfers) DeleteOrderLine(query map[string]interface{}) error {
 
-	fields := []string{"reference_number", "ist_number"}
-
-	fields_string, values := helpers.ApplySearch(query, fields)
-
-	err := r.db.Model(&orders.InternalTransfers{}).Limit(2).Preload(clause.Associations).Where(fields_string, values...).Find(&data)
-
-	if err.Error != nil {
-		return nil, err.Error
+	err := r.db.Model(&orders.InternalTransferLines{}).Where(query).Delete(&orders.InternalTransferLines{})
+	if err.RowsAffected == 0 {
+		return errors.New("record not found")
 	}
-
-	return data, nil
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }

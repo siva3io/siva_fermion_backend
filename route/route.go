@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"os"
 
+	"fermion/backend_core/controllers/offers"
+	"fermion/backend_core/controllers/ondc"
+	"fermion/backend_core/controllers/rating"
 	"fermion/backend_core/controllers/webapp"
 
 	module "fermion/backend_core/controllers/access/module"
@@ -34,9 +37,12 @@ import (
 	"fermion/backend_core/controllers/mdm/products"
 	"fermion/backend_core/controllers/mdm/uom"
 	"fermion/backend_core/controllers/mdm/vendors"
+
+	// "fermion/backend_core/controllers/notifications"
 	"fermion/backend_core/controllers/omnichannel/catalogue"
 	"fermion/backend_core/controllers/omnichannel/channel"
 	"fermion/backend_core/controllers/omnichannel/marketplace"
+	"fermion/backend_core/controllers/omnichannel/omnichannel_fields"
 	"fermion/backend_core/controllers/omnichannel/virtual_warehouse"
 	"fermion/backend_core/controllers/omnichannel/webstores"
 	"fermion/backend_core/controllers/orders/delivery_orders"
@@ -45,6 +51,7 @@ import (
 	"fermion/backend_core/controllers/orders/sales_orders"
 	"fermion/backend_core/controllers/orders/scrap_orders"
 	"fermion/backend_core/controllers/payments/customers"
+	paymentpartners "fermion/backend_core/controllers/payments/payment_partners"
 	"fermion/backend_core/controllers/payments/transactions"
 	"fermion/backend_core/controllers/payments/wallets"
 	"fermion/backend_core/controllers/returns/purchase_returns"
@@ -93,55 +100,85 @@ func Init(g *echo.Group) {
 
 	auth.NewHandler().Route(g.Group("/auth"))
 	webapp.NewHandler().Route(g.Group("/webapp"))
-	currency_exchange.NewHandler().Route(g.Group("/api/v1/currency_and_exchange"))
-	payment_terms_and_record_payment.NewHandler().Route(g.Group("/api/v1/payment_terms"))
-	asn.NewHandler().Route(g.Group("/api/v1/asn"))
-	sales_orders.NewHandler().Route(g.Group("/api/v1/sales_orders"))
-	webstores.NewHandler().Route(g.Group("/api/v1/webstores"))
-	marketplace.NewHandler().Route(g.Group("/api/v1/marketplace"))
-	creditnote.NewHandler().Route(g.Group("/api/v1/creditnote"))
-	debitnote.NewHandler().Route(g.Group("/api/v1/debitnote"))
-	sales_returns.NewHandler().Route(g.Group("/api/v1/sales_returns"))
-	purchase_returns.NewHandler().Route(g.Group("/api/v1/purchase_returns"))
 
-	products_handler := products.NewHandler()
-	products_handler.Route(g.Group("/api/v1/products"))
-	products_handler.Init()
-	// products.Init()
+	//======================== mdm =================================================
+	products.NewHandler().Route(g.Group("/api/v1/products"))
 	contacts.NewHandler().Route(g.Group("/api/v1/contacts"))
+	basic_inventory.NewHandler().Route(g.Group("/api/v1/basic_inventory"))
 	locations.NewHandler().Route(g.Group("/api/v1/locations"))
 	pricing.NewHandler().Route(g.Group("/api/v1/pricing"))
 	uom.NewHandler().Route(g.Group("/api/v1/uom"))
-	basic_inventory.NewHandler().Route(g.Group("/api/v1/basic_inventory"))
+	vendors.NewHandler().Route(g.Group("/api/v1/vendors"))
+
+	//======================== orders =================================================
 	purchase_orders.NewHandler().Route(g.Group("/api/v1/purchase_orders"))
 	delivery_orders.NewHandler().Route(g.Group("/api/v1/delivery_orders"))
 	scrap_orders.NewHandler().Route(g.Group("/api/v1/scrap_orders"))
 	internal_transfers.NewHandler().Route(g.Group("/api/v1/internal_transfers"))
-	shipping_orders.NewHandler().Route(g.Group("/api/v1/shipping_orders"))
-	shipping_partners.NewHandler().Route(g.Group("/api/v1/shipping_partners"))
+	sales_orders.NewHandler().Route(g.Group("/api/v1/sales_orders"))
+
+	//======================== returns =================================================
+	sales_returns.NewHandler().Route(g.Group("/api/v1/sales_returns"))
+	purchase_returns.NewHandler().Route(g.Group("/api/v1/purchase_returns"))
+
+	//======================== inventory_orders =================================================
+	asn.NewHandler().Route(g.Group("/api/v1/asn"))
 	grn.NewHandler().Route(g.Group("/api/v1/grn"))
+	inventory_adjustments.NewHandler().Route(g.Group("/api/v1/inventory_adjustments"))
+
+	//======================== inventory_tasks =================================================
 	pick_list.NewHandler().Route(g.Group("/api/v1/pick_list"))
 	cycle_count.NewHandler().Route(g.Group("/api/v1/cycle_count"))
-	vendors.NewHandler().Route(g.Group("/api/v1/vendors"))
-	inventory_adjustments.NewHandler().Route(g.Group("/api/v1/inventory_adjustments"))
+
+	//======================== shipping =================================================
+	shipping_orders.NewHandler().Route(g.Group("/api/v1/shipping_orders"))
+	shipping_partners.NewHandler().Route(g.Group("/api/v1/shipping_partners"))
 	shipping_orders_wd.NewHandler().Route(g.Group("/api/v1/shipping_orders_wd"))
 	shipping_orders_ndr.NewHandler().Route(g.Group("/api/v1/shipping_orders_ndr"))
 	shipping_orders_rto.NewHandler().Route(g.Group("/api/v1/shipping_orders_rto"))
-	app_core.NewHandler().Route(g.Group("/api/v1/core"))
-	sales_invoice.NewHandler().Route(g.Group("/api/v1/sales_invoice"))
+
+	//======================== accounting =================================================
+	currency_exchange.NewHandler().Route(g.Group("/api/v1/currency_and_exchange"))
+	payment_terms_and_record_payment.NewHandler().Route(g.Group("/api/v1/payment_terms"))
+	creditnote.NewHandler().Route(g.Group("/api/v1/creditnote"))
+	debitnote.NewHandler().Route(g.Group("/api/v1/debitnote"))
 	purchase_invoice.NewHandler().Route(g.Group("/api/v1/purchase_invoice"))
-	ipaas.NewIpaasHandler().Route(g.Group("ipaas"))
-	ipaas.Init()
-	virtual_warehouse.NewHandler().Route(g.Group("/api/v1/virtual_warehouse"))
-	catalogue.NewHandler().Route(g.Group("/api/v1/catalogue"))
-	scheduler.NewHandler().Route(g.Group("/scheduler"))
-	template.NewHandler().Route(g.Group("/api/v1/template"))
-	module.NewHandler().Route(g.Group("/api/v1/module"))
-	views.NewHandler().Route(g.Group("/api/v1/views"))
-	channel.NewHandler().Route(g.Group("api/v1/channels"))
+	sales_invoice.NewHandler().Route(g.Group("/api/v1/sales_invoice"))
 	accounting.NewHandler().Route(g.Group("/api/v1/accounting"))
 	pos.NewHandler().Route(g.Group("/api/v1/pos"))
+
+	//======================== core =================================================
+	app_core.NewHandler().Route(g.Group("/api/v1/core"))
+
+	//======================== omnichannel =================================================
+	omnichannel_fields.NewHandler().Route(g.Group("/api/v1/omnichannel_fields"))
+	marketplace.NewHandler().Route(g.Group("/api/v1/marketplace"))
+	webstores.NewHandler().Route(g.Group("/api/v1/webstores"))
+	virtual_warehouse.NewHandler().Route(g.Group("/api/v1/virtual_warehouse"))
+	catalogue.NewHandler().Route(g.Group("/api/v1/catalogue"))
+	channel.NewHandler().Route(g.Group("api/v1/channels"))
+
+	//======================== payments =================================================
 	customers.NewHandler().Route(g.Group("/api/v1/customers"))
 	transactions.NewHandler().Route(g.Group("/api/v1/transactions"))
 	wallets.NewHandler().Route(g.Group("/api/v1/wallets"))
+	paymentpartners.NewHandler().Route(g.Group("api/v1/payment_partners"))
+
+	//======================== access =================================================
+	template.NewHandler().Route(g.Group("/api/v1/template"))
+	module.NewHandler().Route(g.Group("/api/v1/module"))
+	views.NewHandler().Route(g.Group("/api/v1/views"))
+
+	//======================== ipaas =================================================
+	ipaas.NewHandler().Route(g.Group("ipaas"))
+
+	//======================== schedular =================================================
+	scheduler.NewHandler().Route(g.Group("/scheduler"))
+
+	//======================== ondc =================================================
+	ondc.NewHandler().Route(g.Group("/api/v1/ondc"))
+
+	rating.NewHandler().Route(g.Group("/api/v1/rating"))
+
+	offers.NewHandler().Route(g.Group("/api/v1/offers"))
 }

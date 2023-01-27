@@ -32,10 +32,17 @@ type handler struct {
 	base_service marketplace_base.ServiceBase
 }
 
+var MarketPlaceHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if MarketPlaceHandler != nil {
+		return MarketPlaceHandler
+	}
 	service := NewService()
 	base_service := marketplace_base.NewServiceBase()
-	return &handler{service, base_service}
+	MarketPlaceHandler = &handler{service, base_service}
+	return MarketPlaceHandler
 }
 
 // REGISTER A MARKETPLACE
@@ -233,6 +240,10 @@ func (h *handler) SaveMarketDetails(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateMarketPlaceLinkInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "details created successfully", map[string]interface{}{"created_id": data.ID})
 }
 
@@ -263,6 +274,9 @@ func (h *handler) UpdateMarketDetails(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateMarketPlaceLinkInCache(token_id, access_template_id)
 
 	return res.RespSuccess(c, "update details successfully done", map[string]interface{}{"updated_id": id})
 }
@@ -346,6 +360,16 @@ func (h *handler) ListMarketDetails(c echo.Context) (err error) {
 	c.Bind(p)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetMarketPlaceLinkFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	result, err := h.service.ListMarketplaceDetails(p, token_id, access_template_id, "LIST")
 	if err != nil {
 		return res.RespErr(c, err)
@@ -371,6 +395,16 @@ func (h *handler) ListMarketDetailsDropDown(c echo.Context) (err error) {
 	c.Bind(p)
 	token_id := c.Get("TokenUserID").(string)
 	access_template_id := c.Get("AccessTemplateId").(string)
+
+	var response interface{}
+	if *p == pagination.BasePaginatevalue {
+		response, *p = GetMarketPlaceLinkFromCache(token_id)
+	}
+
+	if response != nil {
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
 	result, err := h.service.ListMarketplaceDetails(p, token_id, access_template_id, "DROPDOWN_LIST")
 	if err != nil {
 		return res.RespErr(c, err)
@@ -402,6 +436,10 @@ func (h *handler) DeleteMarketDetails(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateMarketPlaceLinkInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "marketplace details deleted successfully", map[string]int{"deleted_id": id})
 }
 

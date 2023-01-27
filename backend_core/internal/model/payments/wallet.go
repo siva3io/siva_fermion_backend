@@ -20,12 +20,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Wallets struct {
 	model_core.Model
-	UserId               uint                 `json:"user_id" gorm:""`
-	User                 model_core.CoreUsers `json:"user" gorm:"foreignKey:UserId; references:ID"`
-	UserAmount           float64              `json:"user_amount" gorm:""`
-	TotalUserTopupAmount float64              `json:"total_user_topup_amount" gorm:""`
-	Currency             string               `json:"currency" gorm:"type:text"`
-	CurrencyCode         model_core.Currency  `json:"currency_code" gorm:"foreignKey:Currency; references:CurrencyCode"`
-	Status               string               `json:"status" gorm:"type:text"`
-	Gateway              string               `json:"gateway" gorm:"type:text"`
+	UserId               uint                  `json:"user_id" gorm:""`
+	User                 *model_core.CoreUsers `json:"user" gorm:"foreignKey:UserId; references:ID"`
+	UserAmount           float64               `json:"user_amount" gorm:""`
+	TotalUserTopupAmount float64               `json:"total_user_topup_amount" gorm:""`
+	Currency             uint                  `json:"currency" gorm:"type:text"`
+	CurrencyCode         *model_core.Currency  `json:"currency_code" gorm:"foreignKey:Currency; references:ID"`
+	Status               string                `json:"status" gorm:"type:text"`
+	Gateway              string                `json:"gateway" gorm:"type:text"`
 }

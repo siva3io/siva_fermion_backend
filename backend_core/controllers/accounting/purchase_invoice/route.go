@@ -24,11 +24,10 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("", h.ListPurchaseInvoice, cmiddleware.Authorization)
 	g.GET("/dropdown", h.ListPurchaseInvoiceDropDown, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewPurchaseInvoice, cmiddleware.Authorization)
-	g.POST("/create", h.CreatePurchaseInvoice, cmiddleware.Authorization, PurchaseInvoiceCreateValidate)
-	g.POST("/:id/update", h.UpdatePurchaseInvoice, cmiddleware.Authorization, PurchaseInvoiceUpdateValidate)
+	g.POST("/create", h.CreatePurchaseInvoiceEvent, cmiddleware.Authorization, PurchaseInvoiceCreateValidate)
+	g.POST("/:id/update", h.UpdatePurchaseInvoiceEvent, cmiddleware.Authorization, PurchaseInvoiceUpdateValidate)
 	g.DELETE("/:id/delete", h.DeletePurchaseInvoice, cmiddleware.Authorization)
 	g.DELETE("/invoice_lines/:id/delete", h.DeletePurchaseInvoiceLines, cmiddleware.Authorization)
-	g.GET("/search", h.SearchPurchaseInvoice, cmiddleware.Authorization)
 
 	g.POST("/:id/downloadPdf", h.DownloadPurchaseInvoice, cmiddleware.Authorization)
 	g.POST("/:id/sendEmail", h.EmailPurchaseInvoice, cmiddleware.Authorization)

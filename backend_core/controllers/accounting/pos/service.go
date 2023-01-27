@@ -1,9 +1,14 @@
 package pos
 
 import (
+	"fmt"
+
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
+	"fermion/backend_core/pkg/util/helpers"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/pagination"
+	access_checker "fermion/backend_core/pkg/util/access"
 )
 
 /*
@@ -24,14 +29,22 @@ type Service interface {
 	CreatePos(data *accounting.UserPosLink) error
 	UpdatePos(query map[string]interface{}, data *accounting.UserPosLink) error
 	GetAuthKeys(query map[string]interface{}) (interface{}, error)
+	GetPosLinkList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
 }
 
 type service struct {
 	posRepository accounting_repo.Pos
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{accounting_repo.NewPosRepo()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{accounting_repo.NewPosRepo()}
+	return newServiceObj
 }
 
 func (s *service) CreatePos(data *accounting.UserPosLink) error {
@@ -55,5 +68,22 @@ func (s *service) GetAuthKeys(query map[string]interface{}) (interface{}, error)
 	if err != nil {
 		return nil, err
 	}
+	return result, nil
+}
+
+func (s *service) GetPosLinkList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
+	token_user_id := helpers.ConvertStringToUint(token_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "POS", *token_user_id)
+	if !access_module_flag {
+		return nil, fmt.Errorf("you dont have access for list contacts at view level")
+	}
+	if data_access == nil {
+		return nil, fmt.Errorf("you dont have access for list contacts at data level")
+	}
+	result, err := s.posRepository.FindAllPosLink(query, p)
+	if err != nil {
+		return result, err
+	}
+
 	return result, nil
 }

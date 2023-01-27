@@ -3,16 +3,22 @@ package sales_orders
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
+	"time"
 
 	"fermion/backend_core/controllers/accounting/creditnote"
 	"fermion/backend_core/controllers/accounting/sales_invoice"
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/controllers/omnichannel/channel"
 	"fermion/backend_core/controllers/returns/sales_returns"
+	invoice_model "fermion/backend_core/internal/model/accounting"
 
 	inv_service "fermion/backend_core/controllers/mdm/basic_inventory"
 	"fermion/backend_core/controllers/orders/delivery_orders"
 	"fermion/backend_core/controllers/orders/purchase_orders"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/returns"
@@ -22,7 +28,6 @@ import (
 
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
-	res "fermion/backend_core/pkg/util/response"
 )
 
 /*
@@ -40,19 +45,22 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateSalesOrder(data *orders.SalesOrders, access_template_id string, token_id string) error
-	ListSalesOrders(page *pagination.Paginatevalue, access_template_id string, token_id string, access_action string) (interface{}, error)
-	ViewSalesOrder(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error)
-	UpdateSalesOrder(query map[string]interface{}, data *orders.SalesOrders, access_template_id string, token_id string) error
-	DeleteSalesOrder(query map[string]interface{}, access_template_id string, token_id string) error
-	DeleteSalesOrderLines(query map[string]interface{}, access_template_id string, token_id string) error
-	SearchSalesOrders(query string, access_template_id string, token_id string) (interface{}, error)
-	ChannelSalesOrderUpsert(data []orders.SalesOrders, TokenUserId string) (interface{}, error)
+	CreateSalesOrder(metaData core.MetaData, data *orders.SalesOrders) error
+	ListSalesOrders(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	ViewSalesOrder(metaData core.MetaData) (interface{}, error)
+	UpdateSalesOrder(metaData core.MetaData, data *orders.SalesOrders) error
+	DeleteSalesOrder(metaData core.MetaData) error
+	DeleteSalesOrderLines(metaData core.MetaData) error
+	ChannelSalesOrderUpsert(metaData core.MetaData, data []orders.SalesOrders) (interface{}, error)
+	GetSalesHistory(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+	TrackSalesOrder(query map[string]interface{}) []map[string]interface{}
+	GetSalesOrderTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
+
 	ChannelSalesOrderLinesUpsert(data []orders.SalesOrderLines, salesOrderId uint) (interface{}, error)
 	ProcessSalesOrderCalculation(data *orders.SalesOrders) *orders.SalesOrders
-	GetSalesHistory(productId uint, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
 
-	GetSalesOrderTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	MapWithSalesInvoice(requestPayload *orders.SalesOrders, edaMetaData core.MetaData, flag bool) *invoice_model.SalesInvoice
+	MapWithSalesReturns(requestPayload *orders.SalesOrders, edaMetaData core.MetaData, flag bool) *returns.SalesReturns
 }
 
 type service struct {
@@ -67,11 +75,17 @@ type service struct {
 	salesInvoiceService   sales_invoice.Service
 	salesReturnsService   sales_returns.Service
 	creditNoteService     creditnote.Service
+	channelService        channel.Service
 }
 
-func NewService() *service {
+var newServiceObj *service //singleton object
 
-	return &service{
+// singleton function
+func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{
 		salesOrderRepository:      orders_repo.NewSalesOrder(),
 		basicInventoryService:     inv_service.NewService(),
 		accessModuleRepository:    access_repo.NewModule(),
@@ -82,12 +96,14 @@ func NewService() *service {
 		salesInvoiceService:       sales_invoice.NewService(),
 		salesReturnsService:       sales_returns.NewService(),
 		creditNoteService:         creditnote.NewService(),
+		channelService:            channel.NewService(),
 	}
+	return newServiceObj
 }
 
-func (s *service) CreateSalesOrder(data *orders.SalesOrders, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "SALES_ORDERS", *token_user_id)
+func (s *service) CreateSalesOrder(metaData core.MetaData, data *orders.SalesOrders) error {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "CREATE", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create sales order at view level")
 	}
@@ -95,40 +111,53 @@ func (s *service) CreateSalesOrder(data *orders.SalesOrders, access_template_id 
 		return fmt.Errorf("you dont have access for create sales order at data level")
 	}
 
-	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, data.StatusId)
+	if data.ChannelName != "ONDC" {
+		data = s.ProcessSalesOrderCalculation(data)
+	}
+
+	// data.StatusHistory, _ = helpers.UpdateStatusHistory(data.StatusHistory, *data.StatusId)
+	data.SalesOrderNumber = helpers.GenerateSequence("SO", fmt.Sprint(metaData.TokenUserId), "sales_orders")
+
+	if data.StatusId == nil || *data.StatusId == 0 {
+		defaultStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "DRAFT")
+		data.StatusId = &defaultStatus
+	}
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	result, _ := helpers.UpdateStatusHistory(data.StatusHistory, *data.StatusId)
 	data.StatusHistory = result
-	temp := data.CreatedByID
-	user_id := strconv.Itoa(int(*temp))
-	data.SalesOrderNumber = helpers.GenerateSequence("SO", user_id, "sales_orders")
-	data = s.ProcessSalesOrderCalculation(data)
-	defaultStatus, err := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "DRAFT")
+	sales_order_id, err := s.salesOrderRepository.Save(data)
 	if err != nil {
 		return err
 	}
-	data.StatusId = defaultStatus
-	err = s.salesOrderRepository.Save(data)
-	data_inv := map[string]interface{}{
+
+	dataInv := map[string]interface{}{
 		"id":            data.ID,
 		"order_lines":   data.SalesOrderLines,
 		"order_type":    "sales_order",
 		"is_update_inv": true,
 		"is_credit":     false,
 	}
-
 	//updating the inventory Committed Stock
-	go s.basicInventoryService.UpdateInventory(data_inv, access_template_id, token_id)
-
-	if err != nil {
-		fmt.Println("error", err.Error())
-		return res.BuildError(res.ErrUnprocessableEntity, err)
+	go s.basicInventoryService.UpdateTransactionInventory(metaData, dataInv)
+	// if data.ChannelName == "ONDC" {
+	//ondc on_select call
+	// }
+	Status, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "NEW")
+	*data.StatusId = Status
+	if *data.StatusId == Status {
+		salesInvoice := s.MapWithSalesInvoice(data, metaData, false)
+		metaData.Query = map[string]interface{}{
+			"sales_order_id": sales_order_id,
+		}
+		go s.salesInvoiceService.CreateSalesInvoice(metaData, salesInvoice)
 	}
-	return nil
 
+	return nil
 }
 
-func (s *service) ListSalesOrders(page *pagination.Paginatevalue, access_template_id string, token_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "SALES_ORDERS", *token_user_id)
+func (s *service) ListSalesOrders(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), metaData.ModuleAccessAction, "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list sales order at view level")
 	}
@@ -136,19 +165,15 @@ func (s *service) ListSalesOrders(page *pagination.Paginatevalue, access_templat
 		return nil, fmt.Errorf("you dont have access for list sales order at data level")
 	}
 
-	data, err := s.salesOrderRepository.FindAll(page)
-
+	data, err := s.salesOrderRepository.FindAll(metaData.Query, page)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
-
 }
 
-func (s *service) ViewSalesOrder(query map[string]interface{}, access_template_id string, token_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SALES_ORDERS", *token_user_id)
+func (s *service) ViewSalesOrder(metaData core.MetaData) (interface{}, error) {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view sales order at view level")
 	}
@@ -156,23 +181,16 @@ func (s *service) ViewSalesOrder(query map[string]interface{}, access_template_i
 		return nil, fmt.Errorf("you dont have access for view sales order at data level")
 	}
 
-	data, err := s.salesOrderRepository.FindOne(query)
-
-	if err != nil && err.Error() == "record not found" {
-		return nil, res.BuildError(res.ErrDataNotFound, err)
-	}
-
+	data, err := s.salesOrderRepository.FindOne(metaData.Query)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+
+		return nil, err
 	}
-
 	return data, nil
-
 }
 
-func (s *service) UpdateSalesOrder(query map[string]interface{}, data *orders.SalesOrders, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "SALES_ORDERS", *token_user_id)
+func (s *service) UpdateSalesOrder(metaData core.MetaData, data *orders.SalesOrders) error {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "UPDATE", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update sales order at view level")
 	}
@@ -180,141 +198,142 @@ func (s *service) UpdateSalesOrder(query map[string]interface{}, data *orders.Sa
 		return fmt.Errorf("you dont have access for update sales order at data level")
 	}
 
-	var find_query = map[string]interface{}{
-		"id": query["id"],
+	foundData, err := s.salesOrderRepository.FindOne(metaData.Query)
+	if err != nil {
+		return err
 	}
 
-	found_data, er := s.salesOrderRepository.FindOne(find_query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
+	if data.StatusId != nil {
+		if *data.StatusId != *foundData.StatusId && *data.StatusId != 0 {
 
-	old_data := found_data.(orders.SalesOrders)
+			finalStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "DELIVERED")
+			cancelStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "CANCELLED")
+			shippedStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "SHIPPED")
+			readyToShipStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "READY_TO_SHIP")
 
-	old_status := old_data.StatusId
-	new_status := data.StatusId
+			zone := os.Getenv("DB_TZ")
+			loc, _ := time.LoadLocation(zone)
 
-	if new_status != old_status && new_status != 0 {
-		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusId)
-		data.StatusHistory = result
-		final_status, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "DELIVERED")
-		if data.StatusId == final_status {
-			data_inv := map[string]interface{}{
-				"id":            data.ID,
-				"order_lines":   data.SalesOrderLines,
-				"order_type":    "sales_order",
-				"is_update_inv": false,
-				"is_credit":     false,
+			if *data.StatusId == shippedStatus {
+				data.ShippedDate = time.Now().In(loc)
 			}
 
-			//updating the inventory Committed Stock
-			go s.basicInventoryService.UpdateInventory(data_inv, access_template_id, token_id)
+			if *data.StatusId == readyToShipStatus {
+				data.ReadyTOShip = time.Now().In(loc)
+			}
+			if *data.StatusId == cancelStatus {
+				data.CancelledDate = time.Now().In(loc)
+			}
+
+			if *data.StatusId == finalStatus {
+				data.DeliveryDate = time.Now().In(loc)
+				dataInv := map[string]interface{}{
+					"id":            data.ID,
+					"order_lines":   data.SalesOrderLines,
+					"order_type":    "sales_order",
+					"is_update_inv": false,
+					"is_credit":     false,
+				}
+				//updating the inventory Committed Stock
+				go s.basicInventoryService.UpdateTransactionInventory(metaData, dataInv)
+			}
+			result, _ := helpers.UpdateStatusHistory(data.StatusHistory, *data.StatusId)
+			data.StatusHistory = result
 		}
 	}
 
-	data = s.ProcessSalesOrderCalculation(data)
-
-	err := s.salesOrderRepository.Update(query, data)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+	if foundData.ChannelName != "ONDC" {
+		data = s.ProcessSalesOrderCalculation(data)
 	}
-	for _, order_line := range data.SalesOrderLines {
-		update_query := map[string]interface{}{
-			"product_id": order_line.ProductId,
-			"so_id":      uint(query["id"].(int)),
+	data.UpdatedByID = &metaData.TokenUserId
+
+	err = s.salesOrderRepository.Update(metaData.Query, data)
+	if err != nil {
+		return err
+	}
+	for _, orderLine := range data.SalesOrderLines {
+		updateQuery := map[string]interface{}{
+			"product_id": orderLine.ProductId,
+			"so_id":      foundData.ID,
 		}
-		count, err1 := s.salesOrderRepository.UpdateOrderLines(update_query, order_line)
-		if err1 != nil {
-			return err1
-		} else if count == 0 {
-			order_line.SoId = uint(query["id"].(int))
-			e := s.salesOrderRepository.SaveOrderLines(order_line)
-			fmt.Println(e)
-			if e != nil {
-				return e
+		err = s.salesOrderRepository.UpdateOrderLines(updateQuery, &orderLine)
+		if err != nil {
+			orderLine.SoId = foundData.ID
+			err := s.salesOrderRepository.SaveOrderLines(&orderLine)
+			if err != nil {
+				return err
 			}
 		}
+	}
+
+	var dontProduce interface{}
+	if metaData.AdditionalFields != nil {
+		dontProduce = metaData.AdditionalFields["don't produce"]
+	}
+
+	if foundData.ChannelName == "ONDC" && dontProduce == nil {
+		err = s.UpdateInOndc(*data, foundData)
+		if err != nil {
+			return err
+		}
+	}
+
+	Status, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "NEW")
+	if data.StatusId != nil && *data.StatusId == Status {
+		salesInvoice := s.MapWithSalesInvoice(data, metaData, true)
+		go s.salesInvoiceService.CreateSalesInvoice(metaData, salesInvoice)
+	}
+	SoStatus, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "RETURNED")
+	data.StatusId = &SoStatus
+	if *data.StatusId == SoStatus {
+		salesReturns := s.MapWithSalesReturns(data, metaData, false)
+		go s.salesReturnsService.CreateSalesReturn(metaData, salesReturns)
 	}
 	return nil
-
 }
 
-func (s *service) DeleteSalesOrder(query map[string]interface{}, access_template_id string, si string) error {
-	user_id := helpers.ConvertStringToUint(si)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SALES_ORDERS", *user_id)
+func (s *service) DeleteSalesOrder(metaData core.MetaData) error {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete sales order at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete sales order at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.salesOrderRepository.FindOne(q)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.salesOrderRepository.Delete(query)
+
+	err := s.salesOrderRepository.Delete(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	} else {
-		query := map[string]interface{}{"id": query["id"]}
-		er := s.salesOrderRepository.DeleteOrderLine(query)
-		if er != nil {
-			return res.BuildError(res.ErrDataNotFound, er)
+		query := map[string]interface{}{
+			"so_id": metaData.Query["id"],
+		}
+		err = s.salesOrderRepository.DeleteOrderLine(query)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (s *service) DeleteSalesOrderLines(query map[string]interface{}, access_template_id string, token_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "SALES_ORDERS", *token_user_id)
+func (s *service) DeleteSalesOrderLines(metaData core.MetaData) error {
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete sales order at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete sales order at data level")
 	}
-	_, er := s.salesOrderRepository.FindOrderLines(query)
-	if er != nil {
-		return res.BuildError(res.ErrDataNotFound, er)
-	}
-	err := s.salesOrderRepository.DeleteOrderLine(query)
 
+	err := s.salesOrderRepository.DeleteOrderLine(metaData.Query)
 	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
+		return err
 	}
-
 	return nil
-
 }
 
-func (s *service) SearchSalesOrders(query string, access_template_id string, token_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "SALES_ORDERS", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list sales order at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list sales order at data level")
-	}
-	data, err := s.salesOrderRepository.Search(query)
+func (s *service) ChannelSalesOrderUpsert(metaData core.MetaData, data []orders.SalesOrders) (interface{}, error) {
 
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	return data, nil
-
-}
-
-func (s *service) ChannelSalesOrderUpsert(data []orders.SalesOrders, TokenUserId string) (interface{}, error) {
-
-	//access_module_flag, _ := access_checker.ValidateUserAccess(access_template_id, "LIST", "SALES_ORDERS")
-
-	//if access_module_flag {
 	var success []interface{}
 	var failures []interface{}
 
@@ -324,25 +343,18 @@ func (s *service) ChannelSalesOrderUpsert(data []orders.SalesOrders, TokenUserId
 			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": "reference_number should not be empty"})
 			continue
 		}
-
-		salesOrder.UpdatedByID = helpers.ConvertStringToUint(TokenUserId)
-
-		query := map[string]interface{}{"reference_number": salesOrder.ReferenceNumber}
-
-		data, _ := s.salesOrderRepository.FindOne(query)
-
-		if data != nil {
-
-			fetchedSalesOrder := data.(orders.SalesOrders)
-
-			old_status := fetchedSalesOrder.StatusId
-			new_status := salesOrder.StatusId
-
-			if new_status != old_status && new_status != 0 {
-				result, _ := helpers.UpdateStatusHistory(fetchedSalesOrder.StatusHistory, new_status)
-				salesOrder.StatusHistory = result
+		query := map[string]interface{}{
+			"reference_number": salesOrder.ReferenceNumber,
+		}
+		fetchedSalesOrder, err := s.salesOrderRepository.FindOne(query)
+		if err == nil {
+			// fetchedSalesOrder := data.(orders.SalesOrders)
+			if salesOrder.StatusId != nil {
+				if *salesOrder.StatusId != *fetchedSalesOrder.StatusId && *salesOrder.StatusId != 0 {
+					salesOrder.StatusHistory, _ = helpers.UpdateStatusHistory(fetchedSalesOrder.StatusHistory, *salesOrder.StatusId)
+				}
 			}
-
+			salesOrder.UpdatedByID = &metaData.TokenUserId
 			err := s.salesOrderRepository.Update(query, &salesOrder)
 			if err != nil {
 				failures = append(failures, map[string]interface{}{"reference_number": salesOrder.ReferenceNumber, "status": false, "serial_number": index + 1, "msg": err})
@@ -357,13 +369,12 @@ func (s *service) ChannelSalesOrderUpsert(data []orders.SalesOrders, TokenUserId
 			continue
 		}
 
-		salesOrder.SalesOrderNumber = helpers.GenerateSequence("SO", TokenUserId, "sales_orders")
-		salesOrder.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
-		salesOrder.UpdatedByID = nil
-		statusHistory, _ := helpers.UpdateStatusHistory(salesOrder.StatusHistory, salesOrder.StatusId)
-		salesOrder.StatusHistory = statusHistory
+		salesOrder.SalesOrderNumber = helpers.GenerateSequence("SO", fmt.Sprint(metaData.TokenUserId), "sales_orders")
+		salesOrder.CreatedByID = &metaData.TokenUserId
+		salesOrder.CompanyId = metaData.CompanyId
+		salesOrder.StatusHistory, _ = helpers.UpdateStatusHistory(salesOrder.StatusHistory, *salesOrder.StatusId)
 
-		err := s.salesOrderRepository.Save(&salesOrder)
+		_, err = s.salesOrderRepository.Save(&salesOrder)
 		if err != nil {
 			failures = append(failures, map[string]interface{}{"reference_number": salesOrder.ReferenceNumber, "status": false, "serial_number": index + 1, "msg": err})
 			continue
@@ -375,8 +386,6 @@ func (s *service) ChannelSalesOrderUpsert(data []orders.SalesOrders, TokenUserId
 		"failures": failures,
 	}
 	return response, nil
-	//}
-	//return nil, nil
 }
 
 func (s *service) ChannelSalesOrderLinesUpsert(data []orders.SalesOrderLines, salesOrderId uint) (interface{}, error) {
@@ -384,18 +393,14 @@ func (s *service) ChannelSalesOrderLinesUpsert(data []orders.SalesOrderLines, sa
 	var failures []interface{}
 
 	for index, orderLine := range data {
-		update_query := map[string]interface{}{
+		updateQuery := map[string]interface{}{
 			"product_id": orderLine.ProductId,
 			"so_id":      salesOrderId,
 		}
-		count, err := s.salesOrderRepository.UpdateOrderLines(update_query, orderLine)
+		err := s.salesOrderRepository.UpdateOrderLines(updateQuery, &orderLine)
 		if err != nil {
-			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
-			continue
-		}
-		if count == 0 {
 			orderLine.SoId = salesOrderId
-			err := s.salesOrderRepository.SaveOrderLines(orderLine)
+			err := s.salesOrderRepository.SaveOrderLines(&orderLine)
 			if err != nil {
 				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
 				continue
@@ -414,6 +419,7 @@ func (s *service) ChannelSalesOrderLinesUpsert(data []orders.SalesOrderLines, sa
 
 func (s *service) ProcessSalesOrderCalculation(data *orders.SalesOrders) *orders.SalesOrders {
 	var subTotal, totalTax, shippingCharges float32
+	var totalQuantity int64 = 0
 
 	for index, orderLines := range data.SalesOrderLines {
 		amountWithoutDiscount := (orderLines.Price * float32(orderLines.Quantity))
@@ -424,8 +430,9 @@ func (s *service) ProcessSalesOrderCalculation(data *orders.SalesOrders) *orders
 		data.SalesOrderLines[index].Amount = amount
 		subTotal += amountWithoutTax
 		totalTax += tax
+		totalQuantity = totalQuantity + orderLines.Quantity
 	}
-
+	data.TotalQuantity = totalQuantity
 	data.SoPaymentDetails.SubTotal = subTotal
 	data.SoPaymentDetails.Tax = totalTax
 	var vendorDetails map[string]interface{}
@@ -441,10 +448,9 @@ func (s *service) ProcessSalesOrderCalculation(data *orders.SalesOrders) *orders
 	return data
 }
 
-func (s *service) GetSalesHistory(productId uint, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetSalesHistory(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "SALES_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "LIST", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list sales order at view level")
 	}
@@ -452,20 +458,16 @@ func (s *service) GetSalesHistory(productId uint, page *pagination.Paginatevalue
 		return nil, fmt.Errorf("you dont have access for list sales order at data level")
 	}
 
-	data, err := s.salesOrderRepository.GetSalesHistory(productId, page)
-
+	data, err := s.salesOrderRepository.GetSalesHistory(metaData.Query, page)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
-
 	return data, nil
-
 }
 
-func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetSalesOrderTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "SALES_ORDERS", *token_user_id)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "SALES_ORDERS", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view sales order at view level")
 	}
@@ -473,10 +475,12 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 		return nil, fmt.Errorf("you dont have access for view sales order at data level")
 	}
 
-	salesOrderId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
+	id := metaData.Query["id"].(string)
+	tab := metaData.Query["tab"].(string)
+	// token_id := fmt.Sprint(metaData.TokenUserId)
+	// access_template_id := fmt.Sprint(metaData.AccessTemplateId)
+
+	salesOrderId, _ := strconv.Atoi(id)
 
 	if tab == "delivery_orders" {
 
@@ -484,7 +488,7 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 
 		deliveryOrderPage := page
 		deliveryOrderPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesOrderId)
-		data, err := s.deliveryOrdersService.AllDeliveryOrders(deliveryOrderPage, token_id, access_template_id, "LIST")
+		data, err := s.deliveryOrdersService.AllDeliveryOrders(metaData, deliveryOrderPage)
 		if err != nil {
 			return nil, err
 		}
@@ -497,7 +501,7 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 
 		purchaseOrderPage := page
 		purchaseOrderPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesOrderId)
-		data, err := s.purchaseOrdersService.ListPurchaseOrders(purchaseOrderPage, access_template_id, token_id, "LIST")
+		data, err := s.purchaseOrdersService.ListPurchaseOrders(metaData, purchaseOrderPage)
 		if err != nil {
 			return nil, err
 		}
@@ -510,7 +514,8 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 
 		salesInvoicePage := page
 		salesInvoicePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesOrderId)
-		data, err := s.salesInvoiceService.GetAllSalesInvoice(salesInvoicePage, token_id, access_template_id, "LIST")
+		var metaData core.MetaData
+		data, err := s.salesInvoiceService.GetAllSalesInvoice(metaData, salesInvoicePage)
 		if err != nil {
 			return nil, err
 		}
@@ -526,7 +531,7 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 		deliveryOrderPage := new(pagination.Paginatevalue)
 		deliveryOrderPage.Per_page = 1000
 		deliveryOrderPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesOrderId)
-		deliveryOrderData, err := s.deliveryOrdersService.AllDeliveryOrders(deliveryOrderPage, token_id, access_template_id, "LIST")
+		deliveryOrderData, err := s.deliveryOrdersService.AllDeliveryOrders(metaData, deliveryOrderPage)
 		if err != nil {
 			return nil, err
 		}
@@ -538,7 +543,7 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 			salesReturnsPage := new(pagination.Paginatevalue)
 			salesReturnsPage.Per_page = 1000
 			salesReturnsPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, deliveryOrder.ID)
-			salesReturnsDataInterface, err := s.salesReturnsService.ListSalesReturns(salesReturnsPage, access_template_id, token_id, "LIST")
+			salesReturnsDataInterface, err := s.salesReturnsService.ListSalesReturns(metaData, salesReturnsPage)
 			if err != nil {
 				return nil, err
 			}
@@ -553,13 +558,16 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 		data := make([]creditnote.CreditNoteResponseDTO, 0)
 		dto, _ := json.Marshal(data)
 		err := json.Unmarshal(dto, &data)
+		if err != nil {
+			return nil, err
+		}
 
 		sourceDocumentId, _ := helpers.GetLookupcodeId("DELIVERY_ORDERS_SOURCE_DOCUMENT_TYPES", "SALES_ORDERS")
 
 		deliveryOrderPage := new(pagination.Paginatevalue)
 		deliveryOrderPage.Per_page = 1000
 		deliveryOrderPage.Filters = fmt.Sprintf("[[\"source_document_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesOrderId)
-		deliveryOrderData, err := s.deliveryOrdersService.AllDeliveryOrders(deliveryOrderPage, token_id, access_template_id, "LIST")
+		deliveryOrderData, err := s.deliveryOrdersService.AllDeliveryOrders(metaData, deliveryOrderPage)
 		if err != nil {
 			return nil, err
 		}
@@ -571,7 +579,7 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 			salesReturnsPage := new(pagination.Paginatevalue)
 			salesReturnsPage.Per_page = 1000
 			salesReturnsPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, deliveryOrder.ID)
-			salesReturnsDataInterface, err := s.salesReturnsService.ListSalesReturns(salesReturnsPage, access_template_id, token_id, "LIST")
+			salesReturnsDataInterface, err := s.salesReturnsService.ListSalesReturns(metaData, salesReturnsPage)
 			if err != nil {
 				return nil, err
 			}
@@ -585,16 +593,328 @@ func (s *service) GetSalesOrderTab(id, tab string, page *pagination.Paginatevalu
 				creditNotePage.Per_page = 1000
 				creditNotePage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, salesReturn.ID)
 
-				var query = make(map[string]interface{}, 0)
-
-				creditNoteData, err := s.creditNoteService.GetCreditNoteList(query, creditNotePage, token_id, access_template_id, "LIST")
+				var metaData core.MetaData
+				creditNoteDataInterface, err := s.creditNoteService.GetCreditNoteList(metaData, creditNotePage)
 				if err != nil {
 					return nil, err
 				}
+
+				creditNoteData := creditNoteDataInterface.([]creditnote.CreditNoteResponseDTO)
 				data = append(data, creditNoteData...)
 			}
 		}
 		return data, nil
 	}
 	return nil, nil
+}
+
+func (s *service) TrackSalesOrder(query map[string]interface{}) []map[string]interface{} {
+	var sales_order_res SalesOrdersDTO
+	res, _ := s.salesOrderRepository.FindOne(query)
+	dto, _ := json.Marshal(res)
+	json.Unmarshal(dto, &sales_order_res)
+	return sales_order_res.StatusHistory
+}
+
+func (s *service) UpdateInOndc(newOrder orders.SalesOrders, oldOrder orders.SalesOrders) (err error) {
+
+	orderStatusMap := map[string]string{
+		"CANCELLED":     "Cancelled",
+		"RETURNED":      "RTO-Initiated",
+		"DELIVERED":     "Completed",
+		"SHIPPED":       "Order-picked-up",
+		"READY_TO_SHIP": "Packed",
+		"PROCESSING":    "In-progress",
+		"NEW":           "Accepted",
+		"DRAFT":         "Created",
+	}
+
+	cancelledStatusId, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "CANCELLED")
+	partiallyCancelledStatusId, _ := helpers.GetLookupcodeId("SALES_ORDER_STATUS", "PARTIALLY_CANCELLED")
+
+	if (newOrder.StatusId == nil || *newOrder.StatusId == *oldOrder.StatusId) && len(newOrder.SalesOrderLines) == 0 {
+		fmt.Println("Not Produced to ONDC 1", *newOrder.StatusId, len(newOrder.SalesOrderLines))
+		return nil
+	}
+	payload := map[string]interface{}{}
+
+	var ondcContext map[string]interface{}
+	err = json.Unmarshal(oldOrder.OndcContext, &ondcContext)
+	if err != nil {
+		return err
+	}
+
+	if *newOrder.StatusId != cancelledStatusId && *newOrder.StatusId != partiallyCancelledStatusId {
+		orderState, err := helpers.GetLookupcodeName(*newOrder.StatusId)
+		if err != nil {
+			return err
+		}
+		ondcOrderState := orderStatusMap[orderState]
+		if ondcOrderState == "" {
+			return nil
+		}
+		ondcContext["message"].(map[string]interface{})["order"].(map[string]interface{})["state"] = ondcOrderState
+		oldOrder.OndcContext, _ = json.Marshal(ondcContext)
+
+		producePayload := map[string]interface{}{
+			"meta_data": core.MetaData{
+				AdditionalFields: map[string]interface{}{
+					"type": "get_order_status",
+				},
+			},
+			"data":          oldOrder,
+			"order_request": ondcContext,
+		}
+
+		eda.Produce(eda.SEND_SALES_ORDER, producePayload, false)
+		return nil
+	}
+
+	payload["context"] = ondcContext["context"]
+
+	order := map[string]interface{}{
+		"id": oldOrder.ReferenceNumber,
+	}
+
+	if newOrder.StatusId != nil && *newOrder.StatusId != *oldOrder.StatusId {
+
+		orderState, err := helpers.GetLookupcodeName(*newOrder.StatusId)
+
+		fmt.Println("orderState", orderState, *newOrder.StatusId)
+
+		if err != nil {
+			fmt.Println("Not Produced to ONDC 1", *newOrder.StatusId, len(newOrder.SalesOrderLines))
+			return nil
+		}
+
+		if ondcOrderState := orderStatusMap[orderState]; ondcOrderState != "" {
+			order["state"] = ondcOrderState
+		}
+
+	}
+
+	if (newOrder.StatusId != nil && *newOrder.StatusId != cancelledStatusId) && len(newOrder.SalesOrderLines) > 0 {
+		items := []map[string]interface{}{}
+		for _, newItem := range newOrder.SalesOrderLines {
+			for _, oldItem := range oldOrder.SalesOrderLines {
+				if newItem.ProductId != nil && oldItem.ProductId != nil {
+					if *newItem.ProductId == *oldItem.ProductId {
+						item := map[string]interface{}{
+							"id": oldItem.Product.SkuId,
+						}
+						if newItem.Quantity > 0 && newItem.Quantity != oldItem.Quantity {
+							item["quantity"] = map[string]interface{}{
+								"count": newItem.Quantity,
+							}
+						}
+						if newItem.StatusId != nil && (*newItem.StatusId == cancelledStatusId || *newItem.StatusId == partiallyCancelledStatusId) {
+							item["tags"] = map[string]interface{}{
+								"update_type": "cancel",
+							}
+						}
+						if item["quantity"] != nil || item["tags"] != nil {
+							items = append(items, item)
+						}
+					}
+				}
+			}
+		}
+		if len(items) > 0 {
+			order["items"] = items
+		}
+	}
+
+	if order["items"] == nil && order["state"] == nil {
+		fmt.Println("Not Produced to ONDC 2")
+		return nil
+	}
+
+	if ondcContext != nil {
+		order["quote"] = ondcContext["message"].(map[string]interface{})["order"].(map[string]interface{})["quote"]
+	}
+
+	payload["message"] = map[string]interface{}{
+		"order": order,
+	}
+
+	producePayload := map[string]interface{}{
+		"meta_data": core.MetaData{},
+		"data":      payload,
+	}
+
+	// fetchedOrder, err := s.salesOrderRepository.FindOne(map[string]interface{}{"id": oldOrder.ID})
+	// if err != nil {
+	// 	return err
+	// }
+	// var orderDto SalesOrdersDTO
+	// err = helpers.JsonMarshaller(fetchedOrder, &orderDto)
+	// if err != nil {
+	// 	return err
+	// }
+	fmt.Println("--------Order Produced to ONDC-------->", oldOrder.ReferenceNumber, eda.ONDC_UPDATE_SALES_ORDER_STATUS)
+	eda.Produce(eda.ONDC_UPDATE_SALES_ORDER_STATUS, producePayload, false)
+
+	// helpers.PrettyPrint("payload", producePayload)
+
+	return nil
+}
+
+func (s *service) MapWithSalesInvoice(requestPayload *orders.SalesOrders, edaMetaData core.MetaData, flag bool) *invoice_model.SalesInvoice {
+	//================create Sales Invoice =========================
+	salesInvoice := new(invoice_model.SalesInvoice)
+	salesInvoice.OrderId = &requestPayload.ID
+	if flag {
+		delete(edaMetaData.Query, "company_id")
+		so_data, _ := s.ViewSalesOrder(edaMetaData)
+		json_data, _ := json.Marshal(so_data)
+		json.Unmarshal(json_data, &requestPayload)
+	}
+	channel_name := requestPayload.ChannelName
+	var channel_data channel.ChannelDTO
+	if channel_name != "" {
+		query := map[string]interface{}{
+			"name": channel_name,
+		}
+		channel_data, _ = s.channelService.GetChannelService(query)
+	} else {
+		channel_data.ID = 1
+	}
+	salesInvoice.ChannelID = &channel_data.ID
+
+	var InvoiceBillingAddress CustomerBillingorShippingAddress
+	var InvoiceReceivingAddress CustomerBillingorShippingAddress
+	json.Unmarshal(requestPayload.CustomerBillingAddress, &InvoiceBillingAddress)
+	json.Unmarshal(requestPayload.CustomerShippingAddress, &InvoiceReceivingAddress)
+	var billing_data = make([]map[string]interface{}, 0)
+	var shipping_data = make([]map[string]interface{}, 0)
+	billing_data = append(billing_data, map[string]interface{}{
+		"sender_name":   InvoiceBillingAddress.ContactPersonName,
+		"mobile_number": InvoiceBillingAddress.ContactPersonNumber,
+		"address_line1": InvoiceBillingAddress.AddressLine1,
+		"address_line2": InvoiceBillingAddress.AddressLine2,
+		"address_line3": InvoiceBillingAddress.AddressLine3,
+		"zipcode":       InvoiceBillingAddress.PinCode,
+		"city":          InvoiceBillingAddress.City,
+		"state":         InvoiceBillingAddress.State,
+		"country":       InvoiceBillingAddress.Country,
+		"landmark":      InvoiceBillingAddress.Landmark,
+	})
+	salesInvoice.BillingAddress, _ = json.Marshal(billing_data)
+	shipping_data = append(shipping_data, map[string]interface{}{
+		"receiver_name": InvoiceReceivingAddress.ContactPersonName,
+		"mobile_number": InvoiceReceivingAddress.ContactPersonNumber,
+		"address_line1": InvoiceReceivingAddress.AddressLine1,
+		"address_line2": InvoiceReceivingAddress.AddressLine2,
+		"address_line3": InvoiceReceivingAddress.AddressLine3,
+		"zipcode":       InvoiceReceivingAddress.PinCode,
+		"city":          InvoiceReceivingAddress.City,
+		"state":         InvoiceReceivingAddress.State,
+		"country":       InvoiceReceivingAddress.Country,
+		"landmark":      InvoiceReceivingAddress.Landmark,
+	})
+	salesInvoice.ShippingAddress, _ = json.Marshal(shipping_data)
+
+	salesInvoice.PaymentTypeID = requestPayload.PaymentTypeId
+	var InvoiceTotalQuantity int
+	for _, sales_order_line := range requestPayload.SalesOrderLines {
+		InvoiceTotalQuantity += int(sales_order_line.Quantity)
+		SalesInvoiceLine := new(invoice_model.SalesInvoiceLines)
+		SalesInvoiceLine.ProductVariantID = sales_order_line.ProductId
+		SalesInvoiceLine.ProductID = sales_order_line.ProductTemplateId
+		SalesInvoiceLine.Quantity = int32(sales_order_line.Quantity)
+		SalesInvoiceLine.Tax = float64(sales_order_line.Tax)
+		SalesInvoiceLine.Discount = float64(sales_order_line.Discount)
+		SalesInvoiceLine.Price = float64(sales_order_line.Price)
+		SalesInvoiceLine.TotalAmount = float64(sales_order_line.Amount)
+		salesInvoice.SalesInvoiceLines = append(salesInvoice.SalesInvoiceLines, *SalesInvoiceLine)
+	}
+	salesInvoice.Quantity = int32(InvoiceTotalQuantity)
+
+	salesInvoice.TotalAmount = float64(requestPayload.SoPaymentDetails.TotalAmount)
+	salesInvoice.SubTotalAmount = float64(requestPayload.SoPaymentDetails.SubTotal)
+	salesInvoice.ExpectedShipmentDate = requestPayload.ExpectedShippingDate
+	salesInvoice.OrderDate = requestPayload.CreatedDate
+	salesInvoice.InternalNotes = requestPayload.AdditionalInformation.Notes
+	salesInvoice.SalesInvoiceNumber = helpers.GenerateSequence("SALESINVOICE", fmt.Sprint(edaMetaData.TokenUserId), "sales_invoices")
+	salesInvoice.ReferenceNumber = helpers.GenerateSequence("REF", fmt.Sprint(edaMetaData.TokenUserId), "sales_invoices")
+
+	return salesInvoice
+
+}
+
+func (s *service) MapWithSalesReturns(requestPayload *orders.SalesOrders, edaMetaData core.MetaData, flag bool) *returns.SalesReturns {
+	//================create Sales Returns =========================
+	salesReturns := new(returns.SalesReturns)
+	//salesReturns.OrderId = &requestPayload.ID
+	if flag {
+		delete(edaMetaData.Query, "company_id")
+		so_data, _ := s.ViewSalesOrder(edaMetaData)
+		json_data, _ := json.Marshal(so_data)
+		json.Unmarshal(json_data, &requestPayload)
+	}
+	salesReturns.CustomerName = requestPayload.CustomerName
+	salesReturns.ChannelName = requestPayload.ChannelName
+
+	var returnBillingAddress CustomerBillingorShippingAddress
+	var returnReceivingAddress CustomerBillingorShippingAddress
+	json.Unmarshal(requestPayload.CustomerBillingAddress, &returnBillingAddress)
+	json.Unmarshal(requestPayload.CustomerShippingAddress, &returnReceivingAddress)
+	var billing_data = make([]map[string]interface{}, 0)
+	var shipping_data = make([]map[string]interface{}, 0)
+	billing_data = append(billing_data, map[string]interface{}{
+		"sender_name":   returnBillingAddress.ContactPersonName,
+		"mobile_number": returnBillingAddress.ContactPersonNumber,
+		"address_line1": returnBillingAddress.AddressLine1,
+		"address_line2": returnBillingAddress.AddressLine2,
+		"address_line3": returnBillingAddress.AddressLine3,
+		"zipcode":       returnBillingAddress.PinCode,
+		"city":          returnBillingAddress.City,
+		"state":         returnBillingAddress.State,
+		"country":       returnBillingAddress.Country,
+		"landmark":      returnBillingAddress.Landmark,
+	})
+	salesReturns.CustomerBillingAddress, _ = json.Marshal(billing_data)
+	shipping_data = append(shipping_data, map[string]interface{}{
+		"receiver_name": returnReceivingAddress.ContactPersonName,
+		"mobile_number": returnReceivingAddress.ContactPersonNumber,
+		"address_line1": returnReceivingAddress.AddressLine1,
+		"address_line2": returnReceivingAddress.AddressLine2,
+		"address_line3": returnReceivingAddress.AddressLine3,
+		"zipcode":       returnReceivingAddress.PinCode,
+		"city":          returnReceivingAddress.City,
+		"state":         returnReceivingAddress.State,
+		"country":       returnReceivingAddress.Country,
+		"landmark":      returnReceivingAddress.Landmark,
+	})
+	salesReturns.CustomerPickupAddress, _ = json.Marshal(shipping_data)
+
+	var returnTotalQuantity int
+	for _, sales_order_line := range requestPayload.SalesOrderLines {
+		returnTotalQuantity += int(sales_order_line.Quantity)
+		salesReturnline := new(returns.SalesReturnLines)
+		salesReturnline.ProductId = sales_order_line.ProductId
+		salesReturnline.UomId = sales_order_line.UomId
+		salesReturnline.ProductTemplateId = sales_order_line.ProductTemplateId
+		salesReturnline.SerialNumber = sales_order_line.SerialNumber
+		salesReturnline.QuantityReturned = int64(sales_order_line.Quantity)
+		salesReturnline.Tax = float32(sales_order_line.Tax)
+		salesReturnline.Discount = float32(sales_order_line.Discount)
+		salesReturnline.Rate = int(sales_order_line.Price)
+		salesReturnline.Amount = float32(sales_order_line.Amount)
+		salesReturns.SalesReturnLines = append(salesReturns.SalesReturnLines, *salesReturnline)
+	}
+	salesReturns.TotalQuantity = int64(returnTotalQuantity)
+
+	salesReturns.SrPaymentDetails.TotalAmount = float32(requestPayload.SoPaymentDetails.TotalAmount)
+	salesReturns.SrPaymentDetails.SubTotal = float32(requestPayload.SoPaymentDetails.SubTotal)
+	salesReturns.ExpectedDeliveyDate = requestPayload.ExpectedShippingDate
+	salesReturns.OrderDate = time.Time(requestPayload.SoDate)
+	salesReturns.AdditionalInformation.Notes = requestPayload.AdditionalInformation.Notes
+	salesReturns.AdditionalInformation.TermsAndConditions = requestPayload.AdditionalInformation.TermsAndConditions
+	salesReturns.AdditionalInformation.Attachments = requestPayload.AdditionalInformation.Attachments
+	salesReturns.SalesReturnNumber = helpers.GenerateSequence("SR", fmt.Sprint(edaMetaData.TokenUserId), "sales_returns")
+	salesReturns.ReferenceNumber = helpers.GenerateSequence("REF", fmt.Sprint(edaMetaData.TokenUserId), "sales_returns")
+
+	return salesReturns
+
 }

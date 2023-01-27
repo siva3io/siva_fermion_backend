@@ -22,16 +22,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type Vendors struct {
 	model_core.Model
-	Name             string         `json:"name" gorm:"unique;not null"`
-	ContactId        uint           `json:"contact_id" gorm:""`
-	Contact          Partner        `json:"contact" gorm:"foreignkey:ContactId; references:ID"`
+	Name             string         `json:"name" gorm:""`
+	ContactId        *uint          `json:"contact_id" gorm:""`
+	Contact          *Partner       `json:"contact" gorm:"foreignkey:ContactId; references:ID"`
 	VendorDetails    datatypes.JSON `json:"vendor_details" gorm:"type:json"`
-	PrimaryContactId uint           `json:"primary_contact_id" gorm:""`
-	PrimaryContact   Partner        `json:"primary_contact" gorm:"foreignkey:PrimaryContactId; references:ID"`
+	PrimaryContactId *uint          `json:"primary_contact_id" gorm:""`
+	PrimaryContact   *Partner       `json:"primary_contact" gorm:"foreignkey:PrimaryContactId; references:ID"`
 	VendorDocs       datatypes.JSON `json:"vendor_docs" gorm:"type:json"`
-	//VendorPriceLists []VendorPriceLists `json:"vendor_price_lists" gorm:"foreignkey:VendorID; references:ID"`
 }
 
+// TODO : need to remove vendor_price_lists
 type VendorPriceLists struct {
 	model_core.Model
 	Name             string              `json:"name" gorm:"unique;not null"`

@@ -24,8 +24,8 @@ func (h *handler) Route(g *echo.Group) {
 	g.GET("/wallet_transactions", h.ListWalletTransactions, cmiddleware.Authorization)
 	g.GET("/gateway_transactions", h.ListGatewayTransactions, cmiddleware.Authorization)
 	g.GET("/:id", h.ViewTransactions, cmiddleware.Authorization)
-	g.POST("/create", h.CreateTransactions, cmiddleware.Authorization, TransactionsCreateValidate)
-	g.POST("/:id/update", h.UpdateTransactions, cmiddleware.Authorization, TransactionsUpdateValidate)
+	g.POST("/create", h.CreateTransactionEvent, cmiddleware.Authorization, TransactionsCreateValidate)
+	g.POST("/:id/update", h.UpdateTransactionsEvent, cmiddleware.Authorization, TransactionsUpdateValidate)
 	g.DELETE("/:id/delete", h.DeleteTransactions, cmiddleware.Authorization)
 	g.GET("/get_transaction", h.GetTransaction, cmiddleware.Authorization)
 }

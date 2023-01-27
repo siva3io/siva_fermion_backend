@@ -1,13 +1,15 @@
 package internal_transfers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+
 	concurrency_management "fermion/backend_core/controllers/concurrency_management"
 	orders_base "fermion/backend_core/controllers/orders/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -36,11 +38,19 @@ type handler struct {
 	concurrencyService concurrency_management.Service
 }
 
+var InternalTransfersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
-	service := NewService()
-	base_service := orders_base.NewServiceBase()
-	concurrencyService := concurrency_management.NewService()
-	return &handler{service, base_service, concurrencyService}
+	if InternalTransfersHandler != nil {
+		return InternalTransfersHandler
+	}
+	InternalTransfersHandler = &handler{
+		NewService(),
+		orders_base.NewServiceBase(),
+		concurrency_management.NewService(),
+	}
+	return InternalTransfersHandler
 }
 
 // CreateInternalTransfers godoc
@@ -57,19 +67,40 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/create [post]
-func (h *handler) CreateInternalTransfers(c echo.Context) error {
+func (h *handler) CreateInternalTransfersEvent(c echo.Context) error {
 
-	input_data := c.Get("internal_transfers").(*orders.InternalTransfers)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	input_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err := h.service.CreateInternalTransfers(input_data, access_template_id, token_id)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	if err != nil {
-		return res.RespError(c, err)
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("internal_transfers"),
 	}
+	eda.Produce(eda.CREATE_INTERNAL_TRANSFERS, requestPayload)
+	return res.RespSuccess(c, "IST Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
 
-	return res.RespSuccess(c, "IST Created", map[string]interface{}{"internal_transfer_id": input_data.ID})
+func (h *handler) CreateInternalTransfers(request map[string]interface{}) {
+
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	requestPayload := new(orders.InternalTransfers)
+	helpers.JsonMarshaller(request["data"], requestPayload)
+
+	err := h.service.CreateInternalTransfers(edaMetaData, requestPayload)
+	responseMessage := new(eda.ConsumerResponse)
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_INTERNAL_TRANSFERS_ACK, *responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateInternalTransferInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": requestPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_INTERNAL_TRANSFERS_ACK, *responseMessage)
 }
 
 // GetListInternalTransfers godoc
@@ -91,23 +122,29 @@ func (h *handler) CreateInternalTransfers(c echo.Context) error {
 // @Router /api/v1/internal_transfers [get]
 func (h *handler) ListInternalTransfers(c echo.Context) error {
 
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	page := new(pagination.Paginatevalue)
 	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var data []ListInternalTransfersDTO
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
 
-	resp, err := h.service.ListInternalTransfers(page, access_template_id, token_id, "LIST")
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
-	if err != nil {
-		return res.RespError(c, err)
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetInternalTransferFromCache(fmt.Sprint(metaData.TokenUserId))
+		if cacheResponse != nil {
+			return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+		}
 	}
 
-	return res.RespSuccessInfo(c, "list of internal transfers fetched", data, page)
+	data, err := h.service.ListInternalTransfers(metaData, page)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	var dtoData []ListInternalTransfersDTO
+	helpers.JsonMarshaller(data, &dtoData)
+	return res.RespSuccessInfo(c, "list of internal transfers fetched", dtoData, page)
 }
 
 // ListInternalTransfersDropDown godoc
@@ -129,23 +166,29 @@ func (h *handler) ListInternalTransfers(c echo.Context) error {
 // @Router /api/v1/internal_transfers/dropdown [get]
 func (h *handler) ListInternalTransfersDropDown(c echo.Context) error {
 
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	page := new(pagination.Paginatevalue)
 	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var data []ListInternalTransfersDTO
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
 
-	resp, err := h.service.ListInternalTransfers(page, access_template_id, token_id, "DROPDOWN_LIST")
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
-	if err != nil {
-		return res.RespError(c, err)
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetInternalTransferFromCache(fmt.Sprint(metaData.TokenUserId))
+		if cacheResponse != nil {
+			return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+		}
 	}
 
-	return res.RespSuccessInfo(c, "Dropdown of internal transfers fetched", data, page)
+	data, err := h.service.ListInternalTransfers(metaData, page)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	var dtoData []ListInternalTransfersDTO
+	helpers.JsonMarshaller(data, &dtoData)
+	return res.RespSuccessInfo(c, "list of internal transfers fetched", dtoData, page)
 }
 
 // ViewInternalTransfers godoc
@@ -165,24 +208,16 @@ func (h *handler) ListInternalTransfersDropDown(c echo.Context) error {
 // @Router /api/v1/internal_transfers/{id} [get]
 func (h *handler) ViewInternalTransfers(c echo.Context) error {
 
-	var query = make(map[string]interface{}, 0)
-
-	ID := c.Param("id")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	id, _ := strconv.Atoi(ID)
-
-	query["id"] = int(id)
-
-	fmt.Println("query", query)
-
-	resp, err := h.service.ViewInternalTransfers(query, access_template_id, token_id)
-
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id": c.Param("id"),
+		// "company_id": metaData.CompanyId,
 	}
-
-	return res.RespSuccess(c, "internal transfers fetched", resp)
+	data, err := h.service.ViewInternalTransfers(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "internal transfers fetched", data)
 }
 
 // UpdateInternalTransfers godoc
@@ -200,32 +235,56 @@ func (h *handler) ViewInternalTransfers(c echo.Context) error {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/{id}/update [post]
-func (h *handler) UpdateInternalTransfers(c echo.Context) (err error) {
-	var id = c.Param("id")
+func (h *handler) UpdateInternalTransfersEvent(c echo.Context) (err error) {
 
-	var query = make(map[string]interface{}, 0)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	ID, _ := strconv.Atoi(id)
+	idString := c.Param("id")
+	id, _ := strconv.Atoi(idString)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         id,
+		"company_id": edaMetaData.CompanyId,
+	}
 
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data := c.Get("internal_transfers").(*orders.InternalTransfers)
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("internal_transfers"),
+	}
 
 	//--------------------------concurrency_management_start-----------------------------------------
-	response, PreviousStatusId, err := h.concurrencyService.CheckConcurrencyStatus(uint(ID), "status_id", "internal_transfers")
+	response, PreviousStatusId, err := h.concurrencyService.CheckConcurrencyStatus(uint(id), "status_id", "internal_transfers")
 	if response.Block {
 		return res.RespErr(c, errors.New(response.Message))
 	}
-	defer h.concurrencyService.ReleaseConcurrencyLock(uint(ID), PreviousStatusId, "status_id", "internal_transfers")
+	defer h.concurrencyService.ReleaseConcurrencyLock(uint(id), PreviousStatusId, "status_id", "internal_transfers")
 	//--------------------------concurrency_management_end-----------------------------------------
 
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateInternalTransfers(query, data, access_template_id, token_id)
+	eda.Produce(eda.UPDATE_INTERNAL_TRANSFERS, requestPayload)
+	return res.RespSuccess(c, "IST Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateInternalTransfers(request map[string]interface{}) {
+
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	requestPayload := new(orders.InternalTransfers)
+	helpers.JsonMarshaller(request["data"], requestPayload)
+
+	err := h.service.UpdateInternalTransfers(edaMetaData, requestPayload)
+	responseMessage := new(eda.ConsumerResponse)
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespError(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_INTERNAL_TRANSFERS_ACK, *responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "internal transfers updated succesfully", nil)
+	// cache implementation
+	UpdateInternalTransferInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": requestPayload.ID,
+	}
+	// eda.Produce(eda.UPDATE_INTERNAL_TRANSFERS_ACK, *responseMessage)
 }
 
 // DeleteInternalTransfers godoc
@@ -242,21 +301,23 @@ func (h *handler) UpdateInternalTransfers(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/{id}/delete [delete]
-func (h *handler) DeleteInternalTransfers(c echo.Context) (err error) {
-	var id = c.Param("id")
-	ID, _ := strconv.Atoi(id)
-
-	var query = make(map[string]interface{})
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteInternalTransfers(query, access_template_id, token_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) DeleteInternalTransfers(c echo.Context) error {
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         id,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "internal transfer order deleted successfully", map[string]int{"deleted_id": ID})
+	err := h.service.DeleteInternalTransfers(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	// cache implementation
+	UpdateInternalTransferInCache(metaData)
+
+	return res.RespSuccess(c, "internal transfer order deleted successfully", map[string]interface{}{"deleted_id": id})
 }
 
 // DeleteInternalTransfersLines godoc
@@ -274,55 +335,19 @@ func (h *handler) DeleteInternalTransfers(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/order_lines/{id}/delete [delete]
-func (h *handler) DeleteInternalTransfersLines(c echo.Context) (err error) {
-	var product_id = c.QueryParam("product_id")
-	var id = c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = map[string]interface{}{
-		"ist_id":     ID,
-		"product_id": product_id,
+func (h *handler) DeleteInternalTransfersLines(c echo.Context) error {
+
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"ist_id":     id,
+		"product_id": c.QueryParam("product_id"),
 	}
-	err = h.service.DeleteIstLines(query, access_template_id, token_id)
+	err := h.service.DeleteIstLines(metaData)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "order line deleted successfully", query)
-}
-
-// SearchInternalTransfers godoc
-// @Summary Search InternalTransfers
-// @Description Search InternalTransfers
-// @Tags InternalTransfers
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @Param   query 	query 	string 	true "query"
-// @Success 200 {array} GetAllInternalTransfersResponse
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/internal_transfers/search [get]
-func (h *handler) SearchInternalTransfers(c echo.Context) error {
-
-	query := c.QueryParam("query")
-
-	var data []ListInternalTransfersDTO
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	resp, err := h.service.SearchInternalTransfers(query, access_template_id, token_id)
-
-	value, _ := json.Marshal(resp)
-
-	_ = json.Unmarshal(value, &data)
-
-	if err != nil {
-		return res.RespError(c, err)
-	}
-
-	return res.RespSuccess(c, "OK", data)
+	return res.RespSuccess(c, "order line deleted successfully", metaData.Query)
 }
 
 // DownloadInternalTransfers godoc
@@ -362,22 +387,21 @@ func (h *handler) DownloadInternalTransfers(c echo.Context) error {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/{id}/favourite [post]
-func (h *handler) FavouriteInternalTransfers(c echo.Context) (err error) {
+func (h *handler) FavouriteInternalTransfers(c echo.Context) error {
+
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id": id,
+	}
+	_, err := h.service.ViewInternalTransfers(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
-	}
-	q := map[string]interface{}{
-		"id": ID,
-	}
-	_, er := h.service.ViewInternalTransfers(q, access_template_id, token_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
+		"id":      id,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.FavouriteInternalTransfers(query)
 	if err != nil {
@@ -400,16 +424,15 @@ func (h *handler) FavouriteInternalTransfers(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/{id}/unfavourite [post]
-func (h *handler) UnFavouriteInternalTransfers(c echo.Context) (err error) {
+func (h *handler) UnFavouriteInternalTransfers(c echo.Context) error {
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	metaData := c.Get("MetaData").(core.MetaData)
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"id":      id,
+		"user_id": metaData.TokenUserId,
 	}
-	err = h.base_service.UnFavouriteInternalTransfers(query)
+	err := h.base_service.UnFavouriteInternalTransfers(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -432,21 +455,21 @@ func (h *handler) UnFavouriteInternalTransfers(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/internal_transfers/{id}/filter_module/{tab} [get]
-func (h *handler) GetInternalTransfersTab(c echo.Context) (err error) {
+func (h *handler) GetInternalTransfersTab(c echo.Context) error {
 
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
-	err = c.Bind(page)
+	err := c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
 
-	id := c.Param("id")
-	tab := c.Param("tab")
+	metaData.AdditionalFields = map[string]interface{}{
+		"id":  c.Param("id"),
+		"tab": c.Param("tab"),
+	}
 
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetInternalTransfersTab(id, tab, page, access_template_id, token_id)
+	data, err := h.service.GetInternalTransfersTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}

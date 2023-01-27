@@ -21,20 +21,18 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 func (h *handler) Route(g *echo.Group) {
-	g.POST("/create", h.CreatePricing, cmiddleware.Authorization, PricingCreateValidate)
+	g.POST("/create", h.CreatePricingEvent, cmiddleware.Authorization, PricingCreateValidate)
 	g.GET("", h.PricingList, cmiddleware.Authorization)
 	g.GET("/dropdown", h.PricingListDropdown, cmiddleware.Authorization)
 	g.GET("/:id", h.FindPricing, cmiddleware.Authorization)
-	g.POST("/:id/edit", h.UpdatePricing, cmiddleware.Authorization, PricingUpdateValidate)
+	g.POST("/:id/edit", h.UpdatePricingEvent, cmiddleware.Authorization, PricingUpdateValidate)
 	g.DELETE("/:id/delete", h.DeletePricing, cmiddleware.Authorization)
 	g.DELETE("/:id/delete_line_items", h.DeleteLineItems, cmiddleware.Authorization)
 	g.POST("/:id/favourite", h.FavouritePricings, cmiddleware.Authorization)
 	g.POST("/:id/unfavourite", h.UnFavouritePricings, cmiddleware.Authorization)
 	g.GET("/favourite_list", h.FavouritePricingView, cmiddleware.Authorization)
 
-	g.GET("/sales_price_line_items_list", h.SalesPriceLineItems, cmiddleware.Authorization)
-
-	//---------------------Channel API's ----------------------------------------------------------------
-	g.POST("/channels/upsert", h.ChannelSalesPriceUpsert, cmiddleware.Authorization)
+	// //---------------------Channel API's ----------------------------------------------------------------
+	g.POST("/channels/upsert", h.ChannelSalesPriceUpsertEvent, cmiddleware.Authorization)
 
 }

@@ -30,6 +30,9 @@ func (a ScrapOrders) Validate() error {
 		),
 		validation.Field(&a.Schedule_scrap_date, validation.Required),
 		validation.Field(&a.Scrap_reason_id, validation.Required),
+		validation.Field(&a.Scrap_location_id, validation.Required),
+		validation.Field(&a.Scrap_source_location_id, validation.Required),
+		validation.Field(&a.Order_lines, validation.Required),
 	)
 }
 
@@ -37,6 +40,7 @@ func (o ScrapOrderLines) Validate() error {
 	return validation.ValidateStruct(&o,
 
 		validation.Field(&o.Product_id, validation.Required),
+		validation.Field(&o.Scrap_item_quantity, validation.Required),
 	)
 }
 func ScrapOrdersCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {

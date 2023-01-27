@@ -1,6 +1,7 @@
 package shipping
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -28,26 +29,36 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type RTO interface {
-	CreateRTO(data *shipping.RTO) (uint, error)
+	CreateRTO(data *shipping.RTO) error
 	BulkCreateRTO(data *[]shipping.RTO) error
-	GetAllRTO(p *pagination.Paginatevalue) ([]shipping.RTO, error)
-	GetRTO(id uint) (shipping.RTO, error)
-	UpdateRTO(id uint, data shipping.RTO) error
-	DeleteRTO(id uint, user_id uint) error
+	GetAllRTO(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.RTO, error)
+	GetRTO(query map[string]interface{}) (shipping.RTO, error)
+	UpdateRTO(query map[string]interface{}, data *shipping.RTO) error
+	DeleteRTO(query map[string]interface{}) error
 }
 
 type rto struct {
 	db *gorm.DB
 }
 
+var rtoRepository *rto //singleton object
+
+// singleton function
 func NewRTO() *rto {
+	if rtoRepository != nil {
+		return rtoRepository
+	}
 	db := db.DbManager()
-	return &rto{db}
+	rtoRepository = &rto{db}
+	return rtoRepository
 }
 
-func (r *rto) CreateRTO(data *shipping.RTO) (uint, error) {
-	res := r.db.Model(&shipping.RTO{}).Create(&data)
-	return data.ID, res.Error
+func (r *rto) CreateRTO(data *shipping.RTO) error {
+	err := r.db.Model(&shipping.RTO{}).Create(&data).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *rto) BulkCreateRTO(data *[]shipping.RTO) error {
@@ -55,36 +66,52 @@ func (r *rto) BulkCreateRTO(data *[]shipping.RTO) error {
 	return res.Error
 }
 
-func (r *rto) GetRTO(id uint) (shipping.RTO, error) {
+func (r *rto) GetRTO(query map[string]interface{}) (shipping.RTO, error) {
 	var data shipping.RTO
-	result := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.RTO{}).Where("id", id).First(&data)
-	if result.Error != nil {
-		return data, result.Error
+	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.RTO{}).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return data, err.Error
 	}
 	return data, nil
 }
 
-func (r *rto) GetAllRTO(p *pagination.Paginatevalue) ([]shipping.RTO, error) {
+func (r *rto) GetAllRTO(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.RTO, error) {
 	var data []shipping.RTO
-	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations).Model(&shipping.RTO{}).Scopes(helpers.Paginate(&shipping.RTO{}, p, r.db)).Where("is_active = true").Find(&data).Error
+	err := r.db.Preload("ShippingOrder.Channel").Preload("ShippingOrder.Partner").Preload("ShippingOrder.Order").Preload("ShippingOrder.ShippingPartner").Preload("ShippingOrder.ShippingOrderLines").Preload("ShippingOrder.ShippingOrderLines.ProductVariant").Preload("ShippingOrder.ShippingOrderLines.ProductTemplate").Preload(clause.Associations + "." + clause.Associations).Model(&shipping.RTO{}).Scopes(helpers.Paginate(&shipping.RTO{}, p, r.db)).Where("is_active = true").Find(&data).Error
 	if err != nil {
 		return data, err
 	}
 	return data, nil
 }
 
-func (r *rto) UpdateRTO(id uint, data shipping.RTO) error {
-	res := r.db.Model(&shipping.RTO{}).Where("id", id).Updates(&data)
-	return res.Error
+func (r *rto) UpdateRTO(query map[string]interface{}, data *shipping.RTO) error {
+	err := r.db.Model(&shipping.RTO{}).Where(query).Updates(&data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return err.Error
 }
 
-func (r *rto) DeleteRTO(id uint, user_id uint) error {
-	zone := os.Getenv("DB_TZ")
-	loc, _ := time.LoadLocation(zone)
+func (r *rto) DeleteRTO(query map[string]interface{}) error {
+	timeZone := os.Getenv("DB_TZ")
+	timeLocation, _ := time.LoadLocation(timeZone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
-		"deleted_at": time.Now().In(loc),
+		"deleted_by": query["user_id"],
+		"deleted_at": time.Now().In(timeLocation),
 	}
-	res := r.db.Model(&shipping.RTO{}).Where("id", id).Updates(data)
-	return res.Error
+	delete(query, "user_id")
+	err := r.db.Model(&shipping.RTO{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }

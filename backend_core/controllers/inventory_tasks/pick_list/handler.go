@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	inventory_tasks_base "fermion/backend_core/controllers/inventory_tasks/base"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/inventory_tasks"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -32,10 +35,17 @@ type handler struct {
 	base_service inventory_tasks_base.ServiceBase
 }
 
+var PickListHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if PickListHandler != nil {
+		return PickListHandler
+	}
 	service := NewService()
 	base_service := inventory_tasks_base.NewServiceBase()
-	return &handler{service, base_service}
+	PickListHandler = &handler{service, base_service}
+	return PickListHandler
 }
 
 // FavouritePickListView godoc
@@ -85,19 +95,58 @@ func (h *handler) FavouritePickListView(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/create [post]
-func (h *handler) CreatePickList(c echo.Context) (err error) {
-	data := c.Get("pick_list").(*PicklistRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	t := uint(user_id)
-	data.CreatedByID = &t
-	id, err := h.service.CreatePickList(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) CreatePicklistEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("pick_list"),
 	}
-	return res.RespSuccess(c, "Picklist created successfully", map[string]interface{}{"created_id": id})
+	eda.Produce(eda.CREATE_PICK_LIST, request_payload)
+	return res.RespSuccess(c, "Pick List Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
 }
+
+func (h *handler) CreatePicklist(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(inventory_tasks.PickList)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreatePickList(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_PICK_LIST_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_PICK_LIST_ACK, responseMessage)
+	// cache implementation
+	UpdatePickListInCache(edaMetaData)
+}
+
+// func (h *handler) CreatePickList(c echo.Context) (err error) {
+// 	data := c.Get("pick_list").(*PicklistRequest)
+// 	token_id := c.Get("TokenUserID").(string)
+// 	access_template_id := c.Get("AccessTemplateId").(string)
+// 	user_id, _ := strconv.Atoi(token_id)
+// 	t := uint(user_id)
+// 	data.CreatedByID = &t
+// 	id, err := h.service.CreatePickList(data, token_id, access_template_id)
+// 	if err != nil {
+// 		return res.RespErr(c, err)
+// 	}
+
+// 	// cache implementation
+// 	UpdatePickListInCache(token_id, access_template_id)
+
+// 	return res.RespSuccess(c, "Picklist created successfully", map[string]interface{}{"created_id": id})
+// }
 
 // BulkCreatePicklist godoc
 // @Summary 	do a BulkCreatePicklist
@@ -117,13 +166,13 @@ func (h *handler) BulkCreatePickList(c echo.Context) (err error) {
 	data := new([]PicklistRequest)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreatePickList(data, token_id, access_template_id)
+	err = h.service.BulkCreatePickList(metaData, data)
 	if err != nil {
 		return res.RespError(c, err)
 	}
@@ -145,19 +194,63 @@ func (h *handler) BulkCreatePickList(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/{id}/edit [put]
-func (h *handler) UpdatePickList(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("pick_list").(*PicklistRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdatePickList(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdatePickListEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	pickListId := c.Param("id")
+
+	edaMetaData.Query = map[string]interface{}{
+		"id":         pickListId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Picklist updated successfully", map[string]interface{}{"updated_id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("pick_list"),
+	}
+	eda.Produce(eda.UPDATE_PICK_LIST, request_payload)
+	return res.RespSuccess(c, "Pick List Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
 }
+
+func (h *handler) UpdatePickList(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(inventory_tasks.PickList)
+	helpers.JsonMarshaller(data, updatePayload)
+	err := h.service.UpdatePickList(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_PICK_LIST_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_PICK_LIST_ACK, responseMessage)
+
+	UpdatePickListInCache(edaMetaData)
+}
+
+// func (h *handler) UpdatePickList(c echo.Context) (err error) {
+// 	ID := c.Param("id")
+// 	id, _ := strconv.Atoi(ID)
+// 	data := c.Get("pick_list").(*PicklistRequest)
+// 	token_id := c.Get("TokenUserID").(string)
+// 	access_template_id := c.Get("AccessTemplateId").(string)
+// 	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
+// 	err = h.service.UpdatePickList(uint(id), data, token_id, access_template_id)
+// 	if err != nil {
+// 		return res.RespError(c, err)
+// 	}
+
+// 	// cache implementation
+// 	UpdatePickListInCache(token_id, access_template_id)
+
+// 	return res.RespSuccess(c, "Picklist updated successfully", map[string]interface{}{"updated_id": id})
+// }
 
 // GetPicklist godoc
 // @Summary      Find a Picklist by id
@@ -174,15 +267,19 @@ func (h *handler) UpdatePickList(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/{id} [get]
 func (h *handler) GetPickList(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetPickList(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pickListId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": pickListId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetPickList(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Picklist fetched successfully", result)
+	var response PicklistRequest
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Picklist fetched successfully", response)
 }
 
 // GetAllPicklist godoc
@@ -204,15 +301,31 @@ func (h *handler) GetPickList(c echo.Context) (err error) {
 // @Router       /api/v1/pick_list [get]
 func (h *handler) GetAllPickList(c echo.Context) (err error) {
 	//per_page, page_no, sort
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllPickList(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PicklistRequest
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPickListFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllPickList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Picklist data retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Picklist data retrieved Successfully", response, p)
 }
 
 // DeletePicklist godoc
@@ -230,16 +343,22 @@ func (h *handler) GetAllPickList(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/{id}/delete [delete]
 func (h *handler) DeletePickList(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeletePickList(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	priceListId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         priceListId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeletePickList(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "Picklist deleted successfully", map[string]interface{}{"deleted_id": id})
+
+	// cache implementation
+	UpdatePickListInCache(metaData)
+
+	return res.RespSuccess(c, "Picklist deleted successfully", map[string]interface{}{"deleted_id": priceListId})
 }
 
 // DeletePicklistLines godoc
@@ -258,21 +377,21 @@ func (h *handler) DeletePickList(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/{id}/delete_products [delete]
 func (h *handler) DeletePickListLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	metaData := c.Get("MetaData").(core.MetaData)
+	pickListId := c.Param("id")
 	product_id := c.QueryParam("product_id")
-	prod_id, _ := strconv.Atoi(product_id)
-	query := map[string]interface{}{
-		"pick_list_id": uint(id),
-		"product_id":   uint(prod_id),
+	metaData.Query = map[string]interface{}{
+		"id":         pickListId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+		"product_id": product_id,
 	}
-	err = h.service.DeletePickListLines(query, token_id, access_template_id)
+
+	err = h.service.DeletePickListLines(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "Picklist Line Items successfully deleted", query)
+	return res.RespSuccess(c, "Picklist Line Items successfully deleted", pickListId)
 }
 
 // SendMailPickList godoc
@@ -398,13 +517,29 @@ func (h *handler) UnFavouritePickList(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/pick_list/dropdown [get]
 func (h *handler) GetAllPickListDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllPickList(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PicklistRequest
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetPickListFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllPickList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Picklist data retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Picklist data retrieved Successfully", response, p)
 }

@@ -30,6 +30,7 @@ type WDRequest struct {
 	InitialWeightTaken     float64                `json:"initial_weight_taken"`
 	FinalWeightTaken       float64                `json:"final_weight_taken"`
 	FinalAmount            float64                `json:"final_amount"`
+	InitialAmount          float64                `json:"initial_amount"`
 	DiscrepancyAmount      float64                `json:"discrepancy_amount"`
 	WeightDiscrepancyProof map[string]interface{} `json:"Weight_discrepancy_proof"`
 }

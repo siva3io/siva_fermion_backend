@@ -30,18 +30,21 @@ func (grn GRNRequest) Validate() error {
 			&grn.GRNNumber,
 			validation.When(!grn.AutoGenerateGrnNumber, validation.Required),
 		),
-		validation.Field(&grn.GRNOrderLines),
+		validation.Field(&grn.WarehouseID, validation.Required),
+		validation.Field(&grn.GRNOrderLines, validation.Required),
 	)
 }
 
 func (grn_lines GRNOrderLines) Validate() error {
 	return validation.ValidateStruct(&grn_lines,
 		validation.Field(&grn_lines.ProductID, validation.Required),
-		validation.Field(&grn_lines.ProductTemplateId, validation.Required),
-		validation.Field(&grn_lines.PendingUnits, validation.Required),
+		// validation.Field(&grn_lines.ProductTemplateId, validation.Required),
 		validation.Field(&grn_lines.UOMId, validation.Required),
 		validation.Field(&grn_lines.OrderedUnits, validation.Required),
 		validation.Field(&grn_lines.ReceivedUnits, validation.Required),
+		validation.Field(&grn_lines.PendingUnits, validation.Required),
+		validation.Field(&grn_lines.QualityCheck, validation.Required),
+		validation.Field(&grn_lines.PutawayStatus, validation.Required),
 		validation.Field(&grn_lines.PendingUnits, validation.Required),
 	)
 }
@@ -56,8 +59,12 @@ func GrnCreateValidate(next echo.HandlerFunc) echo.HandlerFunc {
 			return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
 		}
 
-		if err := data.Validate(); err != nil {
-			return res.RespError(c, res.BuildError(res.ErrValidation, err))
+		err := validation.Validate(data)
+		if err != nil {
+			validation_err := helpers.ValidationErrorStructure(err)
+			if validation_err != nil {
+				return res.RespValidationErr(c, "Invalid Fields or Parameter Found", validation_err)
+			}
 		}
 
 		c.Set("grn", data)

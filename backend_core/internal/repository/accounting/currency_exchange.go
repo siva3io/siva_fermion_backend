@@ -2,12 +2,13 @@ package accounting
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
 	"fermion/backend_core/db"
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/pkg/util/helpers"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -31,7 +32,7 @@ type CurrencyExchange interface {
 	CreateExchangePair(data *accounting.CurrencyExchange) error
 	UpdateExchangePair(query map[string]interface{}, data *accounting.CurrencyExchange) error
 	FindOne(query map[string]interface{}) (accounting.CurrencyExchange, error)
-	FindAll() ([]accounting.CurrencyExchange, error)
+	FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.CurrencyExchange, error)
 	DeleteExchangePair(query map[string]interface{}) error
 }
 
@@ -39,9 +40,16 @@ type currency_exchange struct {
 	db *gorm.DB
 }
 
+var currencyExchangeRepository *currency_exchange //singleton object
+
+// singleton function
 func NewCurrency() *currency_exchange {
+	if currencyExchangeRepository != nil {
+		return currencyExchangeRepository
+	}
 	db := db.DbManager()
-	return &currency_exchange{db}
+	currencyExchangeRepository = &currency_exchange{db}
+	return currencyExchangeRepository
 }
 
 func (r *currency_exchange) CreateExchangePair(data *accounting.CurrencyExchange) error {
@@ -52,23 +60,22 @@ func (r *currency_exchange) CreateExchangePair(data *accounting.CurrencyExchange
 	return nil
 }
 func (r *currency_exchange) UpdateExchangePair(query map[string]interface{}, data *accounting.CurrencyExchange) error {
-	err := r.db.Preload(clause.Associations).Model(&accounting.CurrencyExchange{}).Where(query).Updates(data).Error
-	fmt.Println("--------------------------", err)
+	err := r.db.Preload(clause.Associations).Model(&accounting.CurrencyExchange{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if err != nil {
-		return err
+		return err.Error
 	}
 	return nil
 }
 
-func (r *currency_exchange) FindAll() ([]accounting.CurrencyExchange, error) {
-	// var data []accounting.BasicPairInfo
+func (r *currency_exchange) FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]accounting.CurrencyExchange, error) {
 	var data []accounting.CurrencyExchange
-	err := r.db.Preload(clause.Associations).Model(&accounting.CurrencyExchange{}).Find(&data).Error
-	fmt.Println("//////////////////////////////////////", data)
+	err := r.db.Preload(clause.Associations).Model(&accounting.CurrencyExchange{}).Scopes(helpers.Paginate(&accounting.CurrencyExchange{}, p, r.db)).Where(query).Find(&data).Error
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("||||||||||||||||||||||||||||||||||||||||||||||", data)
 	return data, nil
 }
 
@@ -76,7 +83,7 @@ func (r *currency_exchange) FindOne(query map[string]interface{}) (accounting.Cu
 	var data accounting.CurrencyExchange
 	err := r.db.Preload(clause.Associations).Model(&accounting.CurrencyExchange{}).Where(query).First(&data)
 	if err.RowsAffected == 0 {
-		return data, errors.New("record not found")
+		return data, errors.New("oops! record not found")
 	}
 	if err.Error != nil {
 		return data, err.Error
@@ -88,11 +95,14 @@ func (r *currency_exchange) DeleteExchangePair(query map[string]interface{}) err
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": query["user_id"].(int),
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
 	delete(query, "user_id")
 	res := r.db.Model(&accounting.CurrencyExchange{}).Where(query).Updates(data)
+	if res.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
 	if res.Error != nil {
 		return res.Error
 	}

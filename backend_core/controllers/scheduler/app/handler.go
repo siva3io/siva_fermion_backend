@@ -2,9 +2,11 @@ package scheduler
 
 import (
 	"fmt"
-	"net/http"
 	"strconv"
 
+	utils "fermion/backend_core/controllers/scheduler/utils"
+	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
 	"github.com/labstack/echo/v4"
@@ -28,19 +30,21 @@ type handler struct {
 	service Service
 }
 
-func NewHandler() *handler {
-	service := NewService()
-	return &handler{service}
-}
+var SchedulerHandler *handler //singleton object
 
-func Init() {
-	NewService().InitSchedulerJob()
+// singleton function
+func NewHandler() *handler {
+	if SchedulerHandler != nil {
+		return SchedulerHandler
+	}
+	service := NewService()
+	SchedulerHandler = &handler{service}
+	return SchedulerHandler
 }
 
 func (h *handler) AddSchedulerJob(c echo.Context) (err error) {
 
 	var schedulerJobDto SchedulerJobDto
-
 	if err := c.Bind(&schedulerJobDto); err != nil {
 		return res.RespErr(c, err)
 	}
@@ -56,12 +60,16 @@ func (h *handler) AddSchedulerJob(c echo.Context) (err error) {
 	return res.RespSuccess(c, "success", nil)
 }
 func (h *handler) ListSchedulerJob(c echo.Context) (err error) {
-	var result []SchedulerJobResponseDTO
-	result, err = h.service.GetAllSchedulerJob()
+	page := new(pagination.Paginatevalue)
+	err = c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return c.JSON(http.StatusOK, result)
+	result, err := h.service.GetAllSchedulerJob(page)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccessInfo(c, "data retrieved successfully", result, page)
 
 }
 
@@ -93,31 +101,41 @@ func (h *handler) DeleteSchedulerJob(c echo.Context) (err error) {
 
 }
 func (h *handler) UpdateSchedulerJob(c echo.Context) (err error) {
+
 	var id = c.Param("id")
 	var query = make(map[string]interface{}, 0)
 	ID, _ := strconv.Atoi(id)
 	query["id"] = uint(ID)
+	s := c.Get("TokenUserID").(string)
+	user_id, _ := strconv.Atoi(s)
+	query["user_id"] = user_id
 	var data SchedulerJobDto
 	err = c.Bind(&data)
 	if err != nil {
-		return err
+		return res.RespErr(c, err)
 	}
 	err = h.service.UpdateSchedulerJob(query, &data)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
 	return res.RespSuccess(c, "Scheduler Job updated successfully", map[string]interface{}{"updated_id": id})
 }
-func (h *handler) ListSchedulerLogs(c echo.Context) error {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	var query = map[string]interface{}{
-		"scheduler_job_id": ID,
+func (h *handler) ListSchedulerLogs(c echo.Context) (err error) {
+	page := new(pagination.Paginatevalue)
+	err = c.Bind(page)
+	if err != nil {
+		return res.RespErr(c, err)
 	}
-	result, err := h.service.ListSchedulerLogs(query)
+	result, err := h.service.ListSchedulerLogs(page)
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccess(c, "Scheduler Job details retrieved successfully", result)
+	return res.RespSuccessInfo(c, "data retrieved successfully", result, page)
+}
 
+func (h *handler) ListSchedulerFunctions(c echo.Context) (err error) {
+
+	data := helpers.GetStructMethods(utils.CronFunctions{})
+
+	return res.RespSuccess(c, "data retrieved successfully", data)
 }

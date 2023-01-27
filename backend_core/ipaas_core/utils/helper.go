@@ -14,8 +14,7 @@ import (
 
 	"fermion/backend_core/db"
 	"fermion/backend_core/ipaas_core/model"
-	ipaas_models "fermion/backend_core/ipaas_core/model"
-	"fermion/backend_core/pkg/util/helpers"
+	pkg_helpers "fermion/backend_core/pkg/util/helpers"
 
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
@@ -37,66 +36,39 @@ import (
  along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 
-//-------------error handled functions------------------------------
-
-// func ReadFile(path string) (map[string]interface{}, error) {
-// 	data := map[string]interface{}{}
-// 	fileDataByte, ioErr := ioutil.ReadFile(path)
-// 	if ioErr != nil {
-// 		fmt.Println("--------> Read File error <----------------", ioErr)
-// 		return data, ioErr
-// 	}
-
-//		if err := json.Unmarshal([]byte(fileDataByte), &data); err != nil {
-//			fmt.Println("--------> Error while parsing Readfile <----------------" + path)
-//			return nil, err
-//		}
-//		// fmt.Println("ReadFile --->>>>", data)
-//		return data, nil
-//	}
-func GetValueFromSessionVariablesKey(key string, featureSessionVariables []model.KeyValuePair) (interface{}, error) {
+func GetValueFromSessionVariablesKey(key string, featureSessionVariables []model.KeyValuePair) interface{} {
 	var result interface{}
 	for _, sessionVariable := range featureSessionVariables {
 		if sessionVariable.Key == key {
 			result = sessionVariable.Value
-			// fmt.Println("sessionVariable value --->>>>", result)
-			return result, nil
+			return result
 		}
 	}
-	// fmt.Println("GetValueFromSessionVariablesKey --->>>>", result)
-	errorString := fmt.Sprintf("%v - key not found", key)
-	return result, errors.New(errorString)
+	//  fmt.Println("GetValueFromSessionVariablesKey ===>>>>", result)
+	return result
 }
-func ParseObjectsFromConfigPayload(headerArr []interface{}) []model.KeyValuePair {
-	var keyValuePairArrObj = make([]model.KeyValuePair, 0)
-	for _, item := range headerArr {
-		var keyValuePairObj model.KeyValuePair
-		keyValuePairObj.Key = item.(map[string]interface{})["key"].(string)
-		keyValuePairObj.Type = item.(map[string]interface{})["type"].(string)
-		keyValuePairObj.Value = item.(map[string]interface{})["value"]
-		propsInterface := item.(map[string]interface{})["props"]
-		if propsInterface != nil {
-			keyValuePairObj.Props = ParsePropsFromConfig(propsInterface.([]interface{}))
-		}
-		keyValuePairArrObj = append(keyValuePairArrObj, keyValuePairObj)
+func ParseObjectsFromConfigPayload(headerArr []interface{}) ([]model.KeyValuePair, error) {
+	var keyValuePairArrObj []model.KeyValuePair
+	err := pkg_helpers.JsonMarshaller(headerArr, &keyValuePairArrObj)
+	if err != nil {
+		return keyValuePairArrObj, err
 	}
-	// fmt.Println("ParseObjectsFromConfigPayload --->>>>", keyValuePairArrObj)
-	return keyValuePairArrObj
+	//  fmt.Println("ParseObjectsFromConfigPayload ===>>>>", keyValuePairArrObj)
+	return keyValuePairArrObj, nil
 }
 func ParseKeyValuePair(keyValuePair []model.KeyValuePair, featureSessionVariables []model.KeyValuePair) []model.KeyValuePair {
-
 	for ind, val := range keyValuePair {
 		if val.Type == "variable" {
-			keyValuePair[ind].Value, _ = GetValueFromSessionVariablesKey(val.Value.(string), featureSessionVariables)
+			keyValuePair[ind].Value = GetValueFromSessionVariablesKey(val.Value.(string), featureSessionVariables)
 			continue
 		}
 		if val.Type == "dynamic" {
 			result, _ := CallFunctionFromProps(val.Props, featureSessionVariables)
-			fmt.Println("--------> Function return Value from Props<----------------", result)
+			fmt.Println("=============> Function return Value from Props <============= ", result)
 			keyValuePair[ind].Value = result
 		}
 	}
-	// fmt.Println("ParseKeyValuePair --->>>>", keyValuePair)
+	//  fmt.Println("ParseKeyValuePair ===>>>>", keyValuePair)
 	return keyValuePair
 }
 func FormatEndpoint(format string, sessionVariables []model.KeyValuePair) (string, error) {
@@ -105,16 +77,11 @@ func FormatEndpoint(format string, sessionVariables []model.KeyValuePair) (strin
 	keys := regex.FindAllStringSubmatch(format, -1)
 
 	for _, key := range keys {
-		result, err := GetValueFromSessionVariablesKey(key[1], sessionVariables)
-		if err != nil {
-			fmt.Println(err)
-			fmt.Println("--------> error in format endpoint url <----------------")
-			return format, err
-		}
+		result := GetValueFromSessionVariablesKey(key[1], sessionVariables)
 		value := fmt.Sprintf("%v", result)
 		format = strings.Replace(format, key[0], value, -1)
 	}
-	// fmt.Println("FormatEndpoint --->>>>", format)
+	//  fmt.Println("FormatEndpoint ===>>>>", format)
 	return format, nil
 }
 func GetUrlQueryParams(queryParams []model.KeyValuePair, featureSessionVariables []model.KeyValuePair) (string, error) {
@@ -129,7 +96,7 @@ func GetUrlQueryParams(queryParams []model.KeyValuePair, featureSessionVariables
 	if len(response) > 0 {
 		response = "?" + response[0:len(response)-1]
 	}
-	// fmt.Println("GetUrlQueryParams --->>>>", format)
+	//  fmt.Println("GetUrlQueryParams ===>>>>", response)
 	return response, nil
 }
 func ConvertKeyValuePairToInterface(keyValuePair []model.KeyValuePair) interface{} {
@@ -138,20 +105,22 @@ func ConvertKeyValuePairToInterface(keyValuePair []model.KeyValuePair) interface
 	for _, obj := range keyValuePair {
 		object[obj.Key] = obj.Value
 	}
-	// fmt.Println("ConvertKeyValuePairToInterface --->>>>", object)
+	//  fmt.Println("ConvertKeyValuePairToInterface ===>>>>", object)
 	return object
 }
 func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePair, requestBody interface{}, featureSessionVariables []model.KeyValuePair, optionalParams ...interface{}) (model.EndpointResponse, error) {
 
+	// fmt.Println("=============> Function call from Props <=============")
 	var req *http.Request
-	var err error
-	var responseCompletionNorms []interface{}
+	var responseCompletionNorms []model.KeyValuePair
 	RequestBodyUrlEncodedFlag := false
 
-	//-------------------request api headers ---------------------------------------------------------------------
-	// fmt.Println(headers)
+	var err error
+
+	//==================================request api headers=======================================================================================================================================================================
 	headers = ParseKeyValuePair(headers, featureSessionVariables)
 
+	//============================check content-type is application/x-www-form-urlencoded or not==================================================================================================================================
 	for index := range headers {
 		if headers[index].Key == "Content-Type" {
 			if headers[index].Value == "application/x-www-form-urlencoded" {
@@ -161,44 +130,19 @@ func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePa
 		}
 	}
 
-	//-------------------optional parameters - [oauth, ...] -----------------------------------------------------------------------
+	//============================optional parameters - [signature ...]===========================================================================================================================================================
 	if len(optionalParams) != 0 {
-		endpointTaskFile, ok := optionalParams[0].(map[string]interface{})
+		endpointTaskFile, ok := optionalParams[0].(model.APIFile)
 		if !ok {
-			fmt.Println("--------> error in MakeAPIRequest - optionalParams <----------------")
-			return model.EndpointResponse{}, errors.New("error in oauth parameters type conversion")
+			fmt.Println("=============> error in MakeAPIRequest - optionalParams <=============")
+			return model.EndpointResponse{}, errors.New("oops! issue in endpoint_task_file conversion from MakeAPIRequest")
 		}
+		responseCompletionNorms = endpointTaskFile.Response.ResponseCompletionNorms
 
-		if endpointTaskFile["response"] != nil {
-			endpointTaskFileResponse, ok := endpointTaskFile["response"].(map[string]interface{})
-			if !ok {
-				fmt.Println("--------> error in MakeAPIRequest - endpointTaskFile[response] <----------------")
-				return model.EndpointResponse{}, errors.New("endpointTaskFile[\"response\"]")
-			}
-			if endpointTaskFileResponse["response_completion_norms"] != nil {
-				responseCompletionNorms, ok = endpointTaskFileResponse["response_completion_norms"].([]interface{})
-				if !ok {
-					fmt.Println("--------> error in MakeAPIRequest - endpointTaskFile[response][response_completion_norms] <----------------")
-					return model.EndpointResponse{}, errors.New("endpointTaskFile[\"response\"][\"response_completion_norms\"]")
-				}
-			}
-		}
+		payload := endpointTaskFile.Payload
 
-		payload, ok := endpointTaskFile["payload"].(map[string]interface{})
-		if !ok {
-			fmt.Println("--------> error in MakeAPIRequest - endpointTaskFile[payload] <----------------")
-			return model.EndpointResponse{}, errors.New("endpointTaskFile[\"payload\"]")
-		}
-
-		if payload["signature"] != nil {
-			signatureArr, ok := payload["signature"].([]interface{})
-			if !ok {
-				fmt.Println("--------> error in MakeAPIRequest - signature optionalParams <----------------")
-				return model.EndpointResponse{}, errors.New("error in signature optionalParams")
-			}
-			signatures := ParseObjectsFromConfigPayload(signatureArr)
-
-			for _, signature := range signatures {
+		if len(payload.Signature) > 0 {
+			for _, signature := range payload.Signature {
 
 				requestData := map[string]interface{}{
 					"method":  requestMethod,
@@ -206,20 +150,24 @@ func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePa
 					"payload": requestBody,
 					"headers": headers,
 				}
+				newSignatureProps := make([]model.Props, 0)
+				newSignatureProps = append(newSignatureProps, signature.Props...)
 
 				for index, props := range signature.Props {
-					signature.Props[index].Params = append(props.Params, model.KeyValuePair{
+					newSignatureProps[index].Params = append(props.Params, model.KeyValuePair{
 						Key:   "requestData",
 						Value: requestData,
 						Type:  "static",
 					})
 				}
 
-				authSignature, err := CallFunctionFromProps(signature.Props, featureSessionVariables)
+				authSignature, err := CallFunctionFromProps(newSignatureProps, featureSessionVariables)
+				fmt.Println("authSignature", authSignature)
 
 				if err != nil {
+					fmt.Println("=============> error in Signature - optionalParams <=============")
 					fmt.Println("--------> error in Signature - optionalParams <----------------")
-					return model.EndpointResponse{}, errors.New("error in signature functions")
+					return model.EndpointResponse{}, errors.New("oops! issue in signature functions from MakeAPIRequest")
 				}
 				if signature.Value.(string) == "headers" {
 					headers = append(headers, model.KeyValuePair{
@@ -234,21 +182,17 @@ func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePa
 				}
 			}
 		}
-
 	}
-
-	fmt.Println("\n url --------------->", url)
-	// helpers.PrettyPrint("requestBody", requestBody)
 
 	//------------------create new api request -------------------------------------------------------------------
 	if RequestBodyUrlEncodedFlag {
-		urlEncodedpayload, err := helpers.ReturnURLEncodeString(requestBody)
+		urlEncodedpayload, err := pkg_helpers.ReturnURLEncodeString(requestBody)
 		if err != nil {
-			fmt.Println("--------> warning in MakeAPIRequest - url encoded payload <----------------")
+			fmt.Println("=============> warning in MakeAPIRequest - url encoded payload <=============")
 		}
 		req, err = http.NewRequest(requestMethod, url, strings.NewReader(urlEncodedpayload))
 		if err != nil {
-			fmt.Println("--------> error in MakeAPIRequest - http.NewRequest <----------------")
+			fmt.Println("=============> error in MakeAPIRequest - http.NewRequest <=============")
 			return model.EndpointResponse{}, err
 		}
 	}
@@ -259,7 +203,7 @@ func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePa
 			if requestBody != nil {
 				marshaldata, err := json.Marshal(requestBody)
 				if err != nil {
-					fmt.Println("--------> warning in MakeAPIRequest - marshal request body <----------------")
+					fmt.Println("=============> warning in MakeAPIRequest - marshal request body <=============")
 				}
 				jsonBody = marshaldata
 			} else {
@@ -271,34 +215,39 @@ func MakeAPIRequest(requestMethod string, url string, headers []model.KeyValuePa
 
 		req, err = http.NewRequest(requestMethod, url, bytes.NewBuffer(jsonBody))
 		if err != nil {
-			fmt.Println("--------> error in MakeAPIRequest - http.NewRequest <----------------")
+			fmt.Println("=============> error in MakeAPIRequest - http.NewRequest <=============")
 			return model.EndpointResponse{}, err
 		}
 	}
-
-	fmt.Println("--------> request successfully ready to call <----------------")
 
 	for index := 0; index < len(headers); index++ {
 		req.Header.Set(headers[index].Key, fmt.Sprintf("%v", headers[index].Value))
 	}
 
+	fmt.Println("=============> api_endpoint <============= ", url)
+	fmt.Println("=============> api_request_type <============= ", requestMethod)
+	// pkg_helpers.PrettyPrint("api_request_body",requestBody)
+	// pkg_helpers.PrettyPrint("api_request_headers",headers)
+
+	fmt.Println("=============> request successfully ready to call <=============")
 	client := &http.Client{}
 	res, err := client.Do(req)
 
 	if err != nil {
-		fmt.Println("--------> Error while parsing MakeGETRequest <----------------")
+		fmt.Println("=============> Error while parsing MakeGETRequest <=============")
 		return model.EndpointResponse{}, err
 	}
 	response, err := ConvertResponseToInterface(res, responseCompletionNorms, featureSessionVariables)
 	if err != nil {
-		fmt.Println("--------> error in MakeAPIRequest - ConvertResponseToInterface <----------------")
+		fmt.Println("=============> error in MakeAPIRequest - ConvertResponseToInterface <=============")
 		return response, err
 	}
 
-	// helpers.PrettyPrint("response", response)
+	fmt.Println("=============> api_response_status <============= ", response.Status)
+	// pkg_helpers.PrettyPrint("api_response",response.Body)
 	return response, err
 }
-func ConvertResponseToInterface(response *http.Response, responseCompletionNorms []interface{}, featureSessionVariables []model.KeyValuePair) (model.EndpointResponse, error) {
+func ConvertResponseToInterface(response *http.Response, responseCompletionNorms []model.KeyValuePair, featureSessionVariables []model.KeyValuePair) (model.EndpointResponse, error) {
 	var responseConverted model.EndpointResponse
 	responseConverted.Status = response.Status
 	responseConverted.StatusCode = response.StatusCode
@@ -307,17 +256,25 @@ func ConvertResponseToInterface(response *http.Response, responseCompletionNorms
 	body, err := ioutil.ReadAll(response.Body)
 
 	if err != nil {
-		fmt.Println("--------> Error while parsing convertResponseToInterface <----------------")
+		fmt.Println("=============> Error while parsing convertResponseToInterface <============= ")
 		return responseConverted, err
 	}
 
 	if len(responseCompletionNorms) > 0 {
-		responseCompletionNorms := ParseObjectsFromConfigPayload(responseCompletionNorms)
 		for _, val := range responseCompletionNorms {
 			if val.Key == "raw_response" {
-				convertedResponseBody, err := CallFunctionFromProps(val.Props, featureSessionVariables, body)
+				newProps := make([]model.Props, 0)
+				newProps = append(newProps, val.Props...)
+				for index, props := range val.Props {
+					newProps[index].Params = append(props.Params, model.KeyValuePair{
+						Key:   "body",
+						Value: body,
+						Type:  "static",
+					})
+				}
+				convertedResponseBody, err := CallFunctionFromProps(newProps, featureSessionVariables)
 				if err != nil {
-					fmt.Println("--------> Error while parsing rawResponseCompletionNorms <----------------")
+					fmt.Println("=============> Error while parsing rawResponseCompletionNorms <============= ")
 					return responseConverted, err
 				}
 				responseConverted.Body = convertedResponseBody.(map[string]interface{})
@@ -335,14 +292,14 @@ func ConvertResponseToInterface(response *http.Response, responseCompletionNorms
 	}
 	responseConverted.Body = bodyInterface
 
-	// jsonData, _ := json.MarshalIndent(bodyInterface, "", "\t")
-	// fmt.Println("\n\n-------------------------------------JSON RESPONSE ----------", string(jsonData))
-
-	// fmt.Println("ConvertResponseToInterface --->>>>", responseConverted)
+	//  fmt.Println("ConvertResponseToInterface ===>>>>", responseConverted)
 	return responseConverted, nil
 }
-func ConvertArrayInterfaceToArrayStructWithJsonKeyParse(responseSessionArr []interface{}, response model.EndpointResponse, featureSessionVariables []model.KeyValuePair) ([]model.KeyValuePair, error) {
-	sessionVariables := ParseObjectsFromConfigPayload(responseSessionArr)
+func ConvertArrayInterfaceToArrayStructWithJsonKeyParse(responseSessionArray interface{}, response model.EndpointResponse, featureSessionVariables []model.KeyValuePair) ([]model.KeyValuePair, error) {
+	sessionVariables, ok := responseSessionArray.([]model.KeyValuePair)
+	if !ok {
+		return nil, errors.New("cannot convert response_sessiona_rray to []keyValuePair")
+	}
 	var keyValuePairArrObj = make([]model.KeyValuePair, 0)
 
 	for index := 0; index < len(sessionVariables); index++ {
@@ -373,7 +330,7 @@ func ConvertArrayInterfaceToArrayStructWithJsonKeyParse(responseSessionArr []int
 					Type:  "static",
 				})
 				result, _ := CallFunctionFromProps(sessionVariables[index].Props, featureSessionVariablesWithResponse)
-				fmt.Println("--------> Function return Value from Props<----------------", result)
+				fmt.Println("=============> Function return Value from Props <============= ", result)
 				keyValuePairObj.Value = result
 			}
 			keyValuePairArrObj = append(keyValuePairArrObj, keyValuePairObj)
@@ -384,7 +341,7 @@ func ConvertArrayInterfaceToArrayStructWithJsonKeyParse(responseSessionArr []int
 		keyValuePairObj.Value = sessionVariables[index].Value
 		keyValuePairArrObj = append(keyValuePairArrObj, keyValuePairObj)
 	}
-	// fmt.Println("ConvertArrayInterfaceToArrayStructWithJsonKeyParse --->>>>", keyValuePairArrObj)
+	//  fmt.Println("ConvertArrayInterfaceToArrayStructWithJsonKeyParse ===>>>>", keyValuePairArrObj)
 	return keyValuePairArrObj, nil
 }
 func ParseJsonPathFromObject(data map[string]interface{}, keypath string) (interface{}, error) {
@@ -392,28 +349,25 @@ func ParseJsonPathFromObject(data map[string]interface{}, keypath string) (inter
 	if keypath == "" {
 		return data, nil
 	}
-
 	var segs []string = strings.Split(keypath, ".")
 	object := data
 
 	for fieldIndex, field := range segs {
 		if object[field] == nil {
-			// errorString := fmt.Sprintf("%v - not found in the json_path from object", field)
-			fmt.Printf("%v - not found in the json_path from object", field)
+			fmt.Printf("oops! %v - not found in the json_path from object\n", field)
 			return nil, nil
 		}
 		if fieldIndex == len(segs)-1 {
 			return object[field], nil
 		}
-
 		result, ok := object[field].(map[string]interface{})
 		if !ok {
-			errorString := fmt.Sprintf("%v - cannot proceed json_path further with this object", field)
+			errorString := fmt.Sprintf("oops! %v - cannot proceed json_path further with this object\n", field)
 			return nil, errors.New(errorString)
 		}
 		object = result
 	}
-	// fmt.Println("ParseJsonPathFromObject --->>>>", object)
+	//  fmt.Println("ParseJsonPathFromObject ===>>>>", object)
 	return object, nil
 }
 func AppendOrUpdateKeyValuePair(featureSessionVariables []model.KeyValuePair, sessionVariables []model.KeyValuePair) []model.KeyValuePair {
@@ -434,7 +388,7 @@ func AppendOrUpdateKeyValuePair(featureSessionVariables []model.KeyValuePair, se
 		FlagForUpdated = false
 	}
 
-	// fmt.Println("AppendOrUpdateKeyValuePair --->>>>", featureSessionVariables)
+	//  fmt.Println("AppendOrUpdateKeyValuePair ===>>>>", featureSessionVariables)
 	return featureSessionVariables
 }
 func AppendOrUpdateTaskResponseObject(taskResponseArray []model.TaskEndpointResponse, currentTaskResponseObject model.TaskEndpointResponse) []model.TaskEndpointResponse {
@@ -451,14 +405,12 @@ func AppendOrUpdateTaskResponseObject(taskResponseArray []model.TaskEndpointResp
 		}
 	}
 	taskResponseArray = append(taskResponseArray, currentTaskResponseObject)
-	// fmt.Println("AppendOrUpdateTaskResponseObject --->>>>", taskResponseArray)
+
+	//  fmt.Println("AppendOrUpdateTaskResponseObject ===>>>>", taskResponseArray)
 	return taskResponseArray
 }
-func UpdateCurrentBatchRequirements(featureSessionVariables []model.KeyValuePair, currentBatchNumber int, perBatch int, batchRequestDetails []model.KeyValuePair) ([]model.KeyValuePair, error) {
-	data, err := GetValueFromSessionVariablesKey("total_batch", featureSessionVariables)
-	if err != nil {
-		return featureSessionVariables, err
-	}
+func UpdateBatchRequirements(featureSessionVariables []model.KeyValuePair, currentBatchNumber int, perBatch int, batchRequestDetails []model.KeyValuePair) ([]model.KeyValuePair, error) {
+	data := GetValueFromSessionVariablesKey("total_batch", featureSessionVariables)
 	currentBatchDetails := ArraySlice(data.(([]interface{})), currentBatchNumber, currentBatchNumber+perBatch)
 	featureSessionVariables = AppendOrUpdateKeyValuePair(featureSessionVariables, []model.KeyValuePair{
 		{Key: "current_batch", Value: currentBatchDetails},
@@ -466,84 +418,67 @@ func UpdateCurrentBatchRequirements(featureSessionVariables []model.KeyValuePair
 	batchRequestDetails = ParseKeyValuePair(batchRequestDetails, featureSessionVariables)
 	featureSessionVariables = AppendOrUpdateKeyValuePair(featureSessionVariables, batchRequestDetails)
 
-	// fmt.Println("UpdateCurrentBatchRequirements --->>>>", featureSessionVariables)
+	//  fmt.Println("UpdateBatchRequirements ===>>>>", featureSessionVariables)
 	return featureSessionVariables, nil
 }
 func ArraySlice(data []interface{}, start int, end int) []interface{} {
 	arrayLength := len(data)
 	if start >= 0 && start <= arrayLength && end >= 0 && end <= arrayLength && end >= start {
+
+		//  fmt.Println("ArraySlice ===>>>>", data[start:end])
 		return data[start:end]
 	}
 	if start >= 0 && start < arrayLength {
 		if end >= arrayLength {
+
+			//  fmt.Println("ArraySlice ===>>>>", data[start:])
 			return data[start:]
 		}
 	}
 	return []interface{}{}
 }
-
-// ----------------functions need to handle errors-----------------------------------------------------
-func ParsePropsFromConfig(propsArr []interface{}) []model.Props {
-	var returnPropsArr = make([]model.Props, 0)
-	for _, item := range propsArr {
-		var propsObj model.Props
-		propsObj.Name = item.(map[string]interface{})["name"].(string)
-		propsObj.Params = ParseObjectsFromConfigPayload(item.(map[string]interface{})["params"].([]interface{}))
-		returnPropsArr = append(returnPropsArr, propsObj)
+func ParsePropsFromConfig(propsArr []interface{}) ([]model.Props, error) {
+	var returnPropsArr []model.Props
+	err := pkg_helpers.JsonMarshaller(propsArr, &returnPropsArr)
+	if err != nil {
+		return returnPropsArr, err
 	}
-	return returnPropsArr
-}
 
-func ConvertStringToInterface(input string) map[string]interface{} {
+	//  fmt.Println("ArraySlice ===>>>>", data[start:])
+	return returnPropsArr, nil
+}
+func ConvertStringToInterface(input string) (map[string]interface{}, error) {
 	var bodyInterface map[string]interface{}
-	json.Unmarshal([]byte(input), &bodyInterface)
-	return bodyInterface
-}
-func ConvertArrayToKeyValuePair(arrString []map[string]interface{}) []model.KeyValuePair {
-	var keyValuePairArrObj []model.KeyValuePair
-	for i := 0; i < len(arrString); i++ {
-		var keyValuePairObj model.KeyValuePair
-		keyValuePairObj.Key = arrString[i]["key"].(string)
-		keyValuePairObj.Value = arrString[i]["value"].(string)
-		keyValuePairObj.Type = arrString[i]["type"].(string)
-		keyValuePairArrObj[i] = keyValuePairObj
+	err := pkg_helpers.JsonMarshaller(input, &bodyInterface)
+	if err != nil {
+		return bodyInterface, err
 	}
-	return keyValuePairArrObj
-}
 
+	//  fmt.Println("ConvertStringToInterface ===>>>>", bodyInterface)
+	return bodyInterface, nil
+}
+func ConvertArrayToKeyValuePair(arrString []map[string]interface{}) ([]model.KeyValuePair, error) {
+	var keyValuePairArrObj []model.KeyValuePair
+	err := pkg_helpers.JsonMarshaller(arrString, &keyValuePairArrObj)
+	if err != nil {
+		return keyValuePairArrObj, err
+	}
+
+	//  fmt.Println("ConvertArrayToKeyValuePair ===>>>>", keyValuePairArrObj)
+	return keyValuePairArrObj, nil
+}
 func ConvertObjectToKeyValuePair(objString map[string]interface{}) []model.KeyValuePair {
 	var keyValuePairArrObj = make([]model.KeyValuePair, 0)
-	fmt.Println("--------> getKeysFromInterface starting <----------------")
-	data := GetKeysFromInterface(objString)
-	fmt.Println("--------> getKeysFromInterface ending <----------------")
-	// if err := json.Unmarshal(arrString, &data); err != nil {
-	// 	panic(err)
-	// }
-	for i := 0; i < len(data); i++ {
+
+	for key := range objString {
 		var keyValuePairObj model.KeyValuePair
-		keyValuePairObj.Key = data[i].(string)
-		keyValuePairObj.Value = objString[data[i].(string)]
+		keyValuePairObj.Key = key
+		keyValuePairObj.Value = objString[key]
 		keyValuePairArrObj = append(keyValuePairArrObj, keyValuePairObj)
 	}
-	return keyValuePairArrObj
-}
-func GetKeysFromInterface(m map[string]interface{}) []interface{} {
-	keys := make([]interface{}, len(m))
-	i := 0
-	for k := range m {
-		keys[i] = k
-		i++
-	}
-	return keys
-}
 
-func ContainString(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+	//  fmt.Println("ConvertObjectToKeyValuePair ===>>>>", keyValuePairArrObj)
+	return keyValuePairArrObj
 }
 func MakeKeyValuePair(key string, value interface{}, v_type string, props []model.Props) model.KeyValuePair {
 	var data model.KeyValuePair
@@ -551,58 +486,22 @@ func MakeKeyValuePair(key string, value interface{}, v_type string, props []mode
 	data.Value = value
 	data.Type = v_type
 	data.Props = props
+
+	//  fmt.Println("MakeKeyValuePair ===>>>>", data)
 	return data
 }
 func GetBodyData(c echo.Context) interface{} {
 	var body interface{}
 	json.NewDecoder(c.Request().Body).Decode(&body)
-	reqBytes, _ := json.Marshal(body)
-	json.Unmarshal(reqBytes, &body)
+
+	//  fmt.Println("GetBodyData ===>>>>", body)
 	return body
 }
-
-func InterfaceToXml(data interface{}, key string) (string, error) {
-
-	var xmlString string
-	specialCases := strings.Split(key, "@@")
-	leftKey := key
-	rightKey := key
-	if len(specialCases) > 1 {
-		leftKey = fmt.Sprintf("%v %v", strings.TrimSpace(specialCases[0]), strings.TrimSpace(specialCases[1]))
-		rightKey = strings.TrimSpace(specialCases[0])
-	}
-
-	switch data.(type) {
-	case map[string]interface{}:
-		obj := data.(map[string]interface{})
-		sequences := GetSequenceFromMap(obj)
-		for _, sequence := range sequences {
-			seqString := sequence.(string)
-			formatedString, _ := InterfaceToXml(obj[seqString], seqString)
-			xmlString += formatedString
-		}
-		if key == "" {
-			return xmlString, nil
-		}
-		return fmt.Sprintf("<%v>%v</%v>", leftKey, xmlString, rightKey), nil
-
-	case []interface{}:
-		arrayData := data.([]interface{})
-		for _, value := range arrayData {
-			formatedString, _ := InterfaceToXml(value, key)
-			xmlString += formatedString
-		}
-		return xmlString, nil
-
-	default:
-		return fmt.Sprintf("<%v>%v</%v>", leftKey, data, rightKey), nil
-	}
-}
-
 func GetSequenceFromMap(obj map[string]interface{}) []interface{} {
 
 	sequences, ok := obj["sequence"].([]interface{})
 	if ok {
+		//  fmt.Println("GetSequenceFromMap ===>>>>", sequences)
 		return sequences
 	}
 
@@ -613,46 +512,21 @@ func GetSequenceFromMap(obj map[string]interface{}) []interface{} {
 		index++
 	}
 
+	//  fmt.Println("GetSequenceFromMap ===>>>>", keys)
 	return keys
 }
-func ContainsValueInArray(arr []int64, v int64) bool {
-	for _, value := range arr {
-		if value == v {
-			return true
-		}
-	}
-	return false
-}
-
-func BearerAppend(token string) string {
-	var properties []ipaas_models.Props
-	property := ipaas_models.Props{
-		Name: "TokenBearerType",
-		Params: []ipaas_models.KeyValuePair{
-			{Key: "token", Value: token}},
-	}
-	properties = append(properties, property)
-	var kvp []ipaas_models.KeyValuePair
-	bearer_token, _ := CallFunctionFromProps(properties, kvp)
-	return bearer_token.(string)
-}
-
 func ReadFeature(collectionName, id string, optionalParams ...interface{}) (map[string]interface{}, error) {
-
 	var Collections = map[string]string{
 		"features": "ipaas_features",
 		"mappers":  "ipaas_mappers",
 		"apis":     "ipaas_apis",
 	}
-
 	collectionName = Collections[collectionName]
-
 	var query primitive.M
-
 	if len(optionalParams) > 0 {
 		name, ok := optionalParams[0].(string)
 		if !ok {
-			return nil, errors.New("invalid parameters")
+			return nil, errors.New("oops! invalid parameters for ReadFeature")
 		}
 		query = bson.M{"name": name}
 	} else {
@@ -662,46 +536,31 @@ func ReadFeature(collectionName, id string, optionalParams ...interface{}) (map[
 		}
 		query = bson.M{"_id": objectId}
 	}
-
 	var dataBsonM bson.M
 	var data map[string]interface{}
-
 	db := db.NoSqlDbManager()
 	collection := db.Collection(collectionName)
-
 	err := collection.FindOne(context.Background(), query).Decode(&dataBsonM)
 	if err != nil {
 		return nil, err
 	}
-
-	err = helpers.JsonMarshaller(dataBsonM, &data)
+	err = pkg_helpers.JsonMarshaller(dataBsonM, &data)
 	if err != nil {
 		return nil, err
 	}
-
 	if data["encrypted"] == nil {
 		return nil, errors.New("failed to decrypt")
 	}
-
-	decryptedString, err := helpers.AESGCMDecrypt(data["encrypted"].(string))
+	decryptedString, err := pkg_helpers.AESGCMDecrypt(data["encrypted"].(string))
 	if err != nil {
 		return nil, err
 	}
-
 	var decryptedData map[string]interface{}
 	err = json.Unmarshal([]byte(decryptedString), &decryptedData)
 	if err != nil {
 		return nil, err
 	}
 
+	//  fmt.Println("ReadFeature ===>>>>", decryptedData)
 	return decryptedData, nil
-
-	// TODO :- need to implement read from file
-	// featureData, err := ReadFile(path)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return featureData, nil
-	// }
-
 }

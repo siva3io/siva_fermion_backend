@@ -3,17 +3,18 @@ package basic_inventory
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"fermion/backend_core/controllers/mdm/locations"
 	"fermion/backend_core/controllers/mdm/products"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/returns"
 	mdm_repo "fermion/backend_core/internal/repository/mdm"
 	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 )
 
@@ -33,29 +34,25 @@ import (
 */
 
 type Service interface {
-	CreateCentrailizedInventory(data *mdm.CentralizedBasicInventory, token_id string, access_template_id string) error
-	CreateDecentralizedInventory(data *mdm.DecentralizedBasicInventory, token_id string, access_template_id string) error
+	CreateCentrailizedInventory(metaData core.MetaData, data *mdm.CentralizedBasicInventory) error
+	CreateDecentralizedInventory(metaData core.MetaData, data *mdm.DecentralizedBasicInventory) error
 
-	UpdateCentrailizedInventory(query map[string]interface{}, data *mdm.CentralizedBasicInventory, token_id string, access_template_id string) error
-	UpdateDecentralizedInventory(query map[string]interface{}, data *mdm.DecentralizedBasicInventory, token_id string, access_template_id string) error
+	UpdateCentrailizedInventory(metaData core.MetaData, data *mdm.CentralizedBasicInventory) error
+	UpdateDecentralizedInventory(metaData core.MetaData, data *mdm.DecentralizedBasicInventory) error
 
-	DeleteCentrailizedInventory(query map[string]interface{}, token_id string, access_template_id string) error
-	DeleteDecentralizedInventory(query map[string]interface{}, token_id string, access_template_id string) error
+	DeleteCentrailizedInventory(metaData core.MetaData) error
+	DeleteDecentralizedInventory(metaData core.MetaData) error
 
-	GetCentrailizedInventory(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	GetDecentralizedInventory(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
+	GetCentrailizedInventory(metaData core.MetaData) (interface{}, error)
+	GetDecentralizedInventory(metaData core.MetaData) (interface{}, error)
 
-	GetCentrailizedInventoryList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
-	GetDecentralizedInventoryList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_actions string) (interface{}, error)
+	GetCentrailizedInventoryList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetDecentralizedInventoryList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
 
-	SearchCentrailizedInventory(query string, token_id string, access_template_id string) ([]CentralizedSearchObjDTO, error)
-	SearchDecentralizedInventory(query string, token_id string, access_template_id string) ([]DecentralizedSearchObjDTO, error)
+	UpsertInventoryTemplate(metaData core.MetaData, data []interface{}) (interface{}, error)
 
-	UpsertInventoryTemplate(data []interface{}, TokenUserId string) (interface{}, error)
-
-	InventoryTransactionCreate(data *mdm.CentralizedInventoryTransactions, token_id string, access_template_id string) error
-
-	UpdateInventory(data map[string]interface{}, token_id string, access_template_id string) error
+	InventoryTransactionCreate(metaData core.MetaData, data *mdm.CentralizedInventoryTransactions) error
+	UpdateTransactionInventory(metaData core.MetaData, data map[string]interface{}) error
 }
 
 type service struct {
@@ -65,26 +62,38 @@ type service struct {
 	mu              sync.Mutex
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+
 	basicInventory := mdm_repo.NewBasicInventory()
 	productService := products.NewService()
 	locationService := locations.NewService()
-	return &service{
+	newServiceObj = &service{
 		basicInventory:  basicInventory,
 		productService:  productService,
 		locationService: locationService,
 	}
+	return newServiceObj
 }
 
-func (s *service) CreateCentrailizedInventory(data *mdm.CentralizedBasicInventory, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) CreateCentrailizedInventory(metaData core.MetaData, data *mdm.CentralizedBasicInventory) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create inventory at data level")
 	}
+
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+
 	err := s.basicInventory.CentralizedInventorySave(data)
 	if err != nil {
 		return err
@@ -92,190 +101,159 @@ func (s *service) CreateCentrailizedInventory(data *mdm.CentralizedBasicInventor
 
 	return nil
 }
-func (s *service) CreateDecentralizedInventory(data *mdm.DecentralizedBasicInventory, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) CreateDecentralizedInventory(metaData core.MetaData, data *mdm.DecentralizedBasicInventory) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create inventory at data level")
 	}
+
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+
 	err := s.basicInventory.DecentralizedInventorySave(data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) UpdateCentrailizedInventory(query map[string]interface{}, data *mdm.CentralizedBasicInventory, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) UpdateCentrailizedInventory(metaData core.MetaData, data *mdm.CentralizedBasicInventory) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update inventory at data level")
 	}
-	_, err := s.basicInventory.FindOneCentralizedInventory(query)
-	if err != nil {
-		return err
-	}
-	err = s.basicInventory.UpdateCentralizedInventory(query, data)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.basicInventory.UpdateCentralizedInventory(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) UpdateDecentralizedInventory(query map[string]interface{}, data *mdm.DecentralizedBasicInventory, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) UpdateDecentralizedInventory(metaData core.MetaData, data *mdm.DecentralizedBasicInventory) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update inventory at data level")
 	}
-	_, err := s.basicInventory.FindOneDecentralizedInventory(query)
-	if err != nil {
-		return err
-	}
-	err = s.basicInventory.UpdateDecentralizedInventory(query, data)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.basicInventory.UpdateDecentralizedInventory(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) DeleteCentrailizedInventory(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) DeleteCentrailizedInventory(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete inventory at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.basicInventory.FindOneCentralizedInventory(q)
-	if er != nil {
-		return er
-	}
-	err := s.basicInventory.DeleteCentralizedInventory(query)
+	err := s.basicInventory.DeleteCentralizedInventory(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) DeleteDecentralizedInventory(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) DeleteDecentralizedInventory(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete inventory at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete inventory at data level")
-	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.basicInventory.FindOneDecentralizedInventory(q)
-	if er != nil {
-		return er
 	}
 
-	err := s.basicInventory.DeleteDecentralizedInventory(query)
+	err := s.basicInventory.DeleteDecentralizedInventory(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) GetCentrailizedInventory(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) GetCentrailizedInventory(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view inventory at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view inventory at data level")
 	}
-	result, err := s.basicInventory.FindOneCentralizedInventory(query)
+
+	result, err := s.basicInventory.FindOneCentralizedInventory(metaData.Query)
 	if err != nil {
 		return nil, err
 	}
 
 	//----------Fetch the product information------------------------
-	query = map[string]interface{}{"id": result.ProductVariantId}
-	response, _ := s.productService.GetVariantView(query, token_id, access_template_id)
+
+	query := map[string]interface{}{"id": result.ProductVariantId}
+	response, _ := s.productService.GetVariantView(query, fmt.Sprintf("%v", metaData.TokenUserId), accessTemplateId)
 	result.ProductDetails, _ = json.Marshal(response)
 
 	//-------------Fetch the Physical location information---------------------
 	if result.PhysicalLocationId != 0 {
-		query = map[string]interface{}{"id": result.PhysicalLocationId}
-		response, _ = s.locationService.GetLocation(query, token_id, access_template_id)
+		metaData.Query = map[string]interface{}{"id": result.PhysicalLocationId}
+		response, _ = s.locationService.GetLocation(metaData)
 		result.PhysicalLocation, _ = json.Marshal(response)
 	}
 
-	var centralized_basic_inventory_response CentralizedBasicInventoryResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &centralized_basic_inventory_response)
-	if err != nil {
-		return nil, err
-	}
-
-	return centralized_basic_inventory_response, nil
+	return result, nil
 }
-func (s *service) GetDecentralizedInventory(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) GetDecentralizedInventory(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
+
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view inventory at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view inventory at data level")
 	}
-	result, err := s.basicInventory.FindOneDecentralizedInventory(query)
+	result, err := s.basicInventory.FindOneDecentralizedInventory(metaData.Query)
 	if err != nil {
 		return result, err
 	}
 
 	//----------Fetch the product information------------------------
-	query = map[string]interface{}{"id": result.ProductVariantId}
-	response, _ := s.productService.GetVariantView(query, token_id, access_template_id)
+	query := map[string]interface{}{"id": result.ProductVariantId}
+	response, _ := s.productService.GetVariantView(query, fmt.Sprintf("%v", metaData.TokenUserId), accessTemplateId)
 	result.ProductDetails, _ = json.Marshal(response)
 
 	//-------------Fetch the location information---------------------
 	if result.PhysicalLocationId != 0 {
-		query = map[string]interface{}{"id": result.PhysicalLocationId}
-		response, _ = s.locationService.GetLocation(query, token_id, access_template_id)
+		metaData.Query = map[string]interface{}{"id": result.PhysicalLocationId}
+		response, _ = s.locationService.GetLocation(metaData)
 		result.PhysicalLocation, _ = json.Marshal(response)
 	}
 
-	var de_centralized_basic_inventory_response DecentralizedBasicInventoryResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &de_centralized_basic_inventory_response)
-	if err != nil {
-		return nil, err
-	}
-
-	return de_centralized_basic_inventory_response, nil
+	return result, nil
 }
-func (s *service) GetCentrailizedInventoryList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) GetCentrailizedInventoryList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view inventory at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view inventory at data level")
 	}
-	results, err := s.basicInventory.FindAllCentralizedInventory(query, p)
+	results, err := s.basicInventory.FindAllCentralizedInventory(metaData.Query, p)
 	if err != nil {
 		return results, err
 	}
@@ -283,41 +261,32 @@ func (s *service) GetCentrailizedInventoryList(query interface{}, p *pagination.
 	for index, result := range results {
 		//----------Fetch the product information------------------------
 		query := map[string]interface{}{"id": result.ProductVariantId}
-		response, _ := s.productService.GetVariantView(query, token_id, access_template_id)
+		response, _ := s.productService.GetVariantView(query, fmt.Sprintf("%v", metaData.TokenUserId), accessTemplateId)
 		result.ProductDetails, _ = json.Marshal(response)
 
 		//-------------Fetch the location information---------------------
 		if result.PhysicalLocationId != 0 {
-			query = map[string]interface{}{"id": result.PhysicalLocationId}
-			response, _ = s.locationService.GetLocation(query, token_id, access_template_id)
+			metaData.Query = map[string]interface{}{"id": result.PhysicalLocationId}
+			response, _ = s.locationService.GetLocation(metaData)
 			result.PhysicalLocation, _ = json.Marshal(response)
 		}
 
 		results[index] = result
 	}
 
-	var centralized_basic_inventory_response []CentralizedBasicInventoryResponseDTO
-	marshaldata, err := json.Marshal(results)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &centralized_basic_inventory_response)
-	if err != nil {
-		return nil, err
-	}
-
-	return centralized_basic_inventory_response, nil
+	return results, nil
 }
-func (s *service) GetDecentralizedInventoryList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) GetDecentralizedInventoryList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list inventory at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list inventory at data level")
 	}
-	results, err := s.basicInventory.FindAllDecentralizedInventory(query, p)
+	results, err := s.basicInventory.FindAllDecentralizedInventory(metaData.Query, p)
 	if err != nil {
 		return results, err
 	}
@@ -325,84 +294,24 @@ func (s *service) GetDecentralizedInventoryList(query interface{}, p *pagination
 	for index, result := range results {
 		//----------Fetch the product information------------------------
 		query := map[string]interface{}{"id": result.ProductVariantId}
-		response, _ := s.productService.GetVariantView(query, token_id, access_template_id)
+		response, _ := s.productService.GetVariantView(query, fmt.Sprintf("%v", metaData.TokenUserId), accessTemplateId)
 		result.ProductDetails, _ = json.Marshal(response)
 
 		//-------------Fetch the location information---------------------
 		if result.PhysicalLocationId != 0 {
-			query = map[string]interface{}{"id": result.PhysicalLocationId}
-			response, _ = s.locationService.GetLocation(query, token_id, access_template_id)
+			metaData.Query = map[string]interface{}{"id": result.PhysicalLocationId}
+			response, _ = s.locationService.GetLocation(metaData)
 			result.PhysicalLocation, _ = json.Marshal(response)
 		}
 
 		results[index] = result
 	}
 
-	var de_centralized_basic_inventory_response []DecentralizedBasicInventoryResponseDTO
-	marshaldata, err := json.Marshal(results)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &de_centralized_basic_inventory_response)
-	if err != nil {
-		return nil, err
-	}
-
-	return de_centralized_basic_inventory_response, nil
-}
-func (s *service) SearchCentrailizedInventory(query string, token_id string, access_template_id string) ([]CentralizedSearchObjDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "INVENTORY_DECENTRALIZED", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list inventory at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list inventory at data level")
-	}
-	result, err := s.basicInventory.SearchCentralizedInventory(query)
-	var centralizedData []CentralizedSearchObjDTO
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	for _, v := range result {
-		var data CentralizedSearchObjDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
-		if err != nil {
-			return nil, err
-		}
-		centralizedData = append(centralizedData, data)
-	}
-	return centralizedData, nil
-}
-func (s *service) SearchDecentralizedInventory(query string, token_id string, access_template_id string) ([]DecentralizedSearchObjDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "INVENTORY_DECENTRALIZED", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list inventory at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list inventory at data level")
-	}
-	result, err := s.basicInventory.SearchDecentralizedInventory(query)
-	var decentralizeddata []DecentralizedSearchObjDTO
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	for _, v := range result {
-		var data DecentralizedSearchObjDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
-		if err != nil {
-			return nil, err
-		}
-		decentralizeddata = append(decentralizeddata, data)
-	}
-	return decentralizeddata, nil
+	return results, nil
 }
 
 // ---------------------channels-----------------------------------------------------------------------------------
-func (s *service) UpsertInventoryTemplate(data []interface{}, TokenUserId string) (interface{}, error) {
+func (s *service) UpsertInventoryTemplate(metaData core.MetaData, data []interface{}) (interface{}, error) {
 	var success []interface{}
 	var failures []interface{}
 	for index, payload := range data {
@@ -417,7 +326,7 @@ func (s *service) UpsertInventoryTemplate(data []interface{}, TokenUserId string
 			failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
 			continue
 		}
-		DeCentralizedBasicInventory.UpdatedByID = helpers.ConvertStringToUint(TokenUserId)
+		DeCentralizedBasicInventory.UpdatedByID = &metaData.TokenUserId
 
 		InventoryQuery := map[string]interface{}{"product_variant_id": DeCentralizedBasicInventory.ProductVariantId, "channel_code": DeCentralizedBasicInventory.ChannelCode}
 		res, _ := s.basicInventory.FindOneDecentralizedInventory(InventoryQuery)
@@ -430,7 +339,8 @@ func (s *service) UpsertInventoryTemplate(data []interface{}, TokenUserId string
 			success = append(success, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": true, "serial_number": index + 1, "msg": "updated"})
 			continue
 		}
-		DeCentralizedBasicInventory.CreatedByID = helpers.ConvertStringToUint(TokenUserId)
+		DeCentralizedBasicInventory.CreatedByID = &metaData.TokenUserId
+		DeCentralizedBasicInventory.CompanyId = metaData.CompanyId
 		err = s.basicInventory.DecentralizedInventorySave(&DeCentralizedBasicInventory)
 		if err != nil {
 			failures = append(failures, map[string]interface{}{"id": DeCentralizedBasicInventory.ProductVariantId, "status": false, "serial_number": index + 1, "msg": err})
@@ -446,7 +356,7 @@ func (s *service) UpsertInventoryTemplate(data []interface{}, TokenUserId string
 	return response, nil
 }
 
-func (s *service) InventoryTransactionCreate(data *mdm.CentralizedInventoryTransactions, token_id string, access_template_id string) error {
+func (s *service) InventoryTransactionCreate(metaData core.MetaData, data *mdm.CentralizedInventoryTransactions) error {
 	err := s.basicInventory.CentralizedInventoryTransactionSave(data)
 	if err != nil {
 		return err
@@ -455,9 +365,9 @@ func (s *service) InventoryTransactionCreate(data *mdm.CentralizedInventoryTrans
 	return nil
 }
 
-func (s *service) UpdateInventory(data map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "INVENTORY_DECENTRALIZED", *token_user_id)
+func (s *service) UpdateTransactionInventory(metaData core.MetaData, data map[string]interface{}) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "INVENTORY_DECENTRALIZED", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update inventory at view level")
 	}
@@ -515,11 +425,11 @@ func (s *service) UpdateInventory(data map[string]interface{}, token_id string, 
 
 	for _, value := range list {
 
-		query := map[string]interface{}{
+		metaData.Query = map[string]interface{}{
 			"id": value["inventory_id"],
 		}
 
-		inv_data, _ := s.GetCentrailizedInventory(query, token_id, access_template_id)
+		inv_data, _ := s.GetCentrailizedInventory(metaData)
 		byteStream, _ := json.Marshal(inv_data)
 		_ = json.Unmarshal(byteStream, inv_model)
 
@@ -551,7 +461,7 @@ func (s *service) UpdateInventory(data map[string]interface{}, token_id string, 
 			byteStream, _ = json.Marshal(centralizedInventoryTransactionPayload)
 			_ = json.Unmarshal(byteStream, invTransactionPayload)
 
-			err := s.InventoryTransactionCreate(invTransactionPayload, token_id, access_template_id)
+			err := s.InventoryTransactionCreate(metaData, invTransactionPayload)
 			if err != nil {
 				fmt.Println("error", err.Error())
 				return res.BuildError(res.ErrUnprocessableEntity, err)
@@ -565,7 +475,7 @@ func (s *service) UpdateInventory(data map[string]interface{}, token_id string, 
 			}
 		}
 
-		err := s.UpdateCentrailizedInventory(query, inv_model, token_id, access_template_id)
+		err := s.UpdateCentrailizedInventory(metaData, inv_model)
 		if err != nil {
 			fmt.Println("error", err.Error())
 			return res.BuildError(res.ErrUnprocessableEntity, err)

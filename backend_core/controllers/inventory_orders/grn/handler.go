@@ -1,12 +1,13 @@
 package grn
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	inventory_orders_base "fermion/backend_core/controllers/inventory_orders/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -35,10 +36,17 @@ type handler struct {
 	base_service inventory_orders_base.ServiceBase
 }
 
+var GrnHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if GrnHandler != nil {
+		return GrnHandler
+	}
 	service := NewService()
 	base_service := inventory_orders_base.NewServiceBase()
-	return &handler{service, base_service}
+	GrnHandler = &handler{service, base_service}
+	return GrnHandler
 }
 
 // FavouriteGrnView godoc
@@ -88,18 +96,38 @@ func (h *handler) FavouriteGrnView(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/create [post]
-func (h *handler) CreateGRN(c echo.Context) (err error) {
-	data := c.Get("grn").(*GRNRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	t := uint(user_id)
-	data.CreatedByID = &t
-	id, err := h.service.CreateGRN(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) CreateGRNEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("grn"),
 	}
-	return res.RespSuccess(c, "GRN Successfully Created", map[string]interface{}{"Created_Id": id})
+	eda.Produce(eda.CREATE_GRN, request_payload)
+	return res.RespSuccess(c, "Grn creation inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateGRN(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	createPayload := new(inventory_orders.GRN)
+	helpers.JsonMarshaller(data, createPayload)
+	createPayload.CreatedByID = &edaMetaData.TokenUserId
+	err := h.service.CreateGRN(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_GRN_ACK, responseMessage)
+		return
+	}
+
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_GRN_ACK, responseMessage)
+	// cache implementation
+	UpdateGrnInCache(edaMetaData)
 }
 
 // BulkCreateGRN godoc
@@ -130,6 +158,8 @@ func (h *handler) BulkCreateGRN(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespError(c, err)
 	}
+	var metaData core.MetaData
+	UpdateGrnInCache(metaData)
 	return res.RespSuccess(c, "Created", map[string]bool{"Created": true})
 }
 
@@ -148,15 +178,19 @@ func (h *handler) BulkCreateGRN(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/{id} [get]
 func (h *handler) GetGRN(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetGRN(uint(id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": grnId,
+		// "company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "success", result)
+	result, err := h.service.GetGRN(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// var response GRNGetResponse
+	// helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Grn Details Retrieved successfully", result)
 }
 
 // GetAllGRN godoc
@@ -177,15 +211,29 @@ func (h *handler) GetGRN(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn [get]
 func (h *handler) GetAllGRN(c echo.Context) (err error) {
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllGRN(page, token_id, access_template_id, "LIST")
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []GetAllGRN
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetGrnFromCache(tokenUserId)
 	}
-	return res.RespSuccessInfo(c, "GRN Successfully Retrieved", result, page)
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllGRN(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	//helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Crn list Retrieved Successfully", result, p)
 }
 
 // UpdateGRN godoc
@@ -203,46 +251,45 @@ func (h *handler) GetAllGRN(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/{id}/update [Post]
-func (h *handler) UpdateGRN(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	data := c.Get("grn").(*GRNRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateGRN(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+func (h *handler) UpdateGRNEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         grnId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Updated Successfully", map[string]int{"Updated id": id})
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("grn"),
+	}
+	eda.Produce(eda.UPDATE_GRN, request_payload)
+	return res.RespSuccess(c, "Credit Note Update inprogress", edaMetaData.RequestId)
+
 }
 
-// SearchGRN godoc
-// @Summary Search SearchGRN
-// @Description Search SearchGRN
-// @Tags GRN
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @Param   query 	query 	string 	true "query"
-// @Success 200 {array} GetAllGRNResponse
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/grn/search [get]
-func (h *handler) SearchGRN(c echo.Context) error {
-	query := c.QueryParam("query")
-	var data []inventory_orders.GRN
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	resp, err := h.service.SearchGRN(query, token_id, access_template_id)
-	value, _ := json.Marshal(resp)
-	_ = json.Unmarshal(value, &data)
+func (h *handler) UpdateGRN(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+	updatePayLoad := new(inventory_orders.GRN)
+	helpers.JsonMarshaller(data, updatePayLoad)
+
+	updatePayLoad.UpdatedByID = &edaMetaData.TokenUserId
+	err := h.service.UpdateGRN(edaMetaData, updatePayLoad)
+	responsemessage := new(eda.ConsumerResponse)
+	responsemessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespError(c, err)
+		responsemessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_ASN_ACK, responsemessage)
+		return
 	}
-	return res.RespSuccess(c, "Fetched", data)
+	// cache implementation
+	UpdateGrnInCache(edaMetaData)
+	responsemessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_GRN_ACK, responsemessage)
+
 }
 
 // DeleteGRN godoc
@@ -260,16 +307,20 @@ func (h *handler) SearchGRN(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/{id}/delete [delete]
 func (h *handler) DeleteGRN(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteGRN(uint(id), uint(user_id), token_id, access_template_id)
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         grnId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Deleted Successfully", map[string]string{"Deleted grn": get_id})
+	err = h.service.DeleteGRN(metaData)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	// cache implementation
+	UpdateGrnInCache(metaData)
+	return res.RespSuccess(c, "Record deleted successfully", grnId)
 }
 
 // DeleteGRN godoc
@@ -288,15 +339,16 @@ func (h *handler) DeleteGRN(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/order_line/{id}/delete [delete]
 func (h *handler) DeleteGRNOrderLine(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	metaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
 	query := map[string]interface{}{
-		"grn_id":     uint(id),
+		"grn_id":     grnId,
 		"product_id": c.QueryParam("product_id"),
+		"id":         grnId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
 	}
-	err = h.service.DeleteGRNOrderLines(query, token_id, access_template_id)
+	err = h.service.DeleteGRNOrderLines(metaData)
 	if err != nil {
 		return res.RespError(c, err)
 	}
@@ -378,19 +430,26 @@ func (h *handler) GenerateGRNPDF(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/{id}/favourite [post]
 func (h *handler) FavouriteGrn(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": grnId,
 	}
+	_, err = h.service.GetGRN(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+	query := map[string]interface{}{
+		"ID":         grnId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+
 	err = h.base_service.FavouriteGrn(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "GRN is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Credit Note is Marked as Favourite", map[string]string{"grn_id": grnId})
 }
 
 // UnFavouriteGRN godoc
@@ -408,19 +467,21 @@ func (h *handler) FavouriteGrn(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/{id}/unfavourite [post]
 func (h *handler) UnFavouriteGrn(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	grnId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      grnId,
+		"user_id": metaData.TokenUserId,
+
+		"company_id": metaData.CompanyId,
 	}
+
 	err = h.base_service.UnFavouriteGrn(query)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "GRN is marked as Unfavourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Credit Note is Marked as UnFavourite", map[string]string{"grn_id": grnId})
 }
 
 // GetGrnTab godoc
@@ -441,19 +502,19 @@ func (h *handler) UnFavouriteGrn(c echo.Context) (err error) {
 // @Router /api/v1/grn/{id}/filter_module/{tab} [get]
 func (h *handler) GetGrnTab(c echo.Context) (err error) {
 
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
 	err = c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-
 	id := c.Param("id")
 	tab := c.Param("tab")
-
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetGrnTab(id, tab, page, access_template_id, token_id)
+	metaData.AdditionalFields = map[string]interface{}{
+		"grn_id":   id,
+		"tab_name": tab,
+	}
+	data, err := h.service.GetGrnTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -479,13 +540,25 @@ func (h *handler) GetGrnTab(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/grn/dropdown [get]
 func (h *handler) GetAllGRNDropDown(c echo.Context) (err error) {
-	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllGRN(page, token_id, access_template_id, "DROPDOWN_LIST")
-	if err != nil {
-		return res.RespError(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+	p := new(pagination.Paginatevalue)
+	c.Bind(p)
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []GetAllGRNResponse
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetGrnFromCache(tokenUserId)
 	}
-	return res.RespSuccessInfo(c, "GRN Successfully Retrieved", result, page)
+	if cacheResponse != nil {
+		//helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetAllGRN(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	//helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Grn dropdown list Retrieved Successfully", result, p)
 }

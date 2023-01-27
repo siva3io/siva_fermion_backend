@@ -1,12 +1,10 @@
 package webapp
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"fermion/backend_core/controllers/omnichannel/catalogue"
-	"fermion/backend_core/pkg/util/emitter"
 
 	"github.com/labstack/echo/v4"
 )
@@ -32,10 +30,6 @@ func NewHandler() *handler {
 	return &handler{}
 }
 
-func (h *handler) Init() {
-	EventListener()
-}
-
 func (h *handler) GetCatalogueFields(c echo.Context) (err error) {
 
 	//var requestObj []map[string]interface{}
@@ -45,26 +39,23 @@ func (h *handler) GetCatalogueFields(c echo.Context) (err error) {
 	// }
 	ext_channel_id, _ := strconv.Atoi(c.QueryParam("ext_channel_id"))
 	variant_id, _ := strconv.Atoi(c.QueryParam("variant_id"))
-	auth_token := c.QueryParam("user_data")
-	responseObj, _ := catalogue.NewService().GetCatalogue(ext_category_id, ext_channel_id, variant_id)
+	company_id, _ := strconv.Atoi(c.QueryParam("company_id"))
+	query := map[string]interface{}{
+		"category_id": ext_category_id,
+		"channel_id":  ext_channel_id,
+		"variant_id":  variant_id,
+		"company_id":  company_id,
+	}
+	responseObj, _ := catalogue.NewService().GetCatalogue(query)
 	requestObj := responseObj.(map[string]interface{})["channel_attributes"]
 
 	return c.Render(http.StatusOK, "catalogues.html", map[string]interface{}{
-		"name":           "HOME",
-		"msg":            "Hello, Eunima",
-		"request_obj":    requestObj,
-		"category_id":    ext_category_id,
-		"marketplace_id": ext_channel_id,
-		"variant_id":     variant_id,
-		"auth_token":     auth_token,
+		"name":        "HOME",
+		"msg":         "Hello, Eunima",
+		"request_obj": requestObj,
+		"category_id": ext_category_id,
+		"channel_id":  ext_channel_id,
+		"variant_id":  variant_id,
+		"company_id":  company_id,
 	})
-}
-
-func temp(s string) {
-	fmt.Println(s)
-}
-
-func EventListener() {
-	obj := emitter.GetObj()
-	obj.On("sample", temp)
 }

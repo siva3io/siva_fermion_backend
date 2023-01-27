@@ -1,0 +1,581 @@
+{"//": "Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)",
+"//": "All rights reserved.",
+"//": "This program is free software: you can redistribute it and/or modify",
+"//": "it under the terms of the GNU Lesser General Public License v3.0 as published by",
+"//": "the Free Software Foundation, either version 3 of the License, or",
+"//": "(at your option) any later version.",
+"//": "This program is distributed in the hope that it will be useful,",
+"//": "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+"//": "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the",
+"//": "GNU Lesser General Public License v3.0 for more details.",
+"//": "You should have received a copy of the GNU Lesser General Public License v3.0",
+"//": "along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.",
+    "name": "mapper_template",
+    "description": "mapper_template",
+    "fields": [
+        
+        {
+            "id": "obj_ondc_context",
+            "scope": "local",
+            "input": "ondc_context",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_context","obj_messege"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_context",
+            "scope": "local",
+            "input": "context",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_bap_id","field_bpp_id","field_transaction_id"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_bap_id",
+            "scope": "local",
+            "input": "bap_id",
+            "input_type": "keyvalue",
+            "output": "Buyer_NP_Name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_bpp_id",
+            "scope": "local",
+            "input": "bpp_id",
+            "input_type": "keyvalue",
+            "output": "Seller_NP_Name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_transaction_id",
+            "scope": "local",
+            "input": "transaction_id",
+            "input_type": "keyvalue",
+            "output": "Network_Transaction_Id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_messege",
+            "scope": "local",
+            "input": "message",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["obj_order_id"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_order_id",
+            "scope": "local",
+            "input": "order",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_order_id"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_order_id",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "Network_Order_Id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_created_date",
+            "scope": "local",
+            "input": "created_date",
+            "input_type": "keyvalue",
+            "output": "Order_Create_Date_&_Time",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": [
+                {
+                    "name": "FormatDateTime",
+                    "params": [
+                        {
+                            "key": "input",
+                            "type": "variable",
+                            "value": "Order_Create_Date_&_Time"
+                        },
+                        {
+                            "key": "inputFormat",
+                            "type": "static",
+                            "value": "2006-01-02T15:04:05Z"
+                        },
+                        {
+                            "key": "outputFormat",
+                            "type": "static",
+                            "value": "2006-01-02 15:04:05"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_Seller_NP_Order_Item_Id",
+            "scope": "local",
+            "input": "sales_order_lines[0]",
+            "input_type": "array",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["obj_product"],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_product",
+            "scope": "local",
+            "input": "product_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_sku_id"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_sku_id",
+            "scope": "local",
+            "input": "sku_id",
+            "input_type": "keyvalue",
+            "output": "Seller_NP_Order_Item_Id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_seller_np_type",
+            "scope": "local",
+            "input": "seller_np_type",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_seller_np_type"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_seller_np_type",
+            "scope": "local",
+            "input": "display_name",
+            "input_type": "keyvalue",
+            "output": "Seller_NP_Type",
+            "output_type": "keyvalue",
+            "default_value": "Seller_NP_Type",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_status",
+            "scope": "local",
+            "input": "status",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_status"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_status",
+            "scope": "local",
+            "input": "display_name",
+            "input_type": "keyvalue",
+            "output": "Order_Status",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_created_by",
+            "scope": "local",
+            "input": "CreatedBy",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_company_name"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_company_name",
+            "scope": "local",
+            "input": "Company",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_company_name"],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_company_name",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "Name_of_Seller",
+            "output_type": "keyvalue",
+            "default_value": "Siva Store",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_sku_code",
+            "scope": "local",
+            "input": "sales_order_lines[0]",
+            "input_type": "array",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_sku_code"],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_sku_code",
+            "scope": "local",
+            "input": "sku_code",
+            "input_type": "keyvalue",
+            "output": "SKU_Code",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_sku_name",
+            "scope": "local",
+            "input": "sales_order_lines[0]",
+            "input_type": "array",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": ["field_sku_name"],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_sku_name",
+            "scope": "local",
+            "input": "sku_name",
+            "input_type": "keyvalue",
+            "output": "SKU_Name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_order_category",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "Order_Category",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_so_date",
+            "scope": "local",
+            "input": "so_date",
+            "input_type": "keyvalue",
+            "output": "Shipped_At_Date_&_Time",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_delivery_date",
+            "scope": "local",
+            "input": "delivery_date",
+            "input_type": "keyvalue",
+            "output": "Delivered_At_Date_&_Time",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_delivery_type",
+            "scope": "local",
+            "input": "delivery_type",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_delivery_type"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_delivery_type",
+            "scope": "local",
+            "input": "display_name",
+            "input_type": "keyvalue",
+            "output": "Delivery_Type",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_Logistics_Network_Order_Id",
+            "scope": "local",
+            "input": "logistics_network_order_id",
+            "input_type": "keyvalue",
+            "output": "Logistics_Network_Order_Id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_Logistics_Network_Transaction_Id",
+            "scope": "local",
+            "input": "logistics_network_transaction_id",
+            "input_type": "keyvalue",
+            "output": "Logistics_Network_Transaction_Id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_Delivery_City",
+            "scope": "local",
+            "input": "customer_billing_address",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_Delivery_City","field_Delivery_Pincode"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_Delivery_City",
+            "scope": "local",
+            "input": "city",
+            "input_type": "keyvalue",
+            "output": "Delivery_City",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_Delivery_Pincode",
+            "scope": "local",
+            "input": "pin_code",
+            "input_type": "keyvalue",
+            "output": "Delivery_Pincode",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_CancelledDate",
+            "scope": "local",
+            "input": "cancelled_date",
+            "input_type": "keyvalue",
+            "output": "Cancelled_At_Date_&_Time",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "",
+            "helper_function": [
+                {
+                    "name": "FormatDateTime",
+                    "params": [
+                        {
+                            "key": "input",
+                            "type": "variable",
+                            "value": "Cancelled_At_Date_&_Time"
+                        },
+                        {
+                            "key": "inputFormat",
+                            "type": "static",
+                            "value": "2006-01-02T15:04:05Z"
+                        },
+                        {
+                            "key": "outputFormat",
+                            "type": "static",
+                            "value": "2006-01-02 15:04:05"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_CancelledBy",
+            "scope": "local",
+            "input": "CancelledBy",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_CancelledBy"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_CancelledBy",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "Cancelled_By",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_Cancellation_Reason",
+            "scope": "local",
+            "input": "cancellation_reason",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_cancellation_reason","field_Cancellation_Remark"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_cancellation_reason",
+            "scope": "local",
+            "input": "display_name",
+            "input_type": "keyvalue",
+            "output": "Cancellation_Reason",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_Cancellation_Remark",
+            "scope": "local",
+            "input": "display_name",
+            "input_type": "keyvalue",
+            "output": "Cancellation_Remark",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [""],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_Total_Order_Value",
+            "scope": "local",
+            "input": "so_payment_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_Total_Order_Value"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_Total_Order_Value",
+            "scope": "local",
+            "input": "total_amount",
+            "input_type": "keyvalue",
+            "output": "Total_Order_Value",
+            "output_type": "keyvalue",
+            "default_value": null,
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "Total_Order_Value",
+                            "type": "variable",
+                            "value": "Total_Order_Value"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

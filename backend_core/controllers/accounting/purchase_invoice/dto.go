@@ -35,6 +35,7 @@ type (
 		PaymentTermsId        uint                   `json:"payment_terms_id"`
 		PaymentTerms          model_core.Lookupcode  `json:"payment_terms"`
 		PaymentAmount         float32                `json:"payment_amount"`
+		CompanyId             uint                   `json:"company_id"`
 		BalanceDue            float32                `json:"balance_due"`
 		DueDate               string                 `json:"due_date"`
 		ExpectedDeliveryDate  string                 `json:"expected_delivery_date"`
@@ -60,6 +61,7 @@ type PurchaseInvoiceDTO struct {
 	PaymentAmount          float32                      `json:"payment_amount"`
 	BalanceDue             float32                      `json:"balance_due"`
 	DueDate                string                       `json:"due_date"`
+	CompanyId              uint                         `json:"company_id"`
 	ExpectedDeliveryDate   string                       `json:"expected_delivery_date"`
 	LinkSourceDocumentType *uint                        `json:"link_source_document_type"`
 	LinkSourceDocument     map[string]interface{}       `json:"link_source_document"`

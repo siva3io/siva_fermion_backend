@@ -39,7 +39,7 @@ type Core interface {
 	DeleteCode(query interface{}) error
 	FindAllLookupTypes(query interface{}, p *pagination.Paginatevalue) ([]model_core.Lookuptype, error)
 	FindAllLookupCodes(query interface{}, p *pagination.Paginatevalue) ([]model_core.Lookupcode, error)
-
+	GetLookupcodeId(query interface{}) (model_core.Lookupcode, error)
 	//apps
 
 	//-----------------------------Store Apps-------------------------------------------------------
@@ -67,15 +67,36 @@ type Core interface {
 	CreateCompany(data *model_core.Company) error
 	UpdateCompany(query map[string]interface{}, data *model_core.Company) error
 	FindCompany(query map[string]interface{}) (model_core.Company, error)
+
+	//-----------------channel status-------------------------------------------------------
+	ListChannelStatus(page *pagination.Paginatevalue) ([]model_core.ChannelLookupCodes, error)
+	ViewChannelStatus(id uint) ([]model_core.ChannelLookupCodes, error)
+	CreateChannelStatus(data *model_core.ChannelLookupCodes) error
+	UpdateChannelStatus(query map[string]interface{}, data *model_core.ChannelLookupCodes) error
+	DeleteChannelStatus(id uint) error
+
+	//------------------------------------ondc------------------------------------------------------------
+	UpdateOndcDetails(query map[string]interface{}, data *model_core.OndcDetails) error
+	CreateOndcDetails(data *model_core.OndcDetails) (*uint, error)
+	CreateCustomSolution(data model_core.CustomSolution) error
+
+	UpdateInstalledApp(query map[string]interface{}, data *model_core.InstalledApps) error
 }
 
 type cores struct {
 	db *gorm.DB
 }
 
+var coreRepository *cores //singleton object
+
+// singleton function
 func NewCore() *cores {
+	if coreRepository != nil {
+		return coreRepository
+	}
 	db := db.DbManager()
-	return &cores{db}
+	coreRepository = &cores{db}
+	return coreRepository
 }
 
 func (r *cores) GetLookupTypes(query interface{}, p *pagination.Paginatevalue) ([]model_core.Lookuptype, error) {
@@ -97,6 +118,17 @@ func (r *cores) GetLookupCodes(query interface{}, p *pagination.Paginatevalue) (
 	var data []model_core.Lookupcode
 	res := r.db.Model(&model_core.Lookupcode{}).Scopes(helpers.Paginate(&model_core.Lookupcode{}, p, r.db)).Where(query).Find(&data)
 	return data, res.Error
+}
+
+func (r *cores) GetLookupcodeId(query interface{}) (model_core.Lookupcode, error) {
+
+	var lookup model_core.Lookupcode
+
+	res := r.db.Model(&model_core.Lookupcode{}).Where(query).First(&lookup)
+	if res.Error != nil {
+		return lookup, res.Error
+	}
+	return lookup, nil
 }
 
 func (r *cores) FindAllLookupCodes(query interface{}, p *pagination.Paginatevalue) ([]model_core.Lookupcode, error) {
@@ -170,6 +202,11 @@ func (r *cores) UpdateAppStore(query map[string]interface{}, data *model_core.Ap
 	err := r.db.Model(&model_core.AppStore{}).Where(query).Updates(data).Error
 	return err
 }
+
+func (r *cores) UpdateInstalledApp(query map[string]interface{}, data *model_core.InstalledApps) error {
+	err := r.db.Model(&model_core.InstalledApps{}).Where(query).Updates(data).Error
+	return err
+}
 func (r *cores) ListStoreApps(query interface{}, page *pagination.Paginatevalue) ([]model_core.AppStore, error) {
 	var data []model_core.AppStore
 	var queryFilterIds []int
@@ -204,6 +241,7 @@ func (r *cores) GetApp(query map[string]interface{}) (model_core.AppStore, error
 	res := r.db.Model(&model_core.AppStore{}).Where(query).Preload("Currency").First(&data)
 	return data, res.Error
 }
+
 func (r *cores) SearchApps(query map[string]interface{}) (model_core.AppStore, error) {
 	var data model_core.AppStore
 	res := r.db.Model(&model_core.AppStore{}).Where(query).First(&data)
@@ -270,4 +308,52 @@ func (r *cores) FindCompany(query map[string]interface{}) (model_core.Company, e
 		return data, err.Error
 	}
 	return data, nil
+}
+
+// ------------------------channel status----------------------------------
+func (r *cores) ListChannelStatus(page *pagination.Paginatevalue) ([]model_core.ChannelLookupCodes, error) {
+	var data []model_core.ChannelLookupCodes
+	res := r.db.Scopes(helpers.Paginate(&model_core.ChannelLookupCodes{}, page, r.db)).Preload(clause.Associations).Find(&data)
+	return data, res.Error
+}
+func (r *cores) ViewChannelStatus(id uint) ([]model_core.ChannelLookupCodes, error) {
+	var data []model_core.ChannelLookupCodes
+	res := r.db.Model(&model_core.ChannelLookupCodes{}).Where(id).Find(&data)
+	return data, res.Error
+}
+func (r *cores) CreateChannelStatus(data *model_core.ChannelLookupCodes) error {
+	err := r.db.Create(data).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (r *cores) UpdateChannelStatus(query map[string]interface{}, data *model_core.ChannelLookupCodes) error {
+	err := r.db.Model(&model_core.ChannelLookupCodes{}).Where(query).Updates(data).Error
+	return err
+}
+func (r *cores) DeleteChannelStatus(id uint) error {
+	var data model_core.ChannelLookupCodes
+	res := r.db.Model(&model_core.ChannelLookupCodes{}).Where("id=?", id).Delete(&data)
+	return res.Error
+}
+
+// ------------------------------------ondc------------------------------------------------------------
+func (r *cores) CreateOndcDetails(data *model_core.OndcDetails) (*uint, error) {
+	err := r.db.Create(data).Error
+	if err != nil {
+		return nil, err
+	}
+	return data.ID, nil
+}
+
+func (r *cores) UpdateOndcDetails(query map[string]interface{}, data *model_core.OndcDetails) error {
+	err := r.db.Model(&model_core.OndcDetails{}).Where(query).Updates(data).Error
+	return err
+}
+
+func (r *cores) CreateCustomSolution(data model_core.CustomSolution) error {
+	err := r.db.Model(&model_core.CustomSolution{}).Create(data).Error
+	return err
+
 }

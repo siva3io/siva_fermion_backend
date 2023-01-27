@@ -22,8 +22,8 @@ type Transactions struct {
 	UserId uint   `json:"user_id" gorm:""`
 	// User                 model_core.CoreUsers `json:"user" gorm:"foreignKey:UserId; references:ID"`
 	Amount               float64             `json:"amount" gorm:""`
-	Currency             string              `json:"currency" gorm:"type:text"`
-	CurrencyCode         model_core.Currency `json:"currency_code" gorm:"foreignKey:Currency; references:CurrencyCode"`
+	Currency             *uint               `json:"currency" gorm:"type:text"`
+	CurrencyCode         model_core.Currency `json:"currency_code" gorm:"foreignKey:Currency; references:ID"`
 	Status               string              `json:"status" gorm:"type:text"`
 	PaymentType          string              `json:"payment_type" gorm:"type:text"` //credit, Debit
 	Name                 string              `json:"name" gorm:"type:text"`

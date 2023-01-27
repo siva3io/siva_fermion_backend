@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	inventory_tasks_base "fermion/backend_core/controllers/inventory_tasks/base"
+	"fermion/backend_core/internal/model/core"
+	"fermion/backend_core/internal/model/inventory_tasks"
 	"fermion/backend_core/internal/model/mdm/shared_pricing_and_location"
 	"fermion/backend_core/internal/model/pagination"
 	mdmrepo "fermion/backend_core/internal/repository/mdm"
@@ -36,11 +39,18 @@ type handler struct {
 	locationsRepository mdmrepo.Locations
 }
 
+var CycleCountHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CycleCountHandler != nil {
+		return CycleCountHandler
+	}
 	service := NewService()
 	base_service := inventory_tasks_base.NewServiceBase()
 	locationsRepository := mdmrepo.NewLocations()
-	return &handler{service, base_service, locationsRepository}
+	CycleCountHandler = &handler{service, base_service, locationsRepository}
+	return CycleCountHandler
 }
 
 // GetCountCapacity godoc
@@ -164,7 +174,7 @@ func (h *handler) GetBinsList(c echo.Context) (err error) {
 		if variant_id == data_variant_id {
 			query["id"] = data.ID
 			bin_data, _ := h.locationsRepository.GetStorageLocation(query)
-			if helpers.Contains(bin_ids, int64(bin_data.ID)) == false {
+			if !helpers.Contains(bin_ids, int64(bin_data.ID)) {
 				response = append(response, bin_data)
 				bin_ids = append(bin_ids, int64(bin_data.ID))
 			}
@@ -187,17 +197,54 @@ func (h *handler) GetBinsList(c echo.Context) (err error) {
 // @Failure 	404 {object} res.ErrorResponse
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/create [post]
-func (h *handler) CreateCycleCount(c echo.Context) (err error) {
-	data := c.Get("cycle_count").(*CycleCountRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	id, err := h.service.CreateCycleCount(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) CreateCycleCountEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("cycle_count"),
 	}
-	return res.RespSuccess(c, "Cycle count created successfully", map[string]interface{}{"created_id": id})
+	eda.Produce(eda.CREATE_CYCLE_COUNT, request_payload)
+	return res.RespSuccess(c, "Cycle Count Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
 }
+
+func (h *handler) CreateCycleCount(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	createPayload := new(inventory_tasks.CycleCount)
+	helpers.JsonMarshaller(data, createPayload)
+	err := h.service.CreateCycleCount(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CYCLE_COUNT_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_CYCLE_COUNT_ACK, responseMessage)
+	// cache implementation
+	UpdateCycleCountInCache(edaMetaData)
+}
+
+// func (h *handler) CreateCycleCount(c echo.Context) (err error) {
+// 	data := c.Get("cycle_count").(*CycleCountRequest)
+// 	token_id := c.Get("TokenUserID").(string)
+// 	access_template_id := c.Get("AccessTemplateId").(string)
+// 	data.CreatedByID = helpers.ConvertStringToUint(token_id)
+// 	id, err := h.service.CreateCycleCount(data, token_id, access_template_id)
+// 	if err != nil {
+// 		return res.RespErr(c, err)
+// 	}
+
+// 	// cache implementation
+// 	UpdateCycleCountInCache(token_id, access_template_id)
+
+// 	return res.RespSuccess(c, "Cycle count created successfully", map[string]interface{}{"created_id": id})
+// }
 
 // BulkCreateCycleCount godoc
 // @Summary 	do a BulkCreateCycleCount
@@ -217,13 +264,13 @@ func (h *handler) BulkCreateCycleCount(c echo.Context) (err error) {
 	data := new([]CycleCountRequest)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateCycleCount(data, token_id, access_template_id)
+	err = h.service.BulkCreateCycleCount(metaData, data)
 	if err != nil {
 		return res.RespError(c, err)
 	}
@@ -245,19 +292,62 @@ func (h *handler) BulkCreateCycleCount(c echo.Context) (err error) {
 // @Failure 	404 {object} res.ErrorResponse
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/{id}/edit [put]
-func (h *handler) UpdateCycleCount(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("cycle_count").(*CycleCountRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateCycleCount(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) UpdateCycleCountEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	cycleCountId := c.Param("id")
+
+	edaMetaData.Query = map[string]interface{}{
+		"id":         cycleCountId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Cycle count updated successfully", map[string]interface{}{"updated_id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("cycle_count"),
+	}
+	eda.Produce(eda.UPDATE_CYCLE_COUNT, request_payload)
+	return res.RespSuccess(c, "Cycle Count Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
 }
+
+func (h *handler) UpdateCycleCount(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(inventory_tasks.CycleCount)
+	helpers.JsonMarshaller(data, updatePayload)
+	err := h.service.UpdateCycleCount(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CYCLE_COUNT_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_CYCLE_COUNT_ACK, responseMessage)
+
+	UpdateCycleCountInCache(edaMetaData)
+}
+
+// func (h *handler) UpdateCycleCount(c echo.Context) (err error) {
+// 	ID := c.Param("id")
+// 	id, _ := strconv.Atoi(ID)
+// 	data := c.Get("cycle_count").(*CycleCountRequest)
+// 	token_id := c.Get("TokenUserID").(string)
+// 	access_template_id := c.Get("AccessTemplateId").(string)
+// 	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
+// 	err = h.service.UpdateCycleCount(uint(id), data, token_id, access_template_id)
+// 	if err != nil {
+// 		return res.RespErr(c, err)
+// 	}
+
+// 	// cache implementation
+// 	UpdateCycleCountInCache(token_id, access_template_id)
+
+// 	return res.RespSuccess(c, "Cycle count updated successfully", map[string]interface{}{"updated_id": id})
+// }
 
 // GetCycleCount godoc
 // @Summary 	Find a GetCycleCount by id
@@ -274,15 +364,19 @@ func (h *handler) UpdateCycleCount(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/{id} [get]
 func (h *handler) GetCycleCount(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetCycleCount(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	cycleCountId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": cycleCountId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetCycleCount(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Cycle count fetched successfully", result)
+	var response CycleCountRequest
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Cycle count fetched successfully", response)
 }
 
 // GetAllCycleCount godoc
@@ -303,15 +397,32 @@ func (h *handler) GetCycleCount(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count [get]
 func (h *handler) GetAllCycleCount(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllCycleCount(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []CycleCountGetAll
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCycleCountFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllCycleCount(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Cycle Count data Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Cycle Count data Retrieved successfully", response, p)
 }
 
 // DeleteCycleCount godoc
@@ -329,16 +440,22 @@ func (h *handler) GetAllCycleCount(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/{id}/delete [delete]
 func (h *handler) DeleteCycleCount(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteCycleCount(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	cycleCountId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         cycleCountId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteCycleCount(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, " Cycle Count deleted successfully", map[string]interface{}{"deleted_id": id})
+
+	// cache implementation
+	UpdateCycleCountInCache(metaData)
+
+	return res.RespSuccess(c, " Cycle Count deleted successfully", map[string]interface{}{"deleted_id": cycleCountId})
 }
 
 // DeleteCycleCountLines godoc
@@ -357,21 +474,21 @@ func (h *handler) DeleteCycleCount(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/{id}/delete_products [delete]
 func (h *handler) DeleteCycleCountLines(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	product_id := c.QueryParam("product_id")
-	prod_id, _ := strconv.Atoi(product_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	query := map[string]interface{}{
-		"cycle_count_id": uint(id),
-		"product_id":     uint(prod_id),
+	metaData := c.Get("MetaData").(core.MetaData)
+	cycleCountId := c.Param("id")
+	productId := c.QueryParam("product_id")
+	metaData.Query = map[string]interface{}{
+		"id":         cycleCountId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+		"product_id": productId,
 	}
-	err = h.service.DeleteCycleCountLines(query, token_id, access_template_id)
+
+	err = h.service.DeleteCycleCountLines(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Cycle Count Line Items successfully deleted", query)
+	return res.RespSuccess(c, "Cycle Count Line Items successfully deleted", cycleCountId)
 }
 
 // SendMailCycleCount godoc
@@ -530,13 +647,30 @@ func (h *handler) UnFavouriteCycleCount(c echo.Context) (err error) {
 // @Failure 	500 {object} res.ErrorResponse
 // @Router 		/api/v1/cycle_count/dropdown [get]
 func (h *handler) GetAllCycleCountDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllCycleCount(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []CycleCountGetAll
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetCycleCountFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetAllCycleCount(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Cycle Count data Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "Cycle Count data Retrieved successfully", response, p)
 }

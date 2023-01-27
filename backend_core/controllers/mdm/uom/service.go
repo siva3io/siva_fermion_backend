@@ -1,14 +1,14 @@
 package uom
 
 import (
-	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	mdm_repo "fermion/backend_core/internal/repository/mdm"
 	access_checker "fermion/backend_core/pkg/util/access"
-	"fermion/backend_core/pkg/util/helpers"
 )
 
 /*
@@ -27,293 +27,210 @@ import (
 */
 
 type Service interface {
-	CreateUom(data *mdm.Uom, token_id string, access_template_id string) error
-	CreateUomClass(data *mdm.UomClass, token_id string, access_template_id string) error
+	CreateUom(metaData core.MetaData, data *mdm.Uom) error
+	CreateUomClass(metaData core.MetaData, data *mdm.UomClass) error
 
-	UpdateUom(query map[string]interface{}, data *mdm.Uom, token_id string, access_template_id string) error
-	UpdateUomClass(query map[string]interface{}, data *mdm.UomClass, token_id string, access_template_id string) error
+	UpdateUom(metaData core.MetaData, data *mdm.Uom) error
+	UpdateUomClass(metaData core.MetaData, data *mdm.UomClass) error
 
-	DeleteUom(query map[string]interface{}, token_id string, access_template_id string) error
-	DeleteUomClass(query map[string]interface{}, token_id string, access_template_id string) error
+	DeleteUom(metaData core.MetaData) error
+	DeleteUomClass(metaData core.MetaData) error
 
-	GetUom(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	GetUomClass(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
+	GetUom(metaData core.MetaData) (interface{}, error)
+	GetUomClass(metaData core.MetaData) (interface{}, error)
 
-	GetUomList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
-	GetUomClassList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
-
-	SearchUom(query string, token_id string, access_template_id string) ([]IdNameDTO, error)
-	SearchUomClass(query string, token_id string, access_template_id string) ([]IdNameDTO, error)
+	GetUomList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	GetUomClassList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
 }
-
 type service struct {
 	uom mdm_repo.Uom
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	uom := mdm_repo.NewUom()
-	return &service{uom}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{
+		mdm_repo.NewUom(),
+	}
+	return newServiceObj
 }
 
-func (s *service) CreateUom(data *mdm.Uom, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "UOM", *token_user_id)
+func (s *service) CreateUom(metaData core.MetaData, data *mdm.Uom) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create uom at data level")
 	}
+
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+
 	err := s.uom.UomSave(data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) CreateUomClass(data *mdm.UomClass, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "UOM", *token_user_id)
+func (s *service) CreateUomClass(metaData core.MetaData, data *mdm.UomClass) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for create uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for create uom at data level")
 	}
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
+
 	err := s.uom.UomClassSave(data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) UpdateUom(query map[string]interface{}, data *mdm.Uom, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "UOM", *token_user_id)
+func (s *service) UpdateUom(metaData core.MetaData, data *mdm.Uom) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update uom at data level")
 	}
-	_, err := s.uom.FindOneUom(query)
-	if err != nil {
-		return err
-	}
-	err = s.uom.UpdateUom(query, data)
+
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.uom.UpdateUom(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) UpdateUomClass(query map[string]interface{}, data *mdm.UomClass, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "UOM", *token_user_id)
+
+func (s *service) UpdateUomClass(metaData core.MetaData, data *mdm.UomClass) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for update uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update uom at data level")
 	}
-	_, err := s.uom.FindOneUomClass(query)
-	if err != nil {
-		return err
-	}
-	err = s.uom.UpdateUomClass(query, data)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.uom.UpdateUomClass(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) DeleteUom(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "UOM", *token_user_id)
+func (s *service) DeleteUom(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete uom at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.uom.FindOneUom(q)
-	if er != nil {
-		return er
-	}
-	err := s.uom.DeleteUom(query)
+
+	err := s.uom.DeleteUom(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) DeleteUomClass(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "UOM", *token_user_id)
+func (s *service) DeleteUomClass(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete uom at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete uom at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.uom.FindOneUomClass(q)
-	if er != nil {
-		return er
-	}
-	err := s.uom.DeleteUomClass(query)
+
+	err := s.uom.DeleteUomClass(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) GetUom(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "UOM", *token_user_id)
+func (s *service) GetUom(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view uom at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view uom at data level")
 	}
-	result, err := s.uom.FindOneUom(query)
-	if err != nil {
-		return result, err
-	}
-	var response UomResponseDTO
-	marshaldata, err := json.Marshal(result)
+	response, err := s.uom.FindOneUom(metaData.Query)
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
-	}
-
 	return response, nil
 }
-func (s *service) GetUomClass(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "UOM", *token_user_id)
+func (s *service) GetUomClass(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "READ", "UOM", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view uom at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view uom at data level")
 	}
-	result, err := s.uom.FindOneUomClass(query)
+
+	response, err := s.uom.FindOneUomClass(metaData.Query)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+func (s *service) GetUomList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "UOM", metaData.TokenUserId)
+	if !access_module_flag {
+		return nil, fmt.Errorf("you dont have access for list uom at view level")
+	}
+	if data_access == nil {
+		return nil, fmt.Errorf("you dont have access for list uom at data level")
+	}
+
+	result, err := s.uom.FindAllUom(metaData.Query, p)
 	if err != nil {
 		return result, err
 	}
-	var response UomClassResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
+	return result, nil
 }
-func (s *service) GetUomList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "UOM", *token_user_id)
+func (s *service) GetUomClassList(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "UOM", metaData.TokenUserId)
+
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list uom at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list uom at data level")
 	}
-	result, err := s.uom.FindAllUom(query, p)
+	result, err := s.uom.FindAllUomClass(metaData.Query, p)
 	if err != nil {
 		return result, err
 	}
-	var response []UomResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
-	}
 
-	return response, nil
-}
-func (s *service) GetUomClassList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "UOM", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list uom at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list uom at data level")
-	}
-	result, err := s.uom.FindAllUomClass(query, p)
-	if err != nil {
-		return result, err
-	}
-	var response []UomClassResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-func (s *service) SearchUom(query string, token_id string, access_template_id string) ([]IdNameDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "UOM", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list uom at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list uom at data level")
-	}
-	result, err := s.uom.SearchUom(query)
-	var uomDTO []IdNameDTO
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range result {
-		var data IdNameDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
-		if err != nil {
-			return nil, err
-		}
-		uomDTO = append(uomDTO, data)
-	}
-	return uomDTO, nil
-}
-func (s *service) SearchUomClass(query string, token_id string, access_template_id string) ([]IdNameDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "UOM", *token_user_id)
-	if !access_module_flag {
-		return nil, fmt.Errorf("you dont have access for list uom at view level")
-	}
-	if data_access == nil {
-		return nil, fmt.Errorf("you dont have access for list uom at data level")
-	}
-	result, err := s.uom.SearchUom(query)
-	var uomClassDTO []IdNameDTO
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range result {
-		var data IdNameDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
-		if err != nil {
-			return nil, err
-		}
-		uomClassDTO = append(uomClassDTO, data)
-	}
-	return uomClassDTO, nil
+	return result, nil
 }

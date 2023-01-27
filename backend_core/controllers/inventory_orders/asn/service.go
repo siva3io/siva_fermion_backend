@@ -2,15 +2,18 @@ package asn
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
 	"fermion/backend_core/controllers/inventory_orders/grn"
 	"fermion/backend_core/controllers/inventory_orders/inventory_adjustments"
 	"fermion/backend_core/controllers/orders/scrap_orders"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/inventory_orders"
 	"fermion/backend_core/internal/model/pagination"
 	inventory_orders_repo "fermion/backend_core/internal/repository/inventory_orders"
+	returns_repo "fermion/backend_core/internal/repository/returns"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
@@ -31,86 +34,91 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateAsn(data *AsnRequest, token_id string, access_template_id string) (uint, error)
-	BulkCreateAsn(data *[]AsnRequest, token_id string, access_template_id string) error
-	UpdateAsn(data uint, userID *AsnRequest, token_id string, access_template_id string) error
-	GetAsn(id uint, token_id string, access_template_id string) (interface{}, error)
-	GetAllAsn(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_orders.ASN, error)
-	DeleteAsn(id uint, user_id uint, token_id string, access_template_id string) error
-	DeleteAsnLines(query interface{}, token_id string, access_template_id string) error
+	CreateAsn(metaData core.MetaData, data *inventory_orders.ASN) error
+	BulkCreateAsn(metaData core.MetaData, data *[]inventory_orders.ASN) error
+	UpdateAsn(metaData core.MetaData, data *inventory_orders.ASN) error
+	GetAsn(metaData core.MetaData) (interface{}, error)
+	GetAllAsn(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	DeleteAsn(metaData core.MetaData) error
+	DeleteAsnLines(metaData core.MetaData) error
 
-	SendMailAsn(q *SendMailAsn) error
-	GetAsnTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error)
+	SendMailAsn(metaData core.MetaData, q *SendMailAsn) error
+	GetAsnTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
-	asnRepository      inventory_orders_repo.Asn
-	grnService         grn.Service
-	inventoryService   inventory_adjustments.Service
-	scrapOrdersService scrap_orders.Service
+	asnRepository            inventory_orders_repo.Asn
+	grnService               grn.Service
+	inventoryService         inventory_adjustments.Service
+	scrapOrdersService       scrap_orders.Service
+	PurchaseReturnRepository returns_repo.PurchaseReturn
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	AsnRepository := inventory_orders_repo.NewAsn()
-	return &service{AsnRepository,
+	newServiceObj = &service{AsnRepository,
 		grn.NewService(),
 		inventory_adjustments.NewService(),
-		scrap_orders.NewService()}
+		scrap_orders.NewService(), returns_repo.NewPurchaseReturn()}
+	return newServiceObj
 }
 
-func (s *service) CreateAsn(data *AsnRequest, token_id string, access_template_id string) (uint, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "ASN", *token_user_id)
-	if !access_module_flag {
-		return 0, fmt.Errorf("you dont have access for create asn at view level")
+func (s *service) CreateAsn(metaData core.MetaData, data *inventory_orders.ASN) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for create asn at view level")
 	}
-	if data_access == nil {
-		return 0, fmt.Errorf("you dont have access for create asn at data level")
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for create asn at data level")
 	}
-	var AsnData inventory_orders.ASN
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
+	var dtoData AsnRequest
+	if dtoData.AutoCreateAsnNumber {
+		data.AsnNumber = helpers.GenerateSequence("ASN", fmt.Sprint(metaData.TokenUserId), "asns")
 	}
-	err = json.Unmarshal(dto, &AsnData)
-	if err != nil {
-		return 0, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-
-	if data.AutoCreateAsnNumber {
-		AsnData.AsnNumber = helpers.GenerateSequence("ASN", token_id, "asns")
-	}
-	if data.AutoGenerateReferenceNumber {
-		AsnData.ReferenceNumber = helpers.GenerateSequence("REF", token_id, "asns")
+	if dtoData.AutoGenerateReferenceNumber {
+		data.ReferenceNumber = helpers.GenerateSequence("REF", fmt.Sprint(metaData.TokenUserId), "asns")
 	}
 
 	defaultStatus, err := helpers.GetLookupcodeId("GRN_STATUS", "DRAFT")
 	if err != nil {
-		return 0, err
+		return err
 	}
 	data.StatusID = defaultStatus
-	id, err := s.asnRepository.CreateAsn(&AsnData, token_id)
-	return id, err
+	err = s.asnRepository.CreateAsn(data)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *service) BulkCreateAsn(data *[]AsnRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "ASN", *token_user_id)
-	if !access_module_flag {
+func (s *service) BulkCreateAsn(metaData core.MetaData, data *[]inventory_orders.ASN) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create asn at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create asn at data level")
 	}
 	bulk_data := []map[string]interface{}{}
+	var dtoData AsnRequest
 	for index, value := range *data {
 		v := map[string]interface{}{}
 		count := helpers.GetCount("SELECT COUNT(*) FROM asns") + 1 + index
-		if value.AutoCreateAsnNumber {
-			value.AsnNumber = "ASN/" + token_id + "/000" + strconv.Itoa(count)
+		if dtoData.AutoCreateAsnNumber {
+			value.AsnNumber = "ASN/" + fmt.Sprint(metaData.TokenUserId) + "/000" + strconv.Itoa(count)
 		}
-		if value.AutoGenerateReferenceNumber {
-			value.ReferenceNumber = "REF/" + token_id + "/000" + strconv.Itoa(count)
+		if dtoData.AutoGenerateReferenceNumber {
+			value.ReferenceNumber = "REF/" + fmt.Sprint(metaData.TokenUserId) + "/000" + strconv.Itoa(count)
 		}
 
 		val, err := json.Marshal(value)
@@ -134,146 +142,141 @@ func (s *service) BulkCreateAsn(data *[]AsnRequest, token_id string, access_temp
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
 
-	err = s.asnRepository.BulkCreateAsn(&AsnData, token_id)
+	err = s.asnRepository.BulkCreateAsn(&AsnData)
 	return err
 }
 
-func (s *service) UpdateAsn(id uint, data *AsnRequest, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "ASN", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdateAsn(metaData core.MetaData, data *inventory_orders.ASN) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update asn at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update asn at data level")
 	}
-	var AsnData inventory_orders.ASN
-	dto, err := json.Marshal(*data)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
+	var find_query = map[string]interface{}{
+		"id": metaData.Query["id"],
 	}
-	err = json.Unmarshal(dto, &AsnData)
-	if err != nil {
-		return res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	old_data, er := s.asnRepository.GetAsn(id)
+	old_data, er := s.asnRepository.GetAsn(find_query)
 	if er != nil {
 		return er
 	}
+	data.UpdatedByID = &metaData.TokenUserId
 	old_status := old_data.StatusID
-	new_status := AsnData.StatusID
+	new_status := data.StatusID
 	if new_status != old_status && new_status != 0 {
 		result, _ := helpers.UpdateStatusHistory(old_data.StatusHistory, data.StatusID)
-		AsnData.StatusHistory = result
+		data.StatusHistory = result
 	}
 
-	err = s.asnRepository.UpdateAsn(id, &AsnData)
-	for _, order_line := range AsnData.AsnOrderLines {
+	err := s.asnRepository.UpdateAsn(metaData.Query, data)
+	if er != nil {
+		return err
+	}
+	for _, order_line := range data.AsnOrderLines {
 		query := map[string]interface{}{
-			"asn_id":     uint(id),
-			"product_id": uint(order_line.ProductID),
+			"asn_id":     old_data.ID,
+			"product_id": order_line.ProductID,
 		}
 		count, er := s.asnRepository.UpdateAsnLines(query, order_line)
 		if er != nil {
 			return er
 		} else if count == 0 {
-			order_line.Asn_id = id
+			order_line.CreatedByID = &metaData.TokenUserId
+			order_line.CompanyId = metaData.CompanyId
+			order_line.UpdatedByID = nil
+			order_line.Asn_id = metaData.TokenUserId
 			e := s.asnRepository.CreateAsnLines(order_line)
 			if e != nil {
 				return e
 			}
 		}
 	}
-	return err
+	return nil
 }
 
-func (s *service) GetAsn(id uint, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "ASN", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetAsn(metaData core.MetaData) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view asn at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view asn at data level")
 	}
-	result, er := s.asnRepository.GetAsn(id)
+	result, er := s.asnRepository.GetAsn(metaData.Query)
 	if er != nil {
 		return result, er
 	}
-	query := map[string]interface{}{
-		"asn_id": id,
-	}
-	result_order_lines, err := s.asnRepository.GetAsnLines(query)
-	result.AsnOrderLines = result_order_lines
-	if err != nil {
-		return result, err
-	}
+	// result_order_lines, err := s.asnRepository.GetAsnLines(metaData.Query)
+	// result.AsnOrderLines = result_order_lines
+	// if err != nil {
+	// 	return result, err
+	// }
 
 	return result, nil
 }
 
-func (s *service) GetAllAsn(p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]inventory_orders.ASN, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "ASN", *token_user_id)
-	if !access_module_flag {
+func (s *service) GetAllAsn(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list asn at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list asn at data level")
 	}
-	result, err := s.asnRepository.GetAllAsn(p)
+	result, err := s.asnRepository.GetAllAsn(metaData.Query, p)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *service) DeleteAsn(id uint, user_id uint, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "ASN", *token_user_id)
+func (s *service) DeleteAsn(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
+		return fmt.Errorf("you dont have access for delete asn at view level")
+	}
+	if dataAccess == nil {
+		return fmt.Errorf("you dont have access for delete asn at data level")
+	}
+	err := s.asnRepository.DeleteAsn(metaData.Query)
+	if err != nil {
+		return err
+	} else {
+		query := map[string]interface{}{"asn_id": metaData.Query["id"]}
+		er := s.asnRepository.DeleteAsnLines(query)
+		if er != nil {
+			return er
+		}
+	}
+	return nil
+}
+
+func (s *service) DeleteAsnLines(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	access_module_flag, data_access := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "ASN", metaData.TokenUserId)
 	if !access_module_flag {
 		return fmt.Errorf("you dont have access for delete asn at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for delete asn at data level")
 	}
-	_, er := s.asnRepository.GetAsn(id)
-	if er != nil {
-		return er
-	}
-	err := s.asnRepository.DeleteAsn(id, user_id)
+	err := s.asnRepository.DeleteAsnLines(metaData.Query)
 	if err != nil {
 		return err
 	}
-	query := map[string]interface{}{"asn_id": id}
-	err1 := s.asnRepository.DeleteAsnLines(query)
-	return err1
+	return nil
 }
 
-func (s *service) DeleteAsnLines(query interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "ASN", *token_user_id)
-	if !access_module_flag {
-		return fmt.Errorf("you dont have access for delete asn at view level")
+func (s *service) SendMailAsn(metaData core.MetaData, q *SendMailAsn) error {
+	query := map[string]interface{}{
+		"id1": q.ID,
 	}
-	if data_access == nil {
-		return fmt.Errorf("you dont have access for delete asn at data level")
-	}
-	data, err := s.asnRepository.GetAsnLines(query)
-	if err != nil {
-		return err
-	}
-	if len(data) <= 0 {
-		return err
-	}
-	err = s.asnRepository.DeleteAsnLines(query)
-	return err
-}
-
-func (s *service) SendMailAsn(q *SendMailAsn) error {
-
-	id, _ := strconv.Atoi(q.ID)
-	result, er := s.asnRepository.GetAsn(uint(id))
+	result, er := s.asnRepository.GetAsn(query)
 	if er != nil {
 		return er
 	}
@@ -281,29 +284,26 @@ func (s *service) SendMailAsn(q *SendMailAsn) error {
 
 	return err
 }
-func (s *service) GetAsnTab(id, tab string, page *pagination.Paginatevalue, access_template_id string, token_id string) (interface{}, error) {
+func (s *service) GetAsnTab(metaData core.MetaData, page *pagination.Paginatevalue) (interface{}, error) {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
 
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "ASN", *token_user_id)
-	if !access_module_flag {
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "LIST", "ASN", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list asn at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list asn at data level")
 	}
 
-	asnId, err := strconv.Atoi(id)
-	if err != nil {
-		return nil, err
-	}
+	tab := metaData.AdditionalFields["tab"].(string)
+	asnId := metaData.AdditionalFields["id"]
 
 	if tab == "grn" {
 
 		sourceDocumentId, _ := helpers.GetLookupcodeId("GRN_SOURCE_DOCUMENT_TYPES", "ASN")
-
 		grnPage := page
 		grnPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, asnId)
-		data, err := s.grnService.GetAllGRN(grnPage, token_id, access_template_id, "LIST")
+		data, err := s.grnService.GetAllGRN(metaData, grnPage)
 		if err != nil {
 			return nil, err
 		}
@@ -315,7 +315,44 @@ func (s *service) GetAsnTab(id, tab string, page *pagination.Paginatevalue, acce
 
 		inventoryPage := page
 		inventoryPage.Filters = fmt.Sprintf("[[\"source_document_type_id\",\"=\",%v],[\"source_documents\",\"@>\",\"{\\\"id\\\":%v}\"]]", sourceDocumentId, asnId)
-		data, err := s.inventoryService.GetAllInvAdj(inventoryPage, token_id, access_template_id, "LIST")
+		data, err := s.inventoryService.GetAllInvAdj(metaData, inventoryPage)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	}
+	if tab == "purchase_returns" {
+		asnPagination := new(pagination.Paginatevalue)
+		source_document_type_id, _ := helpers.GetLookupcodeId("ASN_SOURCE_DOCUMENT_TYPES", "PURCHASE_RETURNS")
+		asnPagination.Filters = fmt.Sprintf("[[\"id\",\"=\",%v],[\"source_document_type_id\",\"=\",%v]]", asnId, source_document_type_id)
+		asn_interface, err := s.GetAllAsn(metaData, asnPagination)
+		if err != nil {
+			return nil, err
+		}
+		asn := asn_interface.([]inventory_orders.ASN)
+		if len(asn) == 0 {
+			return nil, errors.New("no source document")
+		}
+
+		var asnSourceDoc map[string]interface{}
+		asnSourceDocJson := asn[0].SourceDocuments
+		dto, err := json.Marshal(asnSourceDocJson)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+		err = json.Unmarshal(dto, &asnSourceDoc)
+		if err != nil {
+			return 0, res.BuildError(res.ErrUnprocessableEntity, err)
+		}
+
+		asnSourceDocId := asnSourceDoc["id"]
+		if asnSourceDocId == nil {
+			return nil, errors.New("no source document")
+		}
+
+		PurchaseReturnPage := page
+		PurchaseReturnPage.Filters = fmt.Sprintf("[[\"id\",\"=\",%v]]", asnSourceDoc["id"])
+		data, err := s.PurchaseReturnRepository.FindAll(nil, page)
 		if err != nil {
 			return nil, err
 		}

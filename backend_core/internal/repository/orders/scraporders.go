@@ -1,6 +1,7 @@
 package orders
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -31,10 +32,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 type ScrapOrders interface {
 	SaveScrapOrder(data *orders.ScrapOrders) (uint, error)
 	BulkSaveScrapOrder(data *[]orders.ScrapOrders) error
-	UpdateScrapOrder(id uint, data *orders.ScrapOrders) error
-	FindAllScrapOrders(p *pagination.Paginatevalue) ([]orders.ScrapOrders, error)
-	FindScrapOrderById(id uint) (orders.ScrapOrders, error)
-	DeleteScrapOrder(id uint, user_id uint) error
+	UpdateScrapOrder(query map[string]interface{}, data *orders.ScrapOrders) error
+	FindAllScrapOrders(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.ScrapOrders, error)
+	FindScrapOrderById(query map[string]interface{}) (orders.ScrapOrders, error)
+	DeleteScrapOrder(query map[string]interface{}) error
 
 	CreateScrapOrderLines(data orders.ScrapOrderLines) error
 	UpdateScrapOrderLines(query interface{}, data orders.ScrapOrderLines) (int64, error)
@@ -46,13 +47,19 @@ type scrapOrders struct {
 	db *gorm.DB
 }
 
+var scrapOrdersRepository *scrapOrders //singleton object
+
+// singleton function
 func NewScrap() *scrapOrders {
+	if scrapOrdersRepository != nil {
+		return scrapOrdersRepository
+	}
 	db := db.DbManager()
-	return &scrapOrders{db}
+	scrapOrdersRepository = &scrapOrders{db}
+	return scrapOrdersRepository
 }
 
 func (r *scrapOrders) SaveScrapOrder(data *orders.ScrapOrders) (uint, error) {
-	fmt.Println("repo")
 
 	res := r.db.Model(&orders.ScrapOrders{}).Create(&data)
 	return data.ID, res.Error
@@ -63,32 +70,63 @@ func (r *scrapOrders) BulkSaveScrapOrder(data *[]orders.ScrapOrders) error {
 	return res.Error
 }
 
-func (r *scrapOrders) UpdateScrapOrder(id uint, Updatedata *orders.ScrapOrders) error {
-	res := r.db.Model(&orders.ScrapOrders{}).Where("id", id).Updates(Updatedata)
-	return res.Error
+func (r *scrapOrders) UpdateScrapOrder(query map[string]interface{}, data *orders.ScrapOrders) error {
+	err := r.db.Model(&orders.ScrapOrders{}).Where(query).Updates(data)
+
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+
+		return err.Error
+	}
+	return nil
+}
+func (r *scrapOrders) FindAllScrapOrders(query map[string]interface{}, page *pagination.Paginatevalue) ([]orders.ScrapOrders, error) {
+	var data []orders.ScrapOrders
+
+	err := r.db.Model(&orders.ScrapOrders{}).Preload(clause.Associations).Scopes(helpers.Paginate(&orders.ScrapOrders{}, page, r.db)).Where(query).Find(&data)
+
+	if err.Error != nil {
+		return nil, err.Error
+	}
+
+	return data, nil
 }
 
-func (r *scrapOrders) FindAllScrapOrders(p *pagination.Paginatevalue) ([]orders.ScrapOrders, error) {
-	var result []orders.ScrapOrders
-	res := r.db.Preload(clause.Associations).Model(&orders.ScrapOrders{}).Scopes(helpers.Paginate(&orders.ScrapOrders{}, p, r.db)).Where("is_active = true").Preload("Order_lines.Product").Preload(clause.Associations).Find(&result)
-	return result, res.Error
+func (r *scrapOrders) FindScrapOrderById(query map[string]interface{}) (orders.ScrapOrders, error) {
+	var data orders.ScrapOrders
+
+	err := r.db.Preload(clause.Associations + "." + clause.Associations).Where(query).First(&data)
+
+	if err.RowsAffected == 0 {
+		return data, errors.New("record not found")
+	}
+
+	if err.Error != nil {
+		return data, err.Error
+	}
+
+	return data, nil
 }
 
-func (r *scrapOrders) FindScrapOrderById(id uint) (orders.ScrapOrders, error) {
-	var res orders.ScrapOrders
-	err := r.db.Preload(clause.Associations+"."+clause.Associations).Model(&orders.ScrapOrders{}).Preload("Order_lines.Product").Preload(clause.Associations).Where("id", id).First(&res)
-	return res, err.Error
-}
-
-func (r *scrapOrders) DeleteScrapOrder(id uint, user_id uint) error {
+func (r *scrapOrders) DeleteScrapOrder(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"].(uint),
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&orders.ScrapOrders{}).Where("id", id).Updates(data)
-	return res.Error
+	delete(query, "user_id")
+	err := r.db.Model(&orders.ScrapOrders{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err != nil {
+
+		return err.Error
+	}
+	return nil
 }
 
 func (r *scrapOrders) CreateScrapOrderLines(data orders.ScrapOrderLines) error {

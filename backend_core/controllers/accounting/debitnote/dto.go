@@ -33,6 +33,7 @@ type DebitNoteDTO struct {
 	CurrencyId             *uint                  `json:"currency_id"`
 	GenerateDebitNoteId    bool                   `json:"generate_debit_note_id"`
 	DebitNoteID            string                 `json:"debit_note_id"`
+	CompanyId              uint                   `json:"company_id"`
 	GenerateReferenceId    bool                   `json:"generate_reference_id"`
 	ReferenceId            string                 `json:"reference_id"`
 	ReasonId               *uint                  `json:"reason_id"`
@@ -82,6 +83,7 @@ type DebitNoteResponseDTO struct {
 	ReasonId               *uint                                      `json:"reason_id"`
 	Reason                 core_dto.LookupCodesDTO                    `json:"reason"`
 	StatusId               uint                                       `json:"status_id"`
+	CompanyId              uint                                       `json:"company_id"`
 	Status                 core_dto.LookupCodesDTO                    `json:"status"`
 	BillingAddressId       *uint                                      `json:"billing_address_id"`
 	BillingAddress         partner_dto.PartnerResponseDTO             `json:"billing_address"`

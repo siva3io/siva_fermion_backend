@@ -4,14 +4,16 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/accounting/sales_invoice"
+	"fermion/backend_core/controllers/eda"
 	orders_base "fermion/backend_core/controllers/orders/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
 	"github.com/labstack/echo/v4"
 )
-
 /*
 Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
 All rights reserved.
@@ -26,16 +28,22 @@ GNU Lesser General Public License v3.0 for more details.
 You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
-
 type handler struct {
 	service      Service
 	base_service orders_base.ServiceBase
 }
 
+var ScrapOrdersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ScrapOrdersHandler != nil {
+		return ScrapOrdersHandler
+	}
 	service := NewService()
 	base_service := orders_base.NewServiceBase()
-	return &handler{service, base_service}
+	ScrapOrdersHandler = &handler{service, base_service}
+	return ScrapOrdersHandler
 }
 
 // CreateScrapOrder godoc
@@ -52,26 +60,49 @@ func NewHandler() *handler {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders/create [post]
-func (h *handler) CreateScrapOrder(c echo.Context) (err error) {
-	data := c.Get("scrap_orders").(*ScrapOrders)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	seq_scrap := helpers.GenerateSequence("scrap", token_id, "scrap_orders")
-	seq_ref := helpers.GenerateSequence("Ref", token_id, "scrap_orders")
+func (h *handler) CreateScrapOrderEvent(c echo.Context) (err error) {
+	data := new(ScrapOrders)
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("scrap_orders"),
+	}
+	seq_scrap := helpers.GenerateSequence("SCRAP", fmt.Sprint(edaMetaData.TokenUserId), "scrap_orders")
+	seq_ref := helpers.GenerateSequence("REF", fmt.Sprint(edaMetaData.TokenUserId), "scrap_orders")
 	if data.AutoCreateScrapNumber {
 		data.Scrap_order_number = seq_scrap
 	}
 	if data.AutoGenerateReferenceNumber {
 		data.Reference_id = seq_ref
 	}
+	eda.Produce(eda.CREATE_SCRAP_ORDERS, requestPayload)
+	return res.RespSuccess(c, "Scrap Order Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
 
-	id, err := h.service.CreateScrapOrder(data, token_id, access_template_id)
+func (h *handler) CreateScrapOrder(request map[string]interface{}) {
+
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	requestPayload := new(ScrapOrders)
+	helpers.JsonMarshaller(request["data"], requestPayload)
+
+	err := h.service.CreateScrapOrder(edaMetaData, requestPayload)
+	responseMessage := new(eda.ConsumerResponse)
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_SCRAP_ORDERS_ACK, *responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "ScrapOrders order added successfully", map[string]interface{}{"created_id": id})
+	// cache implementation
+	UpdateScrapOrderInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": requestPayload.ID,
+	}
+	// eda.Produce(eda.CREATE_SCRAP_ORDERS_ACK, *responseMessage)
+
 }
 
 // UpdateScrap godoc
@@ -89,18 +120,48 @@ func (h *handler) CreateScrapOrder(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders/{id}/update [post]
-func (h *handler) UpdateScrapOrder(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	data := c.Get("scrap_orders").(*ScrapOrders)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateScrapOrder(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) UpdateScrapOrderEvent(c echo.Context) (err error) {
+
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	idString := c.Param("id")
+	id, _ := strconv.Atoi(idString)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         id,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "ScrapOrders details updated succesfully", map[string]interface{}{"updated_id": id})
+
+	requestPayload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("scrap_orders"),
+	}
+
+	eda.Produce(eda.UPDATE_SCRAP_ORDERS, requestPayload)
+	return res.RespSuccess(c, "Scrap Order Update Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateScrapOrder(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	updatePayload := new(ScrapOrders)
+	helpers.JsonMarshaller(request["data"], updatePayload)
+
+	err := h.service.UpdateScrapOrder(edaMetaData, updatePayload)
+	responseMessage := new(eda.ConsumerResponse)
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_SCRAP_ORDERS_ACK, *responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateScrapOrderInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": updatePayload.ID,
+	}
+	// eda.Produce(eda.UPDATE_SCRAP_ORDERS_ACK, *responseMessage)
+
 }
 
 // FindAllScrapOrdersDropDown godoc
@@ -121,15 +182,29 @@ func (h *handler) UpdateScrapOrder(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders/dropdown [get]
 func (h *handler) FindAllScrapOrdersDropDown(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllScrapOrders(p, token_id, access_template_id, "DROPDOWN_LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetScrapOrderFromCache(fmt.Sprint(metaData.TokenUserId))
+		if cacheResponse != nil {
+			return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+		}
+	}
+
+	data, err := h.service.AllScrapOrders(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "dropdown data Retrieved successdully", result, p)
+
+	var dtoData []ScrapOrdersResponseDTO
+	helpers.JsonMarshaller(data, &dtoData)
+	return res.RespSuccessInfo(c, "list of scrap orders fetched", dtoData, page)
 }
 
 // FindAllScrapOrders godoc
@@ -150,15 +225,29 @@ func (h *handler) FindAllScrapOrdersDropDown(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders [get]
 func (h *handler) FindAllScrapOrders(c echo.Context) (err error) {
-	p := new(pagination.Paginatevalue)
-	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllScrapOrders(p, token_id, access_template_id, "LIST")
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	helpers.AddMandatoryFilters(page, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	if *page == pagination.BasePaginatevalue {
+		cacheResponse, *page = GetScrapOrderFromCache(fmt.Sprint(metaData.TokenUserId))
+		if cacheResponse != nil {
+			return res.RespSuccessInfo(c, "data retrieved successfully", cacheResponse, page)
+		}
+	}
+
+	data, err := h.service.AllScrapOrders(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "data Retrieved successdully", result, p)
+
+	var dtoData []ScrapOrdersResponseDTO
+	helpers.JsonMarshaller(data, &dtoData)
+	return res.RespSuccessInfo(c, "list of scrap orders fetched", dtoData, page)
 }
 
 // ScrapOrdersByid godoc
@@ -176,15 +265,17 @@ func (h *handler) FindAllScrapOrders(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders/{id} [get]
 func (h *handler) ScrapOrdersByid(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.FindScrapOrder(uint(id), token_id, access_template_id)
+
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id": c.Param("id"),
+		// "company_id": metaData.CompanyId,
+	}
+	data, err := h.service.FindScrapOrder(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "scrap details", result)
+	return res.RespSuccess(c, "scrap orders fetched", data)
 }
 
 // DeleteScrap godoc
@@ -202,16 +293,22 @@ func (h *handler) ScrapOrdersByid(c echo.Context) (err error) {
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/scrap_orders/{id}/delete [delete]
 func (h *handler) DeleteScrapOrder(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteScrapOrder(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         id,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteScrapOrder(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "ScrapOrders order deleted successfully", map[string]int{"deleted_id": id})
+
+	// cache implementation
+	UpdateScrapOrderInCache(metaData)
+
+	return res.RespSuccess(c, "scrap order deleted successfully", map[string]interface{}{"deleted_id": id})
 }
 
 // DeleteScrapOrders godoc
@@ -230,24 +327,19 @@ func (h *handler) DeleteScrapOrder(c echo.Context) (err error) {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 
-// @Router     api/v1/scrap_orders/{line_id}/delete_product [delete]
+// @Router     /api/v1/scrap_orders/{line_id}/delete_product [delete]
 func (h *handler) DeleteScrapOrderLines(c echo.Context) (err error) {
-	product_id := c.QueryParam("product_id")
-	prod_id, _ := strconv.Atoi(product_id)
-	Id := c.Param("id")
-	id, _ := strconv.Atoi(Id)
-	query := map[string]interface{}{
-		"scrap_id":   uint(id),
-		"product_id": uint(prod_id),
+	metaData := c.Get("MetaData").(core.MetaData)
+	id := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"scrap_id":   id,
+		"product_id": c.QueryParam("product_id"),
 	}
-	fmt.Println(query)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	err = h.service.DeleteScrapOrderLines(query, token_id, access_template_id)
+	err = h.service.DeleteScrapOrderLines(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "order line deleted successfully", query)
+	return res.RespSuccess(c, "order line deleted successfully", metaData.Query)
 }
 
 // BulkCreateScrapOrder godoc
@@ -335,10 +427,19 @@ func (h *handler) DownloadScrapOrdersPDF(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/scrap_orders/{id}/generate_pdf [post]
 func (h *handler) GenerateScrapOrdersPDF(c echo.Context) error {
-	resp_data := map[string]interface{}{
-		"file_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+	metaData := c.Get("MetaData").(core.MetaData)
+	purchaseOrderId := c.Param("id")
+	heading := c.QueryParam("heading")
+	helpers.PrettyPrint("=====================>", heading)
+	helpers.PrettyPrint("=====================>", metaData)
+	helpers.PrettyPrint("=====================>", purchaseOrderId)
+	// company_id := c.Get("CompanyId").(string)
+	x := sales_invoice.NewHandler()
+	er := x.GetSalesInvoicePdf(c)
+	if er != nil {
+		return res.RespSuccess(c, "Generated Successfully", "")
 	}
-	return res.RespSuccess(c, "PDF Generated", resp_data)
+	return c.Attachment("test.pdf", "test")
 }
 
 // FavouriteScrapOrders godoc
@@ -357,23 +458,24 @@ func (h *handler) GenerateScrapOrdersPDF(c echo.Context) error {
 // @Router /api/v1/scrap_orders/{id}/favourite [post]
 func (h *handler) FavouriteScrapOrder(c echo.Context) (err error) {
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.Query = map[string]interface{}{
+		"id": id,
 	}
-	_, er := h.service.FindScrapOrder(uint(ID), token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
+	_, err = h.service.FindScrapOrder(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+
+	query := map[string]interface{}{
+		"id":      id,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.FavouriteScrapOrders(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "ScrapOrders is Marked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "ScrapOrder is Marked as Favourite", map[string]string{"id": id})
 }
 
 // UnFavouriteScrapOrders godoc
@@ -392,18 +494,17 @@ func (h *handler) FavouriteScrapOrder(c echo.Context) (err error) {
 // @Router /api/v1/scrap_orders/{id}/unfavourite [post]
 func (h *handler) UnFavouriteScrapOrder(c echo.Context) (err error) {
 	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"id":      id,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.UnFavouriteScrapOrders(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "ScrapOrders is Unmarked as Favourite", map[string]string{"id": id})
+	return res.RespSuccess(c, "ScrapOrder is Unmarked as Favourite", map[string]string{"id": id})
 }
 
 // GetScrapOrderTab godoc
@@ -422,21 +523,21 @@ func (h *handler) UnFavouriteScrapOrder(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/scrap_orders/{id}/filter_module/{tab} [get]
-func (h *handler) GetScrapOrderTab(c echo.Context) (err error) {
+func (h *handler) GetScrapOrderTab(c echo.Context) error {
 
+	metaData := c.Get("MetaData").(core.MetaData)
 	page := new(pagination.Paginatevalue)
-	err = c.Bind(page)
+	err := c.Bind(page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
 
-	id := c.Param("id")
-	tab := c.Param("tab")
+	metaData.AdditionalFields = map[string]interface{}{
+		"id":  c.Param("id"),
+		"tab": c.Param("tab"),
+	}
 
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-
-	data, err := h.service.GetScrapOrderTab(id, tab, page, access_template_id, token_id)
+	data, err := h.service.GetScrapOrderTab(metaData, page)
 	if err != nil {
 		return res.RespErr(c, err)
 	}

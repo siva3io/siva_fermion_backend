@@ -33,4 +33,5 @@ var OrdersTables = []interface{}{
 	&PurchaseOrderLines{},
 	//--------------->Orders Favourite<-------------
 	&UserOrdersFav{},
+	// ------------------HSN--------------------
 }

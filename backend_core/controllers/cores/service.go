@@ -1,17 +1,26 @@
 package cores
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+
 	"strings"
 
-	cache "fermion/backend_core/controllers/cache"
 	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/repository"
+	omnichannel_repo "fermion/backend_core/internal/repository/omnichannel"
+	AppInit "fermion/backend_core/pkg/pkg_init/app_init"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -53,7 +62,7 @@ type Service interface {
 	UpdateAppStore(data *model_core.AppStore, query map[string]interface{}) error
 	ListStoreApps(query interface{}, page *pagination.Paginatevalue) ([]model_core.AppStore, error)
 	ListStoreAppsInstalled(page *pagination.Paginatevalue) ([]model_core.AppStore, error)
-	ListInstalledApps(page *pagination.Paginatevalue) ([]model_core.InstalledApps, error)
+	ListInstalledApps(page *pagination.Paginatevalue, registered bool) ([]model_core.InstalledApps, error)
 	GetApp(query map[string]interface{}) (model_core.AppStore, error)
 	SearchApps(data SearchAppsDTO) (model_core.AppStore, error)
 	CheckState(code string) bool
@@ -65,21 +74,50 @@ type Service interface {
 	//meta data
 	ListMetaData() ([]model_core.IRModel, error)
 	ViewMetaData(model_name string) ([]model_core.IRModelFields, error)
-	UpdateCompanyPreferences(query map[string]interface{}, company Company, host string, schema string) (*model_core.Company, error)
+
+	//company
 	GetCompanyPreferences(query map[string]interface{}) (*Company, error)
 	ListCompanyUsers(query map[string]interface{}, page *pagination.Paginatevalue) ([]UserResponseDTO, error)
-	UpdateCompany(query map[string]interface{}, company model_core.Company) error
+	UpdateCompany(query map[string]interface{}, company Company, host string, scheme string) error
+
+	//channel status
+	ListChannelStatus(page *pagination.Paginatevalue) ([]model_core.ChannelLookupCodes, error)
+	ViewChannelStatus(id uint) ([]model_core.ChannelLookupCodes, error)
+	CreateChannelStatus(data *model_core.ChannelLookupCodes) error
+	UpdateChannelStatus(data *model_core.ChannelLookupCodes, query map[string]interface{}) error
+	DeleteChannelStatus(id uint) error
+
+	//ondc details
+	UpdateOndcDetails(query map[string]interface{}, data map[string]interface{}) error
+	OndcRegistration(query map[string]interface{}, company_details Company) (*model_core.OndcDetails, error)
+	RequestSolution(data model_core.CustomSolution) error
+
+	ListCompanies(page *pagination.Paginatevalue) ([]Company, error)
+
+	UpdateInstalledApp(data *model_core.InstalledApps, query map[string]interface{}) error
+
+	RenewSubscription(query map[string]interface{}, user_id string) error
 }
 
 type service struct {
-	coreRepository repository.Core
-	userRepository repository.User
+	coreRepository             repository.Core
+	userRepository             repository.User
+	omnichannelFieldRepository omnichannel_repo.OmnichannelField
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	CoreRepository := repository.NewCore()
-	userRepository := repository.NewUser()
-	return &service{CoreRepository, userRepository}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{
+		repository.NewCore(),
+		repository.NewUser(),
+		omnichannel_repo.NewOmnichannelFieldRepo(),
+	}
+	return newServiceObj
 }
 
 func (s *service) GetLookupTypes(query interface{}, p *pagination.Paginatevalue) ([]LookupTypesDTO, error) {
@@ -118,7 +156,7 @@ func (s *service) GetLookupTypesList(query interface{}, p *pagination.Paginateva
 
 func (s *service) GetLookupCodes(query interface{}, p *pagination.Paginatevalue) ([]LookupCodesDTO, error) {
 	var lookup_codes_dto []LookupCodesDTO
-	p.Per_page = 100
+	p.Per_page = -1
 	query.(map[string]interface{})["is_enabled"] = true
 	nilObj := new(pagination.Paginatevalue)
 	lookuptype, err := s.coreRepository.GetLookupTypes(query, nilObj)
@@ -165,6 +203,9 @@ func (s *service) GetLookupCodesList(query interface{}, p *pagination.Paginateva
 func (s *service) GetCountries(query interface{}, p *pagination.Paginatevalue) ([]CountryDTO, error) {
 	p.Per_page = 250
 	results, er := s.coreRepository.GetCountries(query, p)
+	if er != nil {
+		return nil, er
+	}
 	var data []CountryDTO
 	json_data, er := json.Marshal(results)
 	if er != nil {
@@ -179,6 +220,9 @@ func (s *service) GetCountries(query interface{}, p *pagination.Paginatevalue) (
 func (s *service) GetStates(query interface{}, p *pagination.Paginatevalue) ([]StateDTO, error) {
 	p.Per_page = 150
 	results, er := s.coreRepository.GetStates(query, p)
+	if er != nil {
+		return nil, er
+	}
 	var data []StateDTO
 	json_data, er := json.Marshal(results)
 	if er != nil {
@@ -193,6 +237,9 @@ func (s *service) GetStates(query interface{}, p *pagination.Paginatevalue) ([]S
 func (s *service) GetCurrencies(query interface{}, p *pagination.Paginatevalue) ([]CurrencyDTO, error) {
 	p.Per_page = 250
 	results, er := s.coreRepository.GetCurrencies(query, p)
+	if er != nil {
+		return nil, er
+	}
 	var data []CurrencyDTO
 	json_data, er := json.Marshal(results)
 	if er != nil {
@@ -276,6 +323,15 @@ func (s *service) UpdateAppStore(data *model_core.AppStore, query map[string]int
 	}
 	return nil
 }
+
+func (s *service) UpdateInstalledApp(data *model_core.InstalledApps, query map[string]interface{}) error {
+	err := s.coreRepository.UpdateInstalledApp(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *service) ListStoreApps(query interface{}, page *pagination.Paginatevalue) ([]model_core.AppStore, error) {
 	results, er := s.coreRepository.ListStoreApps(query, page)
 	return results, er
@@ -284,15 +340,42 @@ func (s *service) ListStoreAppsInstalled(page *pagination.Paginatevalue) ([]mode
 	results, er := s.coreRepository.ListStoreAppsInstalled(page)
 	return results, er
 }
-func (s *service) ListInstalledApps(page *pagination.Paginatevalue) ([]model_core.InstalledApps, error) {
-	results, er := s.coreRepository.ListInstalledApps(page)
-	return results, er
+func (s *service) ListInstalledApps(page *pagination.Paginatevalue, registered bool) ([]model_core.InstalledApps, error) {
+
+	installedApps, err := s.coreRepository.ListInstalledApps(page)
+	if err != nil {
+		return nil, err
+	}
+
+	if !registered {
+		return installedApps, nil
+	}
+
+	var result []model_core.InstalledApps
+	for _, app := range installedApps {
+
+		appData := map[string]interface{}{
+			"id":           app.ID,
+			"access_token": app.AccessToken,
+		}
+		appField, _ := helpers.GetAppAuthFields(appData, []string{"register_status"})
+
+		if appField["register_status"] != nil && appField["register_status"].(map[string]interface{})["value"] != nil {
+			registerStatus := appField["register_status"].(map[string]interface{})["value"].(bool)
+			if registerStatus {
+				result = append(result, app)
+			}
+
+		}
+	}
+	return result, nil
 }
 
 func (s *service) GetApp(query map[string]interface{}) (model_core.AppStore, error) {
 	results, er := s.coreRepository.GetApp(query)
 	return results, er
 }
+
 func (s *service) SearchApps(data SearchAppsDTO) (model_core.AppStore, error) {
 	var query = make(map[string]interface{}, 0)
 	if data.Name != "" {
@@ -345,15 +428,49 @@ func (s *service) InstallApp(app_code string, user_id string) error {
 
 		user, _ := s.userRepository.FindUser(app_query)
 		install_app_data.AccessToken, _ = user.GenerateToken(2, TrialDuration)
-		install_app_code := install_app_data.Code
-		install_app_code = strings.ReplaceAll(install_app_code, " ", "")
-		cache.SetCacheVariable(install_app_code+"AUTHORIZATION", install_app_data.AccessToken)
+		// install_app_code := install_app_data.Code
+		// install_app_code = strings.ReplaceAll(install_app_code, " ", "")
+		// cache.SetCacheVariable(install_app_code+"AUTHORIZATION", install_app_data.AccessToken)
 		create_err := s.coreRepository.InstallApp(install_app_data)
+		AppInit.AppInit(*install_app_data)
 		return create_err
 	}
 	return nil
 	// var install_app_data model.InstalledApps
 }
+
+func (s *service) RenewSubscription(query map[string]interface{}, user_id string) error {
+	app_query := map[string]interface{}{
+		"id": user_id,
+	}
+	user, _ := s.userRepository.FindUser(app_query)
+	token, err := user.GenerateToken(2, TrialDuration)
+	if err != nil {
+		return err
+	}
+	p := new(pagination.Paginatevalue)
+	code := query["app_code"].(string)
+	p.Filters = "[[\"code\",\"=\",\"" + code + "\"],[\"is_active\",\"=\",\"true\"]]"
+	data, err := s.coreRepository.ListInstalledApps(p)
+	if err != nil {
+		return err
+	}
+	var app_data model_core.InstalledApps
+	if len(data) > 0 {
+		app_data = data[0]
+	}
+	app_data.AccessToken = token
+	app_id := map[string]interface{}{
+		"id": app_data.ID,
+	}
+	update := s.coreRepository.UpdateInstalledApp(app_id, &app_data)
+	if err != nil {
+		return err
+	}
+	return update
+
+}
+
 func (s *service) CheckState(code string) bool {
 	check_code := s.coreRepository.CheckState(code)
 	return check_code
@@ -367,87 +484,13 @@ func (s *service) UninstallApp(app_code string) error {
 	return check_code
 }
 
-func (s *service) UpdateCompanyPreferences(query map[string]interface{}, company Company, host string, schema string) (*model_core.Company, error) {
-	// user_token := query["user_token"].(string)
-	delete(query, "user_token")
-	company_details, _ := s.GetCompanyPreferences(query)
-	if company.OrganizationDetails == nil {
-		company.OrganizationDetails = company_details.OrganizationDetails
-	}
-
-	if company.KYCDocuments == nil {
-		company.KYCDocuments = company_details.KYCDocuments
-	} else {
-
-		var country_updated []KYCDocuments
-		flag := false
-
-		for _, country_to_be_updated := range company.KYCDocuments {
-			if company_details.KYCDocuments != nil {
-				for _, country := range company_details.KYCDocuments {
-					if country_to_be_updated.CountryId == country.CountryId {
-						for k, v := range country_to_be_updated.Documents {
-							country.Documents[k] = v
-							flag = true
-						}
-					}
-					country_updated = append(country_updated, country)
-				}
-
-			}
-		}
-		if !flag {
-			company.KYCDocuments = append(company.KYCDocuments, company_details.KYCDocuments...)
-		} else {
-			company.KYCDocuments = country_updated
-
-		}
-		count := 1
-		for _, value := range company.KYCDocuments {
-			// country_id := value.CountryId
-			documents := value.Documents
-			for key, value := range documents {
-				var imageLinkArray = make([]map[string]interface{}, 0)
-				imageLinkArray = append(imageLinkArray, map[string]interface{}{"data": value})
-				//------TODO : condition to check company file preferences and upload_file accordingly ---
-				// response, _ := ipaas_utils.UploadFile(imageLinkArray, key, strconv.Itoa(int(*company.UpdatedByID)), *company.UpdatedByID, schema, host, ipaas_utils.AWS, "Core", "Company", ".png", ipaas_utils.BASE64, user_token)
-				// documents[key] = response
-				documents[key] = imageLinkArray
-			}
-			count++
-		}
-	}
-
-	if company.FilePreferenceID == nil {
-		company.FilePreferenceID = company_details.FilePreferenceID
-	}
-
-	if company.InvoiceGenerationID == nil {
-		company.InvoiceGenerationID = company_details.InvoiceGenerationID
-	}
-
-	if company.BusinessTypeID == nil {
-		company.BusinessTypeID = company_details.BusinessTypeID
-	}
-
-	var company_model model_core.Company
-	dto, _ := json.Marshal(company)
-	err := json.Unmarshal(dto, &company_model)
-
-	result, err := s.userRepository.UpdateCompany(query, company_model)
-	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	return &result, err
-}
-
 func (s *service) GetCompanyPreferences(query map[string]interface{}) (*Company, error) {
 	var company Company
 	result, err := s.userRepository.GetCompany(query)
 	dto, _ := json.Marshal(result)
 	_ = json.Unmarshal(dto, &company)
 	if err != nil {
-		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+		return nil, err
 	}
 	return &company, err
 }
@@ -463,23 +506,152 @@ func (s *service) ListCompanyUsers(query map[string]interface{}, page *paginatio
 	return users, err
 }
 
-func (s *service) UpdateCompany(query map[string]interface{}, company model_core.Company) error {
-	result, _ := s.userRepository.GetCompany(query)
-	company_address := make([]map[string]interface{}, 0)
-	result_address := make([]map[string]interface{}, 0)
-	_ = json.Unmarshal(company.Addresses, &company_address)
-	_ = json.Unmarshal(result.Addresses, &result_address)
+func (s *service) UpdateCompany(query map[string]interface{}, company Company, host string, scheme string) error {
+	var company_details model_core.Company
+	bt, _ := json.Marshal(company)
+	_ = json.Unmarshal(bt, &company_details)
 
-	result_address = append(result_address, company_address...)
+	_, err := s.userRepository.UpdateCompany(query, company_details)
 
-	bt, _ := json.Marshal(result_address)
-	json.Unmarshal(bt, &company.Addresses)
-
-	_, err := s.userRepository.UpdateCompany(query, company)
 	if err != nil {
-		fmt.Println("error", err)
 		return res.BuildError(res.ErrUnprocessableEntity, err)
 	}
+	return nil
+}
 
+func (s *service) OndcRegistration(query map[string]interface{}, company_details Company) (*model_core.OndcDetails, error) {
+	result, _ := s.userRepository.GetCompany(query)
+	var OndcDetails model_core.OndcDetails
+
+	if len(result.OndcDetails.SigningPrivateKey) <= 0 && len(result.OndcDetails.SubscriberId) <= 0 {
+		replacer := strings.NewReplacer("-", "_", " ", "_")
+		OndcDetails.SubscriberURL = fmt.Sprintf("%s_BPP", replacer.Replace(result.CompanyDetails.BusinessName))
+		OndcDetails.SubscriberId = fmt.Sprintf("SIVA_ONDC_%s_BPP", replacer.Replace(result.CompanyDetails.BusinessName))
+		OndcDetails.SigningPrivateKey, OndcDetails.SigningPublicKey = s.GeneratePublicPrivateKeys()
+		OndcDetails.EncryptionPrivateKey, OndcDetails.EncryptionPublicKey = s.GeneratePublicPrivateKeys()
+		OndcDetails.UniqueId = uuid.New().String()
+		OndcDetails.Type = company_details.Type
+
+		OndcDetailsId, err := s.coreRepository.CreateOndcDetails(&OndcDetails)
+		if err != nil {
+			fmt.Println(err)
+		}
+		result.OndcDetailsId = OndcDetailsId
+	} else {
+		fmt.Println("Already in ONDC")
+		OndcDetails = result.OndcDetails
+	}
+
+	result.Type = company_details.Type
+
+	s.userRepository.UpdateCompany(query, result)
+
+	// Need to hit the Sandbox API for registering with ONDC network (NEED TO BE IMPLEMENTED)
+
+	return &OndcDetails, nil
+}
+
+func (s *service) GeneratePublicPrivateKeys() (string, string) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		fmt.Printf("Generation error : %s", err)
+	}
+
+	b, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	block := &pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: b,
+	}
+	privateKey := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(block))
+	// err = ioutil.WriteFile(fb, pem.EncodeToMemory(block), 0600)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// public key
+	b, err = x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	block = &pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: b,
+	}
+	publicKey := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(block))
+	// a, _ := pem.Decode(b)
+	// fmt.Println(a)
+	// fileName := fb + ".pub"
+	// err = ioutil.WriteFile(fileName, pem.EncodeToMemory(block), 0644)
+	// return
+	return privateKey, publicKey
+}
+
+func (s *service) UpdateOndcDetails(query map[string]interface{}, data map[string]interface{}) error {
+
+	var OndcDetails *model_core.OndcDetails
+	dto, _ := json.Marshal(data)
+	_ = json.Unmarshal(dto, &OndcDetails)
+
+	err := s.coreRepository.UpdateOndcDetails(map[string]interface{}{"id": query["id"]}, OndcDetails)
+	if err != nil {
+		_, err := s.coreRepository.CreateOndcDetails(OndcDetails)
+		return err
+	}
 	return err
+}
+
+// channel status
+func (s *service) ListChannelStatus(page *pagination.Paginatevalue) ([]model_core.ChannelLookupCodes, error) {
+	results, er := s.coreRepository.ListChannelStatus(page)
+	return results, er
+}
+func (s *service) ViewChannelStatus(id uint) ([]model_core.ChannelLookupCodes, error) {
+	response, err := s.coreRepository.ViewChannelStatus(id)
+	return response, err
+}
+func (s *service) CreateChannelStatus(data *model_core.ChannelLookupCodes) error {
+	err := s.coreRepository.CreateChannelStatus(data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (s *service) UpdateChannelStatus(data *model_core.ChannelLookupCodes, query map[string]interface{}) error {
+	err := s.coreRepository.UpdateChannelStatus(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (s *service) DeleteChannelStatus(id uint) error {
+	err := s.coreRepository.DeleteChannelStatus(id)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) RequestSolution(data model_core.CustomSolution) error {
+	err := s.coreRepository.CreateCustomSolution(data)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	return nil
+}
+
+func (s *service) ListCompanies(page *pagination.Paginatevalue) ([]Company, error) {
+	var users []Company
+	result, err := s.userRepository.FindAllCompanies(page)
+	dto, _ := json.Marshal(result)
+	_ = json.Unmarshal(dto, &users)
+	if err != nil {
+		return nil, res.BuildError(res.ErrUnprocessableEntity, err)
+	}
+	return users, err
 }

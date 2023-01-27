@@ -1,8 +1,11 @@
 package products
 
 import (
+	"time"
+
 	core_dto "fermion/backend_core/controllers/cores"
 	mdm_UOM "fermion/backend_core/controllers/mdm/uom"
+	"fermion/backend_core/internal/model/mdm"
 
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
@@ -34,99 +37,144 @@ type Ids struct {
 	ID uint `json:"id"`
 }
 type CreateProductVariantDTO struct {
-	ID                     *uint             `json:"id"`
-	CreatedByID            *uint             `json:"created_by"`
-	UpdatedByID            *uint             `json:"updated_by"`
-	DeletedByID            *uint             `json:"deleted_by"`
-	ParentSKUId            string            `json:"parent_sku_id"`
-	SkuId                  string            `json:"sku_id,omitempty"`
-	ProductName            string            `json:"product_name"`
-	AttributeKeyValuesId   pq.Int64Array     `json:"attribute_key_values_id"`
-	ImageOptions           datatypes.JSON    `json:"image_options,omitempty"`
-	VariantTypeId          *uint             `json:"variant_type_id"`
-	Barcode                string            `json:"barcode"`
-	StandardProductTypes   []Ids             `json:"standard_product_types,omitempty"`
-	StandardProductTypeId  string            `json:"standard_product_type_id"`
-	ConditionID            *uint             `json:"condition_id"`
-	ProductDimensions      datatypes.JSON    `json:"product_dimensions,omitempty"`
-	CategoryID             *uint             `json:"category_id"`
-	LeafCategoryID         *uint             `json:"leaf_category_id"`
-	Description            datatypes.JSON    `json:"description,omitempty"`
-	KeywordIds             datatypes.JSON    `json:"keyword_ids,omitempty"`
-	PackageDimensions      datatypes.JSON    `json:"package_dimensions,omitempty"`
-	PackageMaterialOptions datatypes.JSON    `json:"package_material_options,omitempty"`
-	VendorPriceListIds     pq.Int64Array     `json:"vendor_price_list_ids"`
-	PriceListDetails       datatypes.JSON    `json:"price_list_details"`
-	ShippingOptions        datatypes.JSON    `json:"shipping_options,omitempty"`
-	CostDetails            datatypes.JSON    `json:"cost_details,omitempty"`
-	ForecastingOptions     datatypes.JSON    `json:"forecasting_options,omitempty"`
-	ProductPricingDetails  PricingDetailsDTO `json:"product_pricing_details,omitempty"`
-	ValidationInfo         string            `json:"validation_info"`
-	InventoryDetails       []Ids             `json:"inventory_details"`
-	PackageTemplateOptions datatypes.JSON    `json:"package_template_options,omitempty"`
-	StatusId               *uint             `json:"status_id"`
-	ProductTemplateId      uint              `json:"product_template_id"`
-	IsEnabled              *bool             `json:"is_enabled" gorm:"default:true"`
-	IsActive               *bool             `json:"is_active" gorm:"default:true"`
-	AppId                  *uint             `json:"app_id"`
-	TemplateSku            string            `json:"template_sku"`
-	ChannelCode            string            `json:"channel_code"`
-	ProductVariantSku      string            `json:"product_variant_sku"`
-	ExternalId             string            `json:"external_id"`
-	ExternalDetails        datatypes.JSON    `json:"external_details,omitempty"`
+	ID                       *uint                    `json:"id"`
+	CreatedByID              *uint                    `json:"created_by"`
+	UpdatedByID              *uint                    `json:"updated_by"`
+	DeletedByID              *uint                    `json:"deleted_by"`
+	CompanyId                uint                     `json:"company_id"`
+	ParentSKUId              string                   `json:"parent_sku_id"`
+	SkuId                    string                   `json:"sku_id,omitempty"`
+	ProductName              string                   `json:"product_name"`
+	AttributeKeyValuesId     pq.Int64Array            `json:"attribute_key_values_id"`
+	ImageOptions             datatypes.JSON           `json:"image_options,omitempty"`
+	VariantTypeId            *uint                    `json:"variant_type_id"`
+	Barcode                  string                   `json:"barcode"`
+	StandardProductTypes     []Ids                    `json:"standard_product_types,omitempty"`
+	StandardProductTypeId    string                   `json:"standard_product_type_id"`
+	ConditionID              *uint                    `json:"condition_id"`
+	ProductDimensions        datatypes.JSON           `json:"product_dimensions,omitempty"`
+	CategoryID               *uint                    `json:"category_id"`
+	LeafCategoryID           *uint                    `json:"leaf_category_id"`
+	Description              datatypes.JSON           `json:"description,omitempty"`
+	KeywordIds               datatypes.JSON           `json:"keyword_ids,omitempty"`
+	PackageDimensions        datatypes.JSON           `json:"package_dimensions,omitempty"`
+	PackageMaterialOptions   datatypes.JSON           `json:"package_material_options,omitempty"`
+	VendorPriceListIds       pq.Int64Array            `json:"vendor_price_list_ids"`
+	PriceListDetails         datatypes.JSON           `json:"price_list_details,omitempty"`
+	ShippingOptions          datatypes.JSON           `json:"shipping_options,omitempty"`
+	CostDetails              datatypes.JSON           `json:"cost_details,omitempty"`
+	ForecastingOptions       datatypes.JSON           `json:"forecasting_options,omitempty"`
+	ProductPricingDetails    PricingDetailsDTO        `json:"product_pricing_details,omitempty"`
+	ValidationInfo           string                   `json:"validation_info"`
+	InventoryDetails         []Ids                    `json:"inventory_details"`
+	PackageTemplateOptions   datatypes.JSON           `json:"package_template_options,omitempty"`
+	StatusId                 *uint                    `json:"status_id"`
+	ProductTemplateId        uint                     `json:"product_template_id"`
+	IsEnabled                *bool                    `json:"is_enabled" gorm:"default:true"`
+	IsActive                 *bool                    `json:"is_active" gorm:"default:true"`
+	AppId                    *uint                    `json:"app_id"`
+	TemplateSku              string                   `json:"template_sku"`
+	ChannelCode              string                   `json:"channel_code"`
+	ProductVariantSku        string                   `json:"product_variant_sku"`
+	ExternalId               string                   `json:"external_id"`
+	ExternalDetails          datatypes.JSON           `json:"external_details,omitempty"`
+	Location                 Location                 `json:"location"`
+	DeliverySlaDetails       DeliverySlaDetails       `json:"delivery_sla_details"`
+	InventoryDetail          InventoryDetails         `json:"inventory_detail"`
+	ProductCancellationTerms ProductCancellationTerms `json:"product_cancellation_terms"`
+	ProductReturnTerms       ProductReturnTerms       `json:"product_return_terms"`
+	ProductReplacementTerms  ProductReplacementTerms  `json:"product_replacement_terms"`
+	FoodItemDetails          FoodItemDetails          `json:"food_item_details"`
+	ManufacturerDetails      ManufacturerDetails      `json:"manufacturer_details"`
+	ProductCriticalDetails   ProductCriticalDetails   `json:"product_critical_details"`
+	AdditivesInformation     string                   `json:"additives_information"`
+	ShortDescription         string                   `json:"short_description"`
+	DomainId                 *uint                    `json:"domain_id"`
+	Domain                   core_dto.LookupCodesDTO  `json:"domain" gorm:"foreignkey:DomainId;references:ID"`
+	OfferDetails             Offers                   `json:"offer_details,omitempty"`
+
+	RatingAverage float64 `json:"rating_average"`
+	RatingCount   uint    `json:"rating_count"`
+
+	Channel string `json:"channel"`
 }
 type PricingDetailsDTO struct {
-	ID         uint    `json:"id"`
-	SalesPrice float64 `json:"sales_price"`
-	CostPrice  float64 `json:"cost_price"`
-	MRP        float64 `json:"mrp" `
-	TaxOptions float64 `json:"tax_options"`
-	CurrencyId *uint   `json:"currency_id"`
-	Tax        bool    `json:"tax"`
-	Shipping   bool    `json:"shipping"`
+	PaymentMethodId *uint                   `json:"payment_method_id"`
+	PaymentMethod   core_dto.LookupCodesDTO `json:"payment_method"`
+	DeclaredPrice   float64                 `json:"declared_price"`
+	ID              uint                    `json:"id"`
+	SalesPrice      float64                 `json:"sales_price"`
+	CostPrice       float64                 `json:"cost_price"`
+	MRP             float64                 `json:"mrp" `
+	TaxOptions      float64                 `json:"tax_options"`
+	CurrencyId      *uint                   `json:"currency_id"`
+	Tax             bool                    `json:"tax"`
+	Shipping        bool                    `json:"shipping"`
 }
 type PricingDetailsResponseDTO struct {
-	ID         uint                 `json:"id"`
-	SalesPrice float64              `json:"sales_price"`
-	CostPrice  float64              `json:"cost_price"`
-	MRP        float64              `json:"mrp" `
-	TaxOptions float64              `json:"tax_options"`
-	CurrencyId *uint                `json:"currency_id"`
-	Currency   core_dto.CurrencyDTO `json:"currency"`
-	Tax        bool                 `json:"tax"`
-	Shipping   bool                 `json:"shipping"`
+	ID              uint                    `json:"id"`
+	SalesPrice      float64                 `json:"sales_price"`
+	CostPrice       float64                 `json:"cost_price"`
+	MRP             float64                 `json:"mrp" `
+	TaxOptions      float64                 `json:"tax_options"`
+	CurrencyId      *uint                   `json:"currency_id"`
+	Currency        core_dto.CurrencyDTO    `json:"currency"`
+	Tax             bool                    `json:"tax"`
+	Shipping        bool                    `json:"shipping"`
+	DeclaredPrice   float64                 `json:"declared_price"`
+	PaymentMethodId *uint                   `json:"payment_method_id"`
+	PaymentMethod   core_dto.LookupCodesDTO `json:"payment_method"`
 }
 type CreateProductTemplatePayload struct {
-	ID                             *uint                                   `json:"id"`
-	CreatedByID                    *uint                                   `json:"created_by"`
-	UpdatedByID                    *uint                                   `json:"updated_by"`
-	DeletedByID                    *uint                                   `json:"deleted_by"`
-	Name                           string                                  `json:"product_name"`
-	BrandID                        *uint                                   `json:"brand_id"`
-	SKUCode                        string                                  `json:"sku_code"`
-	HSNCODE                        string                                  `json:"hsn_code"`
-	ProductConditionID             *uint                                   `json:"product_condition_id"`
-	ProductTypeID                  *uint                                   `json:"product_type_id"`
-	ProductProcurementTreatmentIds []Ids                                   `json:"product_procurement_treatment_ids" `
-	StockTreatmentIds              []Ids                                   `json:"stock_treatment_ids"`
-	InventoryTrackingID            *uint                                   `json:"inventory_tracking_id"`
-	UomID                          *uint                                   `json:"uom_id"`
-	SecondaryUom                   datatypes.JSON                          `json:"secondary_uom,omitempty"`
-	ImageOptions                   datatypes.JSON                          `json:"image_options,omitempty"`
-	PrimaryCategoryID              *uint                                   `json:"primary_category_id"`
-	SecondaryCategoryID            *uint                                   `json:"secondary_category_id"`
-	Description                    datatypes.JSON                          `json:"description,omitempty"`
-	AttributeKeyValues             []ProductSelectedAttributesAndValuesDTO `json:"attribute_key_values"`
-	ProductVariantIds              []CreateProductVariantDTO               `json:"product_variant_ids"`
-	ProductPricingDetails          PricingDetailsDTO                       `json:"product_pricing_details"`
-	IsEnabled                      *bool                                   `json:"is_enabled" gorm:"default:true"`
-	IsActive                       *bool                                   `json:"is_active" gorm:"default:true"`
-	AppId                          *uint                                   `json:"app_id"`
-	VendorPriceListIds             pq.Int64Array                           `json:"vendor_price_list_ids"`
-	PriceListDetails               datatypes.JSON                          `json:"price_list_details"`
-	ShippingOptions                datatypes.JSON                          `json:"shipping_options,omitempty"`
-	PackageMaterialOptions         datatypes.JSON                          `json:"package_material_options,omitempty"`
-	PackageDimensions              datatypes.JSON                          `json:"package_dimensions,omitempty"`
+	ID                             *uint  `json:"id"`
+	CreatedByID                    *uint  `json:"created_by"`
+	UpdatedByID                    *uint  `json:"updated_by"`
+	DeletedByID                    *uint  `json:"deleted_by"`
+	CompanyId                      uint   `json:"company_id"`
+	Name                           string `json:"product_name"`
+	BrandID                        *uint  `json:"brand_id"`
+	SKUCode                        string `json:"sku_code"`
+	HSNCODE                        string `json:"hsn_code"`
+	ProductConditionID             *uint  `json:"product_condition_id"`
+	ProductTypeID                  *uint  `json:"product_type_id"`
+	ProductProcurementTreatmentIds []Ids  `json:"product_procurement_treatment_ids" `
+	//EstimatedDeliveryTimeID        *uint                                   `json:"estimated_delivery_time_id"`
+	StockTreatmentIds      []Ids                                   `json:"stock_treatment_ids"`
+	InventoryTrackingID    *uint                                   `json:"inventory_tracking_id"`
+	UomID                  *uint                                   `json:"uom_id"`
+	SecondaryUom           datatypes.JSON                          `json:"secondary_uom,omitempty"`
+	ImageOptions           datatypes.JSON                          `json:"image_options,omitempty"`
+	PrimaryCategoryID      *uint                                   `json:"primary_category_id"`
+	SecondaryCategoryID    *uint                                   `json:"secondary_category_id"`
+	Description            datatypes.JSON                          `json:"description,omitempty"`
+	AttributeKeyValues     []ProductSelectedAttributesAndValuesDTO `json:"attribute_key_values"`
+	ProductVariantIds      []CreateProductVariantDTO               `json:"product_variant_ids"`
+	ProductPricingDetails  PricingDetailsDTO                       `json:"product_pricing_details"`
+	IsEnabled              *bool                                   `json:"is_enabled" gorm:"default:true"`
+	IsActive               *bool                                   `json:"is_active" gorm:"default:true"`
+	AppId                  *uint                                   `json:"app_id"`
+	VendorPriceListIds     pq.Int64Array                           `json:"vendor_price_list_ids"`
+	PriceListDetails       datatypes.JSON                          `json:"price_list_details"`
+	ShippingOptions        datatypes.JSON                          `json:"shipping_options,omitempty"`
+	PackageMaterialOptions datatypes.JSON                          `json:"package_material_options,omitempty"`
+	PackageDimensions      datatypes.JSON                          `json:"package_dimensions,omitempty"`
+	AdditivesInformation   string                                  `json:"additives_information"`
+	ShortDescription       string                                  `json:"short_description"`
+	DomainId               *uint                                   `json:"domain_id"`
+	Domain                 core_dto.LookupCodesDTO                 `json:"domain"`
+
+	Location                     Location                 `json:"location"`
+	DeliverySlaDetails           DeliverySlaDetails       `json:"delivery_sla_details"`
+	InventoryDetail              InventoryDetails         `json:"inventory_detail"`
+	ProductCancellationTermsFlag bool                     `json:"product_cancellation_terms_flag"`
+	ProductCancellationTerms     ProductCancellationTerms `json:"product_cancellation_terms"`
+	ProductReturnTermsFlag       bool                     `json:"product_return_terms_flag"`
+	ProductReturnTerms           ProductReturnTerms       `json:"product_return_terms"`
+	ProductReplacementTermsFlag  bool                     `json:"product_replacement_terms_flag"`
+	ProductReplacementTerms      ProductReplacementTerms  `json:"product_replacement_terms"`
+	FoodItemDetails              FoodItemDetails          `json:"food_item_details"`
+	ManufacturerDetails          ManufacturerDetails      `json:"manufacturer_details"`
+	ProductCriticalDetails       ProductCriticalDetails   `json:"product_critical_details"`
 
 	TemplateOptions datatypes.JSON `json:"template_options,omitempty"`
 	StatusId        *uint          `json:"status_id"`
@@ -138,6 +186,72 @@ type CreateProductTemplatePayload struct {
 	ChannelCode     string         `json:"channel_code"`
 	ExternalId      string         `json:"external_id"`
 	ExternalDetails datatypes.JSON `json:"external_details,omitempty"`
+
+	Channel string `json:"channel"`
+}
+type Location struct {
+	Pincode      string             `json:"pincode"`
+	City         string             `json:"city"`
+	StateId      *uint              `json:"state_id"`
+	State        *core_dto.StateDTO `json:"state"`
+	AddressLine1 string             `json:"address_line1"`
+	AddressLine2 string             `json:"address_line2"`
+	AddressLine3 string             `json:"address_line3"`
+}
+
+type DeliverySlaDetails struct {
+	EstimatedDeliveryTimeId *uint                   `json:"estimated_delivery_time_id"`
+	EstimatedDeliveryTime   core_dto.LookupCodesDTO `json:"estimated_delivery_time"`
+}
+
+type InventoryDetails struct {
+	MaximumQuantity   uint `json:"maximum_quantity"`
+	AvailableQuantity uint `json:"available_quantity"`
+}
+
+type ProductCriticalDetails struct {
+	UnitPerBox         uint                    `json:"unit_per_box"`
+	TimeToShipId       *uint                   `json:"time_to_ship_id"`
+	TimeToShip         core_dto.LookupCodesDTO `json:"time_to_ship"`
+	CustomerCareNumber string                  `json:"customer_care_number"`
+}
+
+type ManufacturerDetails struct {
+	ManufacturerName    string    `json:"manufacturer_name"`
+	ManufacturerAddress string    `json:"manufacturer_address"`
+	CommodityName       string    `json:"commodity_name"`
+	NetQuantity         uint      `json:"net_quantity"`
+	ManufacturerTime    time.Time `json:"manufacturer_time"`
+	ManufacturerDate    time.Time `json:"manufacturer_date"`
+}
+
+type ProductCancellationTerms struct {
+	RefundEligible  *bool                   `json:"refund_eligible"`
+	CancelTimeId    *uint                   `json:"cancel_time_id"`
+	CancelTime      core_dto.LookupCodesDTO `json:"cancel_time"`
+	CancellationFee uint                    `json:"cancellation_fee"`
+}
+type ProductReturnTerms struct {
+	RefundEligibleReturn   *bool                   `json:"refund_eligible_return"`
+	FulfillmentManagedById *uint                   `json:"fulfillment_managed_by_id"`
+	FulfillmentManagedBy   core_dto.LookupCodesDTO `json:"fulfillment_managed_by"`
+	ReturnWithinId         *uint                   `json:"return_within_id"`
+	ReturnWithin           core_dto.LookupCodesDTO `json:"return_within"`
+}
+type ProductReplacementTerms struct {
+	ReplacementEligible *bool                   `json:"replacement_eligible"`
+	ReplacementWithinId *uint                   `json:"replacement_within_id"`
+	ReplacementWithin   core_dto.LookupCodesDTO `json:"replacement_within"`
+}
+type FoodItemDetails struct {
+	FoodTypeId              *uint                   `json:"food_type_id"`
+	FoodType                core_dto.LookupCodesDTO `json:"food_type"`
+	FSSAILicenceNumber      string                  `json:"fssai_licence_number"`
+	OtherFSSAILicenceNumber string                  `json:"other_fssai_licence_number"`
+	ImportersFSSAINumber    string                  `json:"importers_fssai_number"`
+	TimeToLife              string                  `json:"time_to_life"`
+	IngredientsInfo         string                  `json:"ingredients_info"`
+	NutritionalInfo         string                  `json:"nutritional_info"`
 }
 type TemplateSelectedAttributeValuesResponse struct {
 	AttributeValueId uint   `json:"attribute_value_id"`
@@ -151,51 +265,76 @@ type TemplateSelectedAttributesResponse struct {
 	AppId           *uint                                     `json:"app_id"`
 }
 type TemplateReponseDTO struct {
-	ID                             *uint                                `json:"id"`
-	CreatedByID                    *uint                                `json:"created_by"`
-	UpdatedByID                    *uint                                `json:"updated_by"`
-	Name                           string                               `json:"product_name"`
-	BrandID                        *uint                                `json:"brand_id"`
-	Brand                          BrandRequestAndResponseDTO           `json:"brand"`
-	AttributeValues                []TemplateSelectedAttributesResponse `json:"attribute_values"`
-	SkuCode                        string                               `json:"sku_code"`
-	HSNCODE                        string                               `json:"hsn_code"`
-	ProductConditionID             *uint                                `json:"product_condition_id"`
-	ProductCondition               core_dto.LookupCodesDTO              `json:"product_condition"`
-	ProductTypeID                  *uint                                `json:"product_type_id"`
-	ProductType                    core_dto.LookupCodesDTO              `json:"product_type"`
-	ProductProcurementTreatmentIds datatypes.JSON                       `json:"product_procurement_treatment_ids"`
-	StockTreatmentIds              datatypes.JSON                       `json:"stock_treatment_ids"`
-	InventoryTrackingID            *uint                                `json:"inventory_tracking_id"`
-	InventoryTracking              core_dto.LookupCodesDTO              `json:"inventory_tracking"`
-	UomID                          *uint                                `json:"uom_id"`
-	Uom                            mdm_UOM.UomResponseDTO               `json:"uom"`
-	SecondaryUom                   datatypes.JSON                       `json:"secondary_uom"`
-	ImageOptions                   datatypes.JSON                       `json:"image_options"`
-	PrimaryCategoryID              *uint                                `json:"primary_category_id"`
-	PrimaryCategory                CategoryResponseDTO                  `json:"primary_category"`
-	SecondaryCategoryID            *uint                                `json:"secondary_category_id"`
-	SecondaryCategory              CategoryResponseDTO                  `json:"secondary_category"`
-	Description                    datatypes.JSON                       `json:"description"`
-	ProductVariantIds              []VariantResponseDTO                 `json:"product_variant_ids"`
-	ProductPricingDetails          PricingDetailsResponseDTO            `json:"product_pricing_details"`
-	VendorPriceListIds             pq.Int64Array                        `json:"vendor_price_list_ids"`
-	PriceListDetails               []map[string]interface{}             `json:"price_list_details"`
-	ShippingOptions                datatypes.JSON                       `json:"shipping_options"`
-	PackageMaterialOptions         datatypes.JSON                       `json:"package_material_options"`
-	PackageDimensions              datatypes.JSON                       `json:"package_dimensions"`
-	StatusId                       *uint                                `json:"status_id"`
-	Status                         core_dto.LookupCodesDTO              `json:"status"`
+	ID                 *uint                                `json:"id"`
+	CreatedByID        *uint                                `json:"created_by"`
+	UpdatedByID        *uint                                `json:"updated_by"`
+	CreatedDate        time.Time                            `json:"created_date"`
+	UpdatedDate        time.Time                            `json:"updated_date"`
+	CompanyId          uint                                 `json:"company_id"`
+	Name               string                               `json:"product_name"`
+	BrandID            *uint                                `json:"brand_id"`
+	Brand              BrandRequestAndResponseDTO           `json:"brand"`
+	AttributeValues    []TemplateSelectedAttributesResponse `json:"attribute_values"`
+	SkuCode            string                               `json:"sku_code"`
+	HSNCODE            string                               `json:"hsn_code"`
+	HSNCodesData       mdm.HSNCodesData                     `json:"hsn_codes_data"`
+	ProductConditionID *uint                                `json:"product_condition_id"`
+	ProductCondition   core_dto.LookupCodesDTO              `json:"product_condition"`
+	ProductTypeID      *uint                                `json:"product_type_id"`
+	ProductType        core_dto.LookupCodesDTO              `json:"product_type"`
+	//EstimatedDeliveryTimeID        *uint                                `json:"estimated_delivery_time_id"`
+	//EstimatedDeliveryTime          core_dto.LookupCodesDTO              `json:"estimated_delivery_time"`
+	ProductProcurementTreatmentIds datatypes.JSON            `json:"product_procurement_treatment_ids"`
+	StockTreatmentIds              datatypes.JSON            `json:"stock_treatment_ids"`
+	InventoryTrackingID            *uint                     `json:"inventory_tracking_id"`
+	InventoryTracking              core_dto.LookupCodesDTO   `json:"inventory_tracking"`
+	UomID                          *uint                     `json:"uom_id"`
+	Uom                            mdm_UOM.UomResponseDTO    `json:"uom"`
+	SecondaryUom                   datatypes.JSON            `json:"secondary_uom"`
+	ImageOptions                   datatypes.JSON            `json:"image_options"`
+	PrimaryCategoryID              *uint                     `json:"primary_category_id"`
+	PrimaryCategory                CategoryResponseDTO       `json:"primary_category"`
+	SecondaryCategoryID            *uint                     `json:"secondary_category_id"`
+	SecondaryCategory              CategoryResponseDTO       `json:"secondary_category"`
+	Description                    datatypes.JSON            `json:"description"`
+	ProductVariantIds              []VariantResponseDTO      `json:"product_variant_ids"`
+	ProductPricingDetails          PricingDetailsResponseDTO `json:"product_pricing_details"`
+	VendorPriceListIds             pq.Int64Array             `json:"vendor_price_list_ids"`
+	PriceListDetails               []map[string]interface{}  `json:"price_list_details"`
+	ShippingOptions                datatypes.JSON            `json:"shipping_options"`
+	PackageMaterialOptions         datatypes.JSON            `json:"package_material_options"`
+	PackageDimensions              datatypes.JSON            `json:"package_dimensions"`
+	StatusId                       *uint                     `json:"status_id"`
+	Status                         core_dto.LookupCodesDTO   `json:"status"`
+	AdditivesInformation           string                    `json:"additives_information"`
+	ShortDescription               string                    `json:"short_description"`
+	DomainId                       *uint                     `json:"domain_id"`
+	Domain                         core_dto.LookupCodesDTO   `json:"domain"`
+
+	Location                 Location                 `json:"location"`
+	DeliverySlaDetails       DeliverySlaDetails       `json:"delivery_sla_details"`
+	InventoryDetail          InventoryDetails         `json:"inventory_detail"`
+	ProductCancellationTerms ProductCancellationTerms `json:"product_cancellation_terms"`
+	ProductReturnTerms       ProductReturnTerms       `json:"product_return_terms"`
+	ProductReplacementTerms  ProductReplacementTerms  `json:"product_replacement_terms"`
+	FoodItemDetails          FoodItemDetails          `json:"food_item_details"`
+	ManufacturerDetails      ManufacturerDetails      `json:"manufacturer_details"`
+	ProductCriticalDetails   ProductCriticalDetails   `json:"product_critical_details"`
 
 	TemplateOptions datatypes.JSON `json:"template_options"`
 	Related         datatypes.JSON `json:"related"`
 	Recommended     datatypes.JSON `json:"recommended"`
 	OtherStatuses   datatypes.JSON `json:"other_statuses"`
+	Channel         string         `json:"channel"`
 }
 type VariantResponseDTO struct {
-	ID                     *uint                                    `json:"id"`
-	CreatedByID            *uint                                    `json:"created_by"`
-	UpdatedByID            *uint                                    `json:"updated_by"`
+	ID                     *uint     `json:"id"`
+	CreatedByID            *uint     `json:"created_by"`
+	UpdatedByID            *uint     `json:"updated_by"`
+	CreatedDate            time.Time `json:"created_date"`
+	CreatedBy              core_dto.UserResponseDTO
+	UpdatedDate            time.Time                                `json:"updated_date"`
+	CompanyId              uint                                     `json:"company_id"`
 	SerialNumber           string                                   `json:"serial_number"`
 	ProductTemplateId      uint                                     `json:"product_template_id"`
 	ParentSkuId            string                                   `json:"parent_sku_id"`
@@ -231,6 +370,31 @@ type VariantResponseDTO struct {
 	ForecastingOptions     datatypes.JSON                           `json:"forecasting_options" gorm:"type:json;default:'{}'"`
 	ValidationInfo         string                                   `json:"validation_info"`
 	PackageTemplateOptions datatypes.JSON                           `json:"package_template_options" gorm:"type:json;default:'{}'"`
+	StoreDetails           core_dto.CompanyDetails                  `json:"store_details"`
+	AdditivesInformation   string                                   `json:"additives_information"`
+	ShortDescription       string                                   `json:"short_description"`
+	DomainId               *uint                                    `json:"domain_id"`
+	Domain                 core_dto.LookupCodesDTO                  `json:"domain" gorm:"foreignkey:DomainId;references:ID"`
+
+	Location                 Location                 `json:"location"`
+	DeliverySlaDetails       DeliverySlaDetails       `json:"delivery_sla_details"`
+	InventoryDetail          InventoryDetails         `json:"inventory_detail"`
+	ProductCancellationTerms ProductCancellationTerms `json:"product_cancellation_terms"`
+	ProductReturnTerms       ProductReturnTerms       `json:"product_return_terms"`
+	ProductReplacementTerms  ProductReplacementTerms  `json:"product_replacement_terms"`
+	FoodItemDetails          FoodItemDetails          `json:"food_item_details"`
+	ProductCriticalDetails   ProductCriticalDetails   `json:"product_critical_details"`
+	ManufacturerDetails      ManufacturerDetails      `json:"manufacturer_details"`
+	OfferDetails             Offers                   `json:"offer_details,omitempty"`
+
+	BrandID      *uint                      `json:"brand_id"`
+	Brand        BrandRequestAndResponseDTO `json:"brand"`
+	HSNCODE      string                     `json:"hsn_code"`
+	HSNCodesData mdm.HSNCodesData           `json:"hsn_codes_data"`
+
+	Channel       string  `json:"channel"`
+	RatingAverage float64 `json:"rating_average"`
+	RatingCount   uint    `json:"rating_count"`
 }
 
 type DecentralizedBasicInventoryResponseDTO struct {
@@ -267,22 +431,30 @@ type BrandRequestAndResponseDTO struct {
 	UpdatedByID *uint  `json:"updated_by"`
 }
 type CategoryResponseDTO struct {
-	ID               uint   `json:"id"`
-	Name             string `json:"name"`
-	ParentCategoryID *uint  `json:"parent_category_id"`
-	ExternalID       *uint  `json:"external_id"`
+	ID                   uint   `json:"id"`
+	Name                 string `json:"name"`
+	ParentCategoryID     *uint  `json:"parent_category_id"`
+	ExternalID           *uint  `json:"external_id"`
+	AdditivesInformation string `json:"additives_information"`
+	ShortDescription     string `json:"short_description"`
+	DomainId             *uint  `json:"domain_id"`
+	CategoryCode         string `json:"category_code"`
 }
 type CategoryAndSubcategoryRequestAndResponseDTO struct {
-	ID               uint                                          `json:"id"`
-	Name             string                                        `json:"name"`
-	ParentCategoryID *uint                                         `json:"parent_category_id"`
-	ChildCategoryIds []CategoryAndSubcategoryRequestAndResponseDTO `json:"child_ids,omitempty"`
-	AppId            *uint                                         `json:"app_id"`
-	ExternalID       *uint                                         `json:"external_id"`
-	IsEnabled        *bool                                         `json:"is_enabled"`
-	IsActive         *bool                                         `json:"is_active"`
-	CreatedByID      *uint                                         `json:"created_by"`
-	UpdatedByID      *uint                                         `json:"updated_by"`
+	ID                   uint                                          `json:"id"`
+	Name                 string                                        `json:"name"`
+	ParentCategoryID     *uint                                         `json:"parent_category_id"`
+	ChildCategoryIds     []CategoryAndSubcategoryRequestAndResponseDTO `json:"child_ids,omitempty"`
+	AppId                *uint                                         `json:"app_id"`
+	ExternalID           *uint                                         `json:"external_id"`
+	IsEnabled            *bool                                         `json:"is_enabled"`
+	IsActive             *bool                                         `json:"is_active"`
+	CreatedByID          *uint                                         `json:"created_by"`
+	UpdatedByID          *uint                                         `json:"updated_by"`
+	AdditivesInformation string                                        `json:"additives_information"`
+	ShortDescription     string                                        `json:"short_description"`
+	DomainId             *uint                                         `json:"domain_id"`
+	CategoryCode         string                                        `json:"category_code"`
 }
 type ProductBaseAttributesRequestAndResponseDTO struct {
 	ID          uint   `json:"id"`
@@ -351,6 +523,11 @@ type BundleLineItems struct {
 	AppId            *uint `json:"app_id"`
 }
 type BudleResponseDTO struct {
+	ID           *uint                     `json:"id"`
+	CreatedByID  *uint                     `json:"created_by"`
+	UpdatedByID  *uint                     `json:"updated_by"`
+	CreatedDate  time.Time                 `json:"created_date"`
+	UpdatedDate  time.Time                 `json:"updated_date"`
 	BundleCode   string                    `json:"bundle_id"`
 	BundleName   string                    `json:"bundle_name"`
 	Instructions string                    `json:"instructions"`
@@ -501,4 +678,13 @@ type ProductBundlesTabResponse struct {
 	MRP          float64                 `json:"mrp" `
 	Tax          bool                    `json:"tax"`
 	Quantity     int                     `json:"quantity"`
+}
+
+type Offers struct {
+	OfferId        uint      `json:"offer_id,omitempty"`
+	Title          string    `json:"title,omitempty"`
+	Value          float64   `json:"value,omitempty"`
+	DiscountTypeId uint      `json:"discount_type_id,omitempty"`
+	ValidFrom      time.Time `json:"valid_from,omitempty"`
+	ValidTo        time.Time `json:"valid_to,omitempty"`
 }

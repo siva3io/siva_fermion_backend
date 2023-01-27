@@ -4,17 +4,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	core_model "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	core_user_repo "fermion/backend_core/internal/repository"
 	access_template "fermion/backend_core/internal/repository/access"
+	inventory_orders_repo "fermion/backend_core/internal/repository/inventory_orders"
 	mdm_repo "fermion/backend_core/internal/repository/mdm"
+	orders_repo "fermion/backend_core/internal/repository/orders"
+	returns_repo "fermion/backend_core/internal/repository/returns"
 	access_checker "fermion/backend_core/pkg/util/access"
+
+	// ds "fermion/backend_core/pkg/util/dynamic_struct"
 	"fermion/backend_core/pkg/util/helpers"
-	res "fermion/backend_core/pkg/util/response"
 )
 
 /*
@@ -32,275 +39,387 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type Service interface {
-	CreateOrUpdateSubUser(data PartnerRequestDTO) error
-	CreateContact(data *mdm.Partner, token_id string, access_template_id string) error
-	UpdateContact(query map[string]interface{}, data *mdm.Partner, token_id string, access_template_id string) error
-	DeleteContact(query map[string]interface{}, token_id string, access_template_id string) error
-	GetContact(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	GetContactList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error)
-	SearchContact(query string, token_id string, access_template_id string) ([]IdNameDTO, error)
+	Create(metaData core.MetaData, data *mdm.Partner) error
+	Update(metaData core.MetaData, data *mdm.Partner) error
+	Delete(metaData core.MetaData) error
+	FindOne(metaData core.MetaData) (interface{}, error)
+	FindAll(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	Upsert(metaData core.MetaData, data []interface{}) (interface{}, error)
+
+	GetRelatedTabs(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
+	CreateOrUpdateSubUser(metaData core.MetaData, data PartnerRequestDTO) (uint, error)
 }
 
 type service struct {
-	contactsRepository       mdm_repo.Contacts
-	coreuserRepository       core_user_repo.User
-	coreRepository           core_user_repo.Core
-	accessTemplateRepository access_template.Template
+	ContactsRepository       mdm_repo.Contacts
+	CoreuserRepository       core_user_repo.User
+	CoreRepository           core_user_repo.Core
+	AccessTemplateRepository access_template.Template
+	SalesorderRepository     orders_repo.Sales
+	SalesReturnRepository    returns_repo.SalesReturn
+	DeliveryOrdersRepository orders_repo.DeliveryOrders
+	PurchaseOrderRepository  orders_repo.Purchase
+	AsnRepository            inventory_orders_repo.Asn
+	GrnRepository            inventory_orders_repo.GRN
+	PurchaseReturnRepository returns_repo.PurchaseReturn
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	contactsRepository := mdm_repo.NewContacts()
-	coreuserRepository := core_user_repo.NewUser()
-	coreRepository := core_user_repo.NewCore()
-	accessTemplateRepository := access_template.NewTemplate()
-	return &service{contactsRepository, coreuserRepository, coreRepository, accessTemplateRepository}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{
+		mdm_repo.NewContacts(),
+		core_user_repo.NewUser(),
+		core_user_repo.NewCore(),
+		access_template.NewTemplate(),
+		orders_repo.NewSalesOrder(),
+		returns_repo.NewSalesReturn(),
+		orders_repo.NewDo(),
+		orders_repo.NewPurchaseOrder(),
+		inventory_orders_repo.NewAsn(),
+		inventory_orders_repo.NewGRN(),
+		returns_repo.NewPurchaseReturn()}
+
+	return newServiceObj
 }
 
-func (s *service) CreateContact(data *mdm.Partner, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "CONTACTS", *token_user_id)
-	if !access_module_flag {
+// ============================ CRUD services =================================================================
+func (s *service) Create(metaData core.MetaData, data *mdm.Partner) error {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "CREATE", "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create contacts at data level")
 	}
+
 	data.PrimaryEmail = strings.ToLower(data.PrimaryEmail)
-	email_query := map[string]interface{}{
+	data.CreatedByID = &metaData.TokenUserId
+	data.CompanyId = metaData.CompanyId
+
+	searchQuery := map[string]interface{}{
 		"primary_email": data.PrimaryEmail,
+		"company_id":    data.CompanyId,
 	}
-	_, err := s.contactsRepository.FindOneContact(email_query)
+	_, err := s.ContactsRepository.FindOne(searchQuery)
 	if err == nil {
-		return res.BuildError(res.ErrDuplicate, errors.New("oops! Email already Exists"))
-	} else {
-		if data.ParentId != nil && *data.ParentId == 0 {
-			data.ParentId = nil
-		}
-		err := s.contactsRepository.SaveContact(data)
-		if err != nil {
-			return err
-		}
+		return errors.New("oops! Email already Exists")
+	}
+	if data.ParentId != nil && *data.ParentId == 0 {
+		data.ParentId = nil
+	}
+	err = s.ContactsRepository.Create(data)
+	if err != nil {
+		return err
 	}
 	return nil
 }
-func (s *service) UpdateContact(query map[string]interface{}, data *mdm.Partner, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "CONTACTS", *token_user_id)
-	if !access_module_flag {
+func (s *service) Update(metaData core.MetaData, data *mdm.Partner) error {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "UPDATE", "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for update contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for update contacts at data level")
 	}
-	_, err := s.contactsRepository.FindOneContact(query)
+
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.ContactsRepository.Update(metaData.Query, data)
 	if err != nil {
 		return err
 	}
-	err = s.contactsRepository.UpdateContact(query, data)
-	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
-	}
 	return nil
 }
-func (s *service) DeleteContact(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "CONTACTS", *token_user_id)
-	if !access_module_flag {
+func (s *service) Delete(metaData core.MetaData) error {
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "DELETE", "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for delete contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for delete contacts at data level")
 	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.contactsRepository.FindOneContact(q)
-	if er != nil {
-		return er
-	}
-	err := s.contactsRepository.DeleteContact(query)
+
+	err := s.ContactsRepository.Delete(metaData.Query)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func (s *service) GetContact(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "CONTACTS", *token_user_id)
-	if !access_module_flag {
+func (s *service) FindOne(metaData core.MetaData) (interface{}, error) {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for view contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for view contacts at data level")
 	}
-	result, err := s.contactsRepository.FindOneContact(query)
+
+	contactDetails, err := s.ContactsRepository.FindOne(metaData.Query)
 	if err != nil {
-		return result, err
+		return contactDetails, err
 	}
 
-	var response PartnerResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
-	}
+	contactDetails.Properties = helpers.GetLookupCodesFromArrOfObjectIdsToArrOfObjects(contactDetails.Properties)
 
-	for _, address := range response.AddressDetails {
-		if address.MarkDefaultAddress {
-			response.DefaultAddress = address
-			break
-		}
-	}
-
-	return response, nil
+	return contactDetails, nil
 }
-func (s *service) GetContactList(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "CONTACTS", *token_user_id)
-	if !access_module_flag {
+func (s *service) FindAll(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, metaData.ModuleAccessAction, "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list contacts at data level")
 	}
-	result, err := s.contactsRepository.FindAllContact(query, p)
+
+	arrayOfContactDetails, err := s.ContactsRepository.FindAll(metaData.Query, p)
 	if err != nil {
-		return result, err
-	}
-	var response []PartnerResponseDTO
-	marshaldata, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(marshaldata, &response)
-	if err != nil {
-		return nil, err
+		return arrayOfContactDetails, err
 	}
 
-	for index, ContactDetails := range response {
-		for _, address := range ContactDetails.AddressDetails {
-			if address.MarkDefaultAddress {
-				response[index].DefaultAddress = address
+	return arrayOfContactDetails, nil
+}
+func (s *service) Upsert(metaData core.MetaData, data []interface{}) (interface{}, error) {
+
+	var success []interface{}
+	var failures []interface{}
+
+	for index, payload := range data {
+		var requestdto PartnerRequestDTO
+		contact := new(mdm.Partner)
+		payloadResponse := map[string]interface{}{}
+
+		helpers.JsonMarshaller(payload, &requestdto)
+		helpers.JsonMarshaller(payload, contact)
+
+		searchQuery := map[string]interface{}{
+			"primary_email": requestdto.PrimaryEmail,
+			"company_id":    metaData.CompanyId,
+		}
+		contactResponse, _ := s.ContactsRepository.FindOne(searchQuery)
+		if contactResponse.PrimaryEmail != "" {
+			contact.UpdatedByID = &metaData.TokenUserId
+			err := s.ContactsRepository.Update(searchQuery, contact)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+			}
+			payloadResponse["msg"] = "updated"
+		} else {
+			contact.CompanyId = metaData.CompanyId
+			contact.CreatedByID = &metaData.TokenUserId
+			err := s.ContactsRepository.Create(contact)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+			}
+			payloadResponse["msg"] = "created"
+		}
+		contactResponse, _ = s.ContactsRepository.FindOne(searchQuery)
+		//================= create or update sub_user =================
+		if requestdto.IsAllowedLogin != nil && *requestdto.IsAllowedLogin {
+			helpers.JsonMarshaller(contactResponse, &requestdto)
+			userId, err := s.CreateOrUpdateSubUser(metaData, requestdto)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+				continue
+			}
+			contact.UserId = userId
+			err = s.ContactsRepository.Update(searchQuery, contact)
+			if err != nil {
+				failures = append(failures, map[string]interface{}{"status": false, "serial_number": index + 1, "msg": err})
+				continue
+			}
+			payloadResponse["sub_user"] = "upserted"
+		}
+
+		//================= create or update vendor ===================
+		isVendorCreate := false
+		var contactDetails PartnerResponseDTO
+		helpers.JsonMarshaller(contactResponse, &contactDetails)
+		for _, object := range contactDetails.Properties {
+			LookupCode, _ := helpers.GetLookupcodeName(object.Id)
+			if LookupCode == "VENDOR" {
+				isVendorCreate = true
 				break
 			}
 		}
+		if isVendorCreate {
+			vendor := new(mdm.Vendors)
+			if contactDetails.FirstName != "" || contactDetails.LastName != "" {
+				vendor.Name = contactDetails.FirstName + " " + contactDetails.LastName
+			} else {
+				if contactDetails.CompanyName != "" {
+					vendor.Name = contactDetails.CompanyName
+				}
+			}
+			vendor.ContactId = &contactDetails.Id
+			vendor.PrimaryContactId = contactDetails.ParentId
+			vendorPayload := []interface{}{}
+			vendorPayload = append(vendorPayload, vendor)
+			request_payload := map[string]interface{}{
+				"meta_data": metaData,
+				"data":      vendorPayload,
+			}
+			eda.Produce(eda.UPSERT_VENDOR, request_payload)
+			payloadResponse["vendor"] = "upserted"
+		}
+		payloadResponse["status"] = true
+		payloadResponse["serial_number"] = index + 1
+		success = append(success, payloadResponse)
 	}
-
+	response := map[string]interface{}{
+		"success":  success,
+		"failures": failures,
+	}
 	return response, nil
 }
-func (s *service) SearchContact(query string, token_id string, access_template_id string) ([]IdNameDTO, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "LIST", "CONTACTS", *token_user_id)
-	if !access_module_flag {
+
+// ============================= other services ================================================================
+func (s *service) GetRelatedTabs(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+
+	accessTemplateId := strconv.FormatUint(uint64(metaData.AccessTemplateId), 10)
+	contactId := metaData.AdditionalFields["contact_id"]
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(accessTemplateId, "READ", "CONTACTS", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return nil, fmt.Errorf("you dont have access for list contacts at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return nil, fmt.Errorf("you dont have access for list contacts at data level")
 	}
-	result, err := s.contactsRepository.SearchContact(query)
-	var contactdetails []IdNameDTO
-	if err != nil {
-		return nil, err
-	}
-	for _, v := range result {
-		var data IdNameDTO
-		value, _ := json.Marshal(v)
-		err := json.Unmarshal(value, &data)
+
+	tabName := metaData.AdditionalFields["tab_name"].(string)
+
+	if tabName == "sales_orders" {
+		salesOrderPage := p
+		salesOrderPage.Filters = fmt.Sprintf("[[\"customer_billing_address\",\"@>\",\"{\\\"id\\\":%v}\"]]", contactId)
+		relatedSalesOrders, err := s.SalesorderRepository.FindAll(nil, salesOrderPage)
 		if err != nil {
 			return nil, err
 		}
-		contactdetails = append(contactdetails, data)
+		return relatedSalesOrders, nil
 	}
-	return contactdetails, nil
+	if tabName == "sales_returns" {
+		salesReturnsPage := p
+		salesReturnsPage.Filters = fmt.Sprintf("[[\"customer_billing_address\",\"@>\",\"{\\\"id\\\":%v}\"]]", contactId)
+		relatedSalesReturns, err := s.SalesReturnRepository.FindAll(nil, salesReturnsPage)
+		if err != nil {
+			return nil, err
+		}
+		return relatedSalesReturns, nil
+	}
+	if tabName == "delivery_orders" {
+		deliveryOrdersPage := p
+		deliveryOrdersPage.Filters = fmt.Sprintf("[[\"billing_address_details\",\"@>\",\"{\\\"id\\\":%v}\"]]", contactId)
+		relatedDeliveryOrders, err := s.DeliveryOrdersRepository.AllDeliveryOrders(nil, deliveryOrdersPage)
+		if err != nil {
+			return nil, err
+		}
+		return relatedDeliveryOrders, nil
+	}
+	if tabName == "purchase_orders" {
+		purchaseOrdersPage := p
+		purchaseOrdersPage.Filters = fmt.Sprintf("[[\"billing_address\",\"@>\",\"{\\\"id\\\":%v}\"]]", contactId)
+		relatedPurchaseOrders, err := s.PurchaseOrderRepository.FindAll(nil, purchaseOrdersPage)
+		if err != nil {
+			return nil, err
+		}
+		return relatedPurchaseOrders, nil
+	}
+	if tabName == "asn" {
+		asnPage := p
+		asnPage.Filters = fmt.Sprintf("[[\"destination_location_details\",\"@>\",\"{\\\"id\\\":%v}\"]]", contactId)
+		relatedAsns, err := s.AsnRepository.GetAllAsn(metaData.Query, asnPage)
+		if err != nil {
+			return nil, err
+		}
+		return relatedAsns, nil
+	}
+	if tabName == "purchase_returns" {
+		purchaseReturnsPage := p
+		purchaseReturnsPage.Filters = fmt.Sprintf("[[\"vendor_details\",\"@>\",\"{\\\"contact_id\\\":%v}\"]]", contactId)
+		relatedPurchaseReturns, err := s.PurchaseReturnRepository.FindAll(nil, purchaseReturnsPage)
+		if err != nil {
+			return nil, err
+		}
+		return relatedPurchaseReturns, nil
+	}
+	return nil, nil
 }
 
-func (s *service) CreateOrUpdateSubUser(data PartnerRequestDTO) error {
+func (s *service) CreateOrUpdateSubUser(metaData core.MetaData, data PartnerRequestDTO) (uint, error) {
+
 	var newUser core_model.CoreUsers
 	newUser.Name = data.FirstName + " " + data.LastName
 	newUser.FirstName = data.FirstName
 	newUser.LastName = data.LastName
 	newUser.Email = data.PrimaryEmail
+	newUser.Username = data.PrimaryEmail
 	newUser.MobileNumber = data.PrimaryPhone
 	newUser.Profile = data.ImageOptions
-	newUser.CreatedByID = data.CreatedByID
 	newUser.ExternalDetails = data.ExternalDetails
+	newUser.RoleId = data.RoleId
+	newUser.UserTypes = data.UserTypes
+	newUser.AccessIds = data.AccessIds
 
-	query := map[string]interface{}{"id": *data.CreatedByID}
-	SuperUserResponse, _ := s.coreuserRepository.FindUser(query)
-	if SuperUserResponse.ID != 0 {
-		newUser.CompanyId = SuperUserResponse.CompanyId
-	}
+	newUser.AccessTemplateId = data.AccessTemplateId
+	newUser.CreatedByID = &metaData.TokenUserId
+	newUser.CompanyId = &metaData.CompanyId
 
-	// fmt.Println("======>>>>new user :--", *newUser.CompanyId, *newUser.CreatedByID)
-
-	query = map[string]interface{}{
-		"id": *SuperUserResponse.CompanyId,
-	}
-	companyResponse, _ := s.coreRepository.FindCompany(query)
-	if companyResponse.Name != "" {
-		var AccessTemplateId uint
-		companyDefaultSettings := map[string]interface{}{}
-		AccessTemplateDetails := map[string]interface{}{}
-		var ok bool
-		json.Unmarshal(companyResponse.CompanyDefaults, &companyDefaultSettings)
-		if companyDefaultSettings["access_template_details"] != nil {
-			AccessTemplateDetails, ok = companyDefaultSettings["access_template_details"].(map[string]interface{})
-			if !ok {
-				return errors.New("access_template_details is not a map[string]interface{}")
-			}
+	if len(newUser.AccessTemplateId) == 0 {
+		query := map[string]interface{}{
+			"id": metaData.CompanyId,
 		}
-
-		if AccessTemplateDetails == nil || AccessTemplateDetails["default_user_template_id"] == nil {
-			defaultUserTemplate := new(core_model.AccessTemplate)
-			defaultUserTemplate.Name = "DEFAULT USER TEMPLATE"
-			defaultUserTemplate.CompanyId = companyResponse.ID
-			// defaultUserTemplate.CreatedByID = &companyResponse.CreatedByID
-
-			template, err := s.accessTemplateRepository.CreateTemplate(defaultUserTemplate)
-			if err != nil {
-				return err
+		companyResponse, _ := s.CoreRepository.FindCompany(query)
+		if companyResponse.Name != "" {
+			var AccessTemplateId uint
+			companyDefaultSettings := map[string]interface{}{}
+			json.Unmarshal(companyResponse.CompanyDefaults, &companyDefaultSettings)
+			if companyDefaultSettings["access_template_details"] != nil {
+				AccessTemplateDetails, ok := companyDefaultSettings["access_template_details"].(map[string]interface{})
+				if !ok {
+					return 0, errors.New("access_template_details not exists in company default settings")
+				}
+				if AccessTemplateDetails != nil {
+					AccessTemplateId = uint(AccessTemplateDetails["default_user_template_id"].(float64))
+				}
 			}
-			AccessTemplateId = template
-			AccessTemplateDetails["default_user_template_id"] = template
-			companyDefaultSettings["access_template_details"] = AccessTemplateDetails
-
-			updateQuery := map[string]interface{}{
-				"name": companyResponse.Name,
-			}
-			jsondata, err := json.Marshal(companyDefaultSettings)
-			if err != nil {
-				return err
-			}
-			updateCompany := new(core_model.Company)
-			updateCompany.CompanyDefaults = jsondata
-			s.coreRepository.UpdateCompany(updateQuery, updateCompany)
-		} else {
-			fmt.Println("=========>>>> it takes already exists one")
-			AccessTemplateId = uint(AccessTemplateDetails["default_user_template_id"].(float64))
-		}
-
-		newUser.AccessTemplateId = append(newUser.AccessTemplateId, &core_model.AccessTemplate{ID: AccessTemplateId})
-
-		query = map[string]interface{}{"login": data.PrimaryEmail}
-		resp, _ := s.coreuserRepository.FindLogin(query)
-		if resp.ID != 0 {
-			err := s.coreuserRepository.UpdateUser(query, &newUser)
-			if err != nil {
-				return err
-			}
-			fmt.Println("--------------------->>> Sub User Updated Successfully <<<-----------------------------")
-
-		} else {
-			err := s.coreuserRepository.Save(&newUser)
-			if err != nil {
-				return err
-			}
-			fmt.Println("--------------------->>> Sub User Created Successfully <<<-----------------------------")
-
+			newUser.AccessTemplateId = append(newUser.AccessTemplateId, &core_model.AccessTemplate{ID: AccessTemplateId})
 		}
 	}
-	return nil
+
+	query := map[string]interface{}{"email": data.PrimaryEmail}
+	resp, _ := s.CoreuserRepository.FindUser(query)
+	if resp.ID != 0 {
+		err := s.CoreuserRepository.UpdateUser(query, &newUser)
+		if err != nil {
+			return resp.ID, err
+		}
+		fmt.Println("--------------------->>> Sub User Updated Successfully <<<-----------------------------")
+
+	} else {
+		err := s.CoreuserRepository.Save(&newUser)
+		if err != nil {
+			return 0, err
+		}
+		fmt.Println("--------------------->>> Sub User Created Successfully <<<-----------------------------")
+
+	}
+	return newUser.ID, nil
 }

@@ -1,0 +1,1232 @@
+{
+    "//": "Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)",
+  "//": "All rights reserved.",
+  "//": "This program is free software: you can redistribute it and/or modify",
+  "//": "it under the terms of the GNU Lesser General Public License v3.0 as published by",
+  "//": "the Free Software Foundation, either version 3 of the License, or",
+  "//": "(at your option) any later version.",
+  "//": "This program is distributed in the hope that it will be useful,",
+  "//": "but WITHOUT ANY WARRANTY; without even the implied warranty of",
+  "//": "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the",
+  "//": "GNU Lesser General Public License v3.0 for more details.",
+  "//": "You should have received a copy of the GNU Lesser General Public License v3.0",
+  "//": "along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.",
+    "name": "mapper_template",
+    "description": "products",
+    "fields": [
+        {
+            "id": "field_external_id",
+            "scope": "local",
+            "input": "id",
+            "input_type": "keyvalue",
+            "output": "external_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "external_id",
+                            "type": "variable",
+                            "value": "external_id"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_created_by",
+            "scope": "local",
+            "input": "created_by",
+            "input_type": "keyvalue",
+            "output": "created_by",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_id",
+            "scope": "local",
+            "input": "sku_id",
+            "input_type": "keyvalue",
+            "output": "id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_provider_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "provider_id",
+            "output_type": "keyvalue",
+            "default_value": "SIVA-ONDC-STORE-1",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_is_available_on_cod",
+            "scope": "local",
+            "input": "is_available_on_cod",
+            "input_type": "keyvalue",
+            "output": "is_available_on_cod",
+            "output_type": "keyvalue",
+            "default_value": "false",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_descriptor",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "descriptor",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_name",
+                "field_symbol",
+                "obj_short_desc",
+                "obj_long_desc",
+                "field_images"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_name",
+            "scope": "local",
+            "input": "product_name",
+            "input_type": "keyvalue",
+            "output": "name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_symbol",
+            "scope": "local",
+            "input": "image_options.link",
+            "input_type": "keyvalue",
+            "output": "symbol",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_short_desc",
+            "scope": "local",
+            "input": "description",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_short_description"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_long_desc",
+            "scope": "local",
+            "input": "description",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_long_description"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_long_description",
+            "scope": "local",
+            "input": "data",
+            "input_type": "keyvalue",
+            "output": "long_desc",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_short_description",
+            "scope": "local",
+            "input": "data",
+            "input_type": "keyvalue",
+            "output": "short_desc",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_images",
+            "scope": "local",
+            "input": "image_options",
+            "input_type": "keyvalue",
+            "output": "images",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "ArrofObjecttoArrofInterface",
+                    "params": [
+                        {
+                            "key": "input",
+                            "type": "variable",
+                            "value": "images"
+                        },
+                        {
+                            "key": "key",
+                            "type": "static",
+                            "value": "link"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_quantity",
+            "scope": "local",
+            "input": "inventory_detail",
+            "input_type": "object",
+            "output": "quantity",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_available",
+                "obj_maximum"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_available",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "available",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_available_count"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_available_count",
+            "scope": "local",
+            "input": "available_quantity",
+            "input_type": "keyvalue",
+            "output": "count",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "count",
+                            "type": "variable",
+                            "value": "count"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_maximum",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "maximum",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_max_count"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_max_count",
+            "scope": "local",
+            "input": "maximum_quantity",
+            "input_type": "keyvalue",
+            "output": "count",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "count",
+                            "type": "variable",
+                            "value": "count"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_price",
+            "scope": "local",
+            "input": "product_pricing_details",
+            "input_type": "object",
+            "output": "price",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_currency",
+                "obj_value",
+                "obj_maximum_value"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_value",
+            "scope": "local",
+            "input": "product_pricing_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_value"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_value",
+            "scope": "local",
+            "input": "sales_price",
+            "input_type": "keyvalue",
+            "output": "value",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "value",
+                            "type": "variable",
+                            "value": "value"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_maximum_value",
+            "scope": "local",
+            "input": "product_pricing_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_maximum_value"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_maximum_value",
+            "scope": "local",
+            "input": "mrp",
+            "input_type": "keyvalue",
+            "output": "maximum_value",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "maximum_value",
+                            "type": "variable",
+                            "value": "maximum_value"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_currency",
+            "scope": "local",
+            "input": "product_pricing_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "obj_currency1"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_currency1",
+            "scope": "local",
+            "input": "currency",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_currency"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_currency",
+            "scope": "local",
+            "input": "currency_code",
+            "input_type": "keyvalue",
+            "output": "currency",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_category_id",
+            "scope": "local",
+            "input": "category",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_category_id"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_category_id",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "category_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_fulillment_id",
+            "scope": "local",
+            "input": "product_return_terms",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_fufillment_id"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_fufillment_id",
+            "scope": "local",
+            "input": "fulfillment_managed_by_id",
+            "input_type": "keyvalue",
+            "output": "fulfillment_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_is_returnable",
+            "scope": "local",
+            "input": "product_return_terms",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_returnable"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_returnable",
+            "scope": "local",
+            "input": "refund_eligible_return",
+            "input_type": "keyvalue",
+            "output": "is_returnable",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_is_cancellable",
+            "scope": "local",
+            "input": "product_cancellation_terms",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_is_cancellable"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_is_cancellable",
+            "scope": "local",
+            "input": "refund_eligible",
+            "input_type": "keyvalue",
+            "output": "is_cancellable",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_is_seller_pickup_return",
+            "scope": "local",
+            "input": "product_return_terms",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_is_seller_pickup_return"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_is_seller_pickup_return",
+            "scope": "local",
+            "input": "refund_eligible_return",
+            "input_type": "keyvalue",
+            "output": "is_seller_pickup_return",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_tine_to_ship",
+            "scope": "local",
+            "input": "product_critical_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_time_to_ship"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_time_to_ship",
+            "scope": "local",
+            "input": "time_to_ship",
+            "input_type": "keyvalue",
+            "output": "time to ship",
+            "output_type": "keyvalue",
+            "default_value": "PT45M",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_statutory_Reqs_packaged commodities",
+            "scope": "local",
+            "input": "manufacturer_details",
+            "input_type": "object",
+            "output": "statutory_reqs_packaged_commodities",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_packer_name",
+                "field_packer_address",
+                "field_generic_name",
+                "field_net_quantity",
+                "field_manfucatured_data"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_packer_name",
+            "scope": "local",
+            "input": "manufacturer_name",
+            "input_type": "keyvalue",
+            "output": "manufacturer_or_packer_name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_packer_address",
+            "scope": "local",
+            "input": "manufacturer_address",
+            "input_type": "keyvalue",
+            "output": "manufacturer_or_packer_address",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_generic_name",
+            "scope": "local",
+            "input": "commodity_name",
+            "input_type": "keyvalue",
+            "output": "common_or_generic_name_of_commodity",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_net_quantity",
+            "scope": "local",
+            "input": "net_quantity",
+            "input_type": "keyvalue",
+            "output": "net_quantity_or_measure_of_commodity_in_pkg",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "net_quantity_or_measure_of_commodity_in_pkg",
+                            "type": "variable",
+                            "value": "net_quantity_or_measure_of_commodity_in_pkg"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "field_manfucatured_data",
+            "scope": "local",
+            "input": "manufacturer_date",
+            "input_type": "keyvalue",
+            "output": "month_year_of_manufacture_packing_import",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_statutory_reqs_prepackaged_food",
+            "scope": "local",
+            "input": "food_item_details",
+            "input_type": "object",
+            "output": "statutory_reqs_prepackaged_food",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_nutrition",
+                "filed_additives_info",
+                "filed_brand_owner_fssai_license_no",
+                "field_other_fssai_license_no",
+                "field_importer_fssai_license_no"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_nutrition",
+            "scope": "local",
+            "input": "nutritional_info",
+            "input_type": "keyvalue",
+            "output": "nutritional_info",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "filed_additives_info",
+            "scope": "local",
+            "input": "ingredients_info",
+            "input_type": "keyvalue",
+            "output": "additives_info",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "filed_brand_owner_fssai_license_no",
+            "scope": "local",
+            "input": "fssai_licence_number",
+            "input_type": "keyvalue",
+            "output": "brand_owner_FSSAI_license_no",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_other_fssai_license_no",
+            "scope": "local",
+            "input": "other_fssai_licence_number",
+            "input_type": "keyvalue",
+            "output": "other_FSSAI_license_no",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_importer_fssai_license_no",
+            "scope": "local",
+            "input": "importers_fssai_number",
+            "input_type": "keyvalue",
+            "output": "importer_FSSAI_license_no",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_locations",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "locations",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_address",
+                "obj_circle",
+                "field_locations_id",
+                "obj_time",
+                "obj_contact"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_contact",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "contact",
+            "output_type": "keyvalue",
+            "default_value": {
+                "email": "test@eunimart.com",
+                "phone": "9876543210"
+            },
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_locations_id",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "id",
+            "output_type": "keyvalue",
+            "default_value": "SIVA-ONDC-STORE-1-LOC-1",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_time",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "time",
+            "output_type": "keyvalue",
+            "default_value": {
+                "days": "1,2,3,4,5,6,7",
+                "range": {
+                    "end": "2000",
+                    "start": "1000"
+                }
+            },
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_circle",
+            "scope": "local",
+            "input": "",
+            "input_type": "keyvalue",
+            "output": "circle",
+            "output_type": "keyvalue",
+            "default_value": {
+                "gps": "12.9715987,77.5945627",
+                "radius": {
+                    "unit": "mi",
+                    "value": 1.5
+                }
+            },
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_address",
+            "scope": "local",
+            "input": "location",
+            "input_type": "object",
+            "output": "address",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_city",
+                "obj_state",
+                "field_street",
+                "field_areacode"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_city",
+            "scope": "local",
+            "input": "city",
+            "input_type": "keyvalue",
+            "output": "city",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_state",
+            "scope": "local",
+            "input": "state",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_state"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_state",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "state",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_street",
+            "scope": "local",
+            "input": "address_line1",
+            "input_type": "keyvalue",
+            "output": "street",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_areacode",
+            "scope": "local",
+            "input": "pincode",
+            "input_type": "keyvalue",
+            "output": "area_code",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_tags",
+            "scope": "local",
+            "input": "",
+            "input_type": "object",
+            "output": "tags",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "obj_product_type",
+                "obj_brand"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_product_type",
+            "scope": "local",
+            "input": "leaf_category",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_leaf_category_name"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_leaf_category_name",
+            "scope": "local",
+            "input": "name",
+            "input_type": "keyvalue",
+            "output": "product_type",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_brand",
+            "scope": "local",
+            "input": "brand",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_brand_name"
+            ],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_brand_name",
+            "scope": "local",
+            "input": "brand_name",
+            "input_type": "keyvalue",
+            "output": "brand_name",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_return_window",
+            "scope": "local",
+            "input": "return_window",
+            "input_type": "keyvalue",
+            "output": "return_window",
+            "output_type": "keyvalue",
+            "default_value": "P7D",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "obj_mandatory_reqs_veggies_fruits",
+            "scope": "local",
+            "input": "manufacturer_details",
+            "input_type": "object",
+            "output": "mandatory_reqs_veggies_fruits",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_mandatory_reqs_veggies_fruits"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_mandatory_reqs_veggies_fruits",
+            "scope": "local",
+            "input": "net_quantity",
+            "input_type": "keyvalue",
+            "output": "net_quantity",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": [
+                {
+                    "name": "FloattoString",
+                    "params": [
+                        {
+                            "key": "net_quantity",
+                            "type": "variable",
+                            "value": "net_quantity"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "obj_consumer_care",
+            "scope": "local",
+            "input": "product_critical_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [
+                "field_consumer_name"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_consumer_name",
+            "scope": "local",
+            "input": "customer_care_number",
+            "input_type": "keyvalue",
+            "output": "contact_details_consumer_care",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_consumer_name",
+            "scope": "local",
+            "input": "customer_care_number",
+            "input_type": "keyvalue",
+            "output": "contact_details_consumer_care",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "obj_fssai_license_no",
+            "scope": "local",
+            "input": "food_item_details",
+            "input_type": "object",
+            "output": "",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_fssai_license_no"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_fssai_license_no",
+            "scope": "local",
+            "input": "fssai_licence_number",
+            "input_type": "keyvalue",
+            "output": "@ondc/org/fssai_license_no",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_hsn_details",
+            "scope": "local",
+            "input": "hsn_codes_data",
+            "input_type": "keyvalue",
+            "output": "hsn_code_details",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_pkg_details",
+            "scope": "local",
+            "input": "package_dimensions",
+            "input_type": "keyvalue",
+            "output": "package_dimensions",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_offers",
+            "scope": "local",
+            "input": "offer_details",
+            "input_type": "object",
+            "output": "offer_details",
+            "output_type": "object",
+            "default_value": "",
+            "fields": [
+                "field_offer_id",
+                "field_title",
+                "field_value1",
+                "field_discount_type_id",
+                "field_valid_from",
+                "field_valid_to"
+            ],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_offer_id",
+            "scope": "local",
+            "input": "offer_id",
+            "input_type": "keyvalue",
+            "output": "offer_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_title",
+            "scope": "local",
+            "input": "title",
+            "input_type": "keyvalue",
+            "output": "title",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_value1",
+            "scope": "local",
+            "input": "value",
+            "input_type": "keyvalue",
+            "output": "value",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_discount_type_id",
+            "scope": "local",
+            "input": "discount_type_id",
+            "input_type": "keyvalue",
+            "output": "discount_type_id",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_valid_from",
+            "scope": "local",
+            "input": "valid_from",
+            "input_type": "keyvalue",
+            "output": "valid_from",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_valid_to",
+            "scope": "local",
+            "input": "valid_to",
+            "input_type": "keyvalue",
+            "output": "valid_to",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "nested",
+            "helper_function": []
+        },
+        {
+            "id": "field_rating_average",
+            "scope": "local",
+            "input": "rating_average",
+            "input_type": "keyvalue",
+            "output": "rating",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        },
+        {
+            "id": "field_rating_count",
+            "scope": "local",
+            "input": "rating_count",
+            "input_type": "keyvalue",
+            "output": "rating_count",
+            "output_type": "keyvalue",
+            "default_value": "",
+            "fields": [],
+            "execution_type": "",
+            "helper_function": []
+        }
+    ]
+}

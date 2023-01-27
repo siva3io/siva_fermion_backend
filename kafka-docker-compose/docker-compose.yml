@@ -1,0 +1,64 @@
+
+# Copyright (C) 2022 Eunimart Omnichannel Pvt Ltd. (www.eunimart.com)
+# All rights reserved.
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License v3.0 as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License v3.0 for more details.
+# You should have received a copy of the GNU Lesser General Public License v3.0
+# along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
+
+version: '3'
+services:
+  zk1:
+    image: confluentinc/cp-zookeeper:7.3.0
+    hostname: zk1
+    container_name: zk1
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+  
+  kafka1:
+    image: confluentinc/cp-kafka:7.3.0
+    hostname: kafka1
+    container_name: kafka1
+    depends_on:
+      - zk1
+    ports:
+      - "9091:9091"
+      - "9991:9991"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zk1:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:29091,PLAINTEXT_HOST://localhost:9091
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9991
+      KAFKA_JMX_HOSTNAME: kafka1
+
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "9021:8080"  # "8080:8080"
+    depends_on:
+      - kafka1
+    environment:
+      SERVER_SERVLET_CONTEXT_PATH: /kafkaui
+      AUTH_TYPE: "LOGIN_FORM"
+      SPRING_SECURITY_USER_NAME: admin
+      SPRING_SECURITY_USER_PASSWORD: admin
+      KAFKA_CLUSTERS_0_NAME: tech
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:29091
+      KAFKA_CLUSTERS_0_METRICS_PORT: 9991

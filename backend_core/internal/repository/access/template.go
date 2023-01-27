@@ -39,9 +39,17 @@ type template struct {
 	db *gorm.DB
 }
 
+var TemplateRepository *template //singleton object
+
+//singleton function
+
 func NewTemplate() *template {
+	if TemplateRepository != nil {
+		return TemplateRepository
+	}
 	db := db.DbManager()
-	return &template{db}
+	TemplateRepository = &template{db}
+	return TemplateRepository
 }
 
 func (r *template) CreateTemplate(data *model_core.AccessTemplate) (uint, error) {
@@ -68,8 +76,8 @@ func (r *template) FindAllTemplate(p *pagination.Paginatevalue) ([]model_core.Ac
 	var result []model_core.AccessTemplate
 	//res := r.db.Preload(clause.Associations).Model(&model_core.AccessTemplate{}).Preload(clause.Associations).Scopes(helpers.Paginate(&model_core.AccessTemplate{}, p, r.db)).Where("is_active = true").Find(&result)
 	res := r.db.Model(&model_core.AccessTemplate{}).Scopes(helpers.Paginate(&model_core.AccessTemplate{}, p, r.db)).Where("is_active = true")
-	final_res := res.Find(&result)
-	fmt.Println(final_res.Error)
+	res.Find(&result)
+	// fmt.Println(final_res.Error)
 
 	if res.Error != nil {
 		return nil, res.Error

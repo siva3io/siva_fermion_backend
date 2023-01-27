@@ -40,9 +40,16 @@ type inventoryTasksBase struct {
 	db *gorm.DB
 }
 
+var inventoryTasksBaseRepository *inventoryTasksBase //singleton object
+
+// singleton function
 func NewInventoryTasksBase() *inventoryTasksBase {
-	database := db.DbManager()
-	return &inventoryTasksBase{database}
+	if inventoryTasksBaseRepository != nil {
+		return inventoryTasksBaseRepository
+	}
+	db := db.DbManager()
+	inventoryTasksBaseRepository = &inventoryTasksBase{db}
+	return inventoryTasksBaseRepository
 
 }
 

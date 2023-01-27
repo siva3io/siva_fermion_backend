@@ -34,7 +34,7 @@ func (h *handler) Route(g *echo.Group) {
 	g.POST("/:id/update", h.UpdateVirtualWarehouseDetails, cmiddleware.Authorization, VirtualWarehouseDetailsUpdateValidate)
 	g.GET("/:id/view", h.FindVirtualWarehouseDetails, cmiddleware.Authorization)
 	g.GET("/list", h.ListVirtualWarehouseDetails, cmiddleware.Authorization)
-	g.DELETE("/:id/remove", h.DeleteVirtualWarehouseDetails, cmiddleware.Authorization)
+	g.DELETE("/:id/delete", h.DeleteVirtualWarehouseDetails, cmiddleware.Authorization)
 	g.GET("/:virtual_warehouse_code/get_auth_keys", h.GetAuthKeys, cmiddleware.Authorization)
 
 	//Available Virtual Warehouses

@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
+	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -29,9 +32,16 @@ type handler struct {
 	service Service
 }
 
+var ShippingOrdersRtoHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ShippingOrdersRtoHandler != nil {
+		return ShippingOrdersRtoHandler
+	}
 	service := NewService()
-	return &handler{service}
+	ShippingOrdersRtoHandler = &handler{service}
+	return ShippingOrdersRtoHandler
 }
 
 // CreateRTO godoc
@@ -48,17 +58,42 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto/create [post]
-func (h *handler) CreateRTO(c echo.Context) (err error) {
+func (h *handler) CreateRTOEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 	data := new(RTORequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	id, err := h.service.CreateRTO(data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
 	}
-	return res.RespSuccess(c, "Created", map[string]interface{}{"Created_RTO_Id": id})
+	eda.Produce(eda.CREATE_SHIPPING_ORDER_RTO, request_payload)
+	return res.RespSuccess(c, "Shipping_order rto Creation Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateRTO(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(shipping.RTO)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateRTO(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		eda.Produce(eda.CREATE_SHIPPING_ORDER_RTO_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateRtoInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+	eda.Produce(eda.CREATE_SHIPPING_ORDER_RTO_ACK, responseMessage)
+
 }
 
 // BulkCreateRTO godoc
@@ -79,13 +114,13 @@ func (h *handler) BulkCreateRTO(c echo.Context) (err error) {
 	data := new([]RTORequest)
 	c.Bind(&data)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
+	var metaData core.MetaData
 	t := helpers.ConvertStringToUint(token_id)
 	for i := 0; i < len(*data); i++ {
 		(*data)[i].CreatedByID = t
 		fmt.Println((*data)[i].CreatedByID)
 	}
-	err = h.service.BulkCreateRTO(data, token_id, access_template_id)
+	err = h.service.BulkCreateRTO(metaData, data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
@@ -107,15 +142,19 @@ func (h *handler) BulkCreateRTO(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto/{id} [get]
 func (h *handler) GetRTO(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetRTO(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	uomId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": uomId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetRTO(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "success", result)
+	var response GetRTO
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "success", response)
 }
 
 // GetAllRTO godoc
@@ -136,15 +175,28 @@ func (h *handler) GetRTO(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto [get]
 func (h *handler) GetAllRTO(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllRTO(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []GetAllRTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetRtoFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetAllRTO(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "RTO list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "RTO list Retrieved Successfully", response, p)
 }
 
 // GetAllRTODropDown godoc
@@ -165,15 +217,28 @@ func (h *handler) GetAllRTO(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto/dropdown [get]
 func (h *handler) GetAllRTODropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetAllRTO(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+	var cacheResponse interface{}
+	var response []GetAllRTO
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetRtoFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+	result, err := h.service.GetAllRTO(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "RTO DropDown Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "RTO list Retrieved Successfully", response, p)
 }
 
 // UpdateRTO godoc
@@ -191,19 +256,47 @@ func (h *handler) GetAllRTODropDown(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto/{id}/update [post]
-func (h *handler) UpdateRTO(c echo.Context) (err error) {
-	var data RTORequest
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
+func (h *handler) UpdateRTOEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	rtoId := c.Param("id")
+	data := new(RTORequest)
 	c.Bind(&data)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateRTO(uint(id), data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         rtoId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Updated Successfully", map[string]int{"Updated id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      data,
+	}
+
+	eda.Produce(eda.UPDATE_SHIPPING_ORDER_RTO, request_payload)
+	return res.RespSuccess(c, "Shipping_order rtoUpdate Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateRTO(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(shipping.RTO)
+	helpers.JsonMarshaller(data, updatePayload)
+	err := h.service.UpdateRTO(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		eda.Produce(eda.UPDATE_SHIPPING_ORDER_RTO_ACK, responseMessage)
+		return
+	}
+	// cache implementation
+	UpdateRtoInCache(edaMetaData)
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	eda.Produce(eda.UPDATE_SHIPPING_ORDER_RTO_ACK, responseMessage)
+
 }
 
 // DeleteRTO godoc
@@ -221,14 +314,20 @@ func (h *handler) UpdateRTO(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/shipping_orders_rto/{id}/delete [delete]
 func (h *handler) DeleteRTO(c echo.Context) (err error) {
-	get_id := c.Param("id")
-	id, _ := strconv.Atoi(get_id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteRTO(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	rtoId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         rtoId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteRTO(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Deleted Successfully", map[string]string{"Deleted_RTO_ID": get_id})
+
+	// cache implementation
+	UpdateRtoInCache(metaData)
+
+	return res.RespSuccess(c, "Deleted Successfully", rtoId)
 }

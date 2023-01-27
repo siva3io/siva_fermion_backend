@@ -3,12 +3,15 @@ package cores
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
-	cache "fermion/backend_core/controllers/cache"
 	model_core "fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
+
+	"fermion/backend_core/pkg/util/cache"
 	"fermion/backend_core/pkg/util/helpers"
 	res "fermion/backend_core/pkg/util/response"
 
@@ -34,9 +37,16 @@ type handler struct {
 	service Service
 }
 
+var CoreHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if CoreHandler != nil {
+		return CoreHandler
+	}
 	service := NewService()
-	return &handler{service}
+	CoreHandler = &handler{service}
+	return CoreHandler
 }
 
 // Lookup Types godoc
@@ -440,7 +450,7 @@ func (h *handler) ListStoreApps(c echo.Context) (err error) {
 		if err != nil {
 			return res.RespError(c, err)
 		}
-		return res.RespSuccessInfo(c, "List retrived successfully", response, page)
+		return res.RespSuccessInfo(c, "List retrieved successfully", response, page)
 	}
 
 	data, err = h.service.ListStoreApps(app_type, page)
@@ -452,7 +462,7 @@ func (h *handler) ListStoreApps(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespError(c, err)
 	}
-	return res.RespSuccessInfo(c, "List retrived successfully", response, page)
+	return res.RespSuccessInfo(c, "List retrieved successfully", response, page)
 }
 
 // GetApp godoc
@@ -514,21 +524,38 @@ func (h *handler) SearchApps(c echo.Context) (err error) {
 	return res.RespSuccess(c, "App fetched", result)
 }
 
-func (h *handler) UpdateCacheData(c echo.Context) (err error) {
+func (h *handler) UpdateLocalCacheData(c echo.Context) (err error) {
+	data := make(map[string]interface{})
+	c.Bind(&data)
+	fmt.Println("Payload received")
+	for key, value := range data {
+		fmt.Printf("Completed inserting %s credentials into local cache \n", key)
+		cache.SetCacheVariable(key, value)
+	}
+	return res.RespSuccessInfo(c, " Local cache updated successfully", nil, nil)
+}
+
+func (h *handler) GetLocalCacheData(c echo.Context) (err error) {
+	key := c.Param("key")
+	fmt.Println(key)
+	return res.RespSuccessInfo(c, " Local cache Retrieved successfully", cache.GetCacheVariable(key), nil)
+}
+
+func (h *handler) UpdateRedisCacheData(c echo.Context) (err error) {
 	data := make(map[string]interface{})
 	c.Bind(&data)
 	fmt.Println("Payload received")
 	for key, value := range data {
 		fmt.Printf("Completed inserting %s credentials into cache \n", key)
-		cache.SetCacheVariable(key, value)
+		cache.SetCacheKey(key, value)
 	}
 	return res.RespSuccessInfo(c, " Cache updated successfully", nil, nil)
 }
 
-func (h *handler) GetCacheData(c echo.Context) (err error) {
+func (h *handler) GetRedisCacheData(c echo.Context) (err error) {
 	key := c.Param("key")
 	fmt.Println(key)
-	return res.RespSuccessInfo(c, " Cache Retrieved successfully", cache.GetCacheVariable(key), nil)
+	return res.RespSuccessInfo(c, " Cache Retrieved successfully", cache.GetCacheKey(key), nil)
 }
 
 func (h *handler) GetChannelLookupCodes(c echo.Context) (err error) {
@@ -594,17 +621,27 @@ func (h *handler) ViewMetaData(c echo.Context) (err error) {
 // @Param page_no           query int 	 false "page_no"
 // @Param sort				query string false "sort"
 // @param filters 			query string false "Filters"
+// @param registered 		query string false "registered"
 // @Success 200 {object} InstalledAppsDTO
 // @Failure 400 {object} res.ErrorResponse
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/core/apps/installed [get]
 func (h *handler) ListInstalledApps(c echo.Context) (err error) {
+	queryParam := make(map[string]interface{})
+	var registered bool
 	page := new(pagination.Paginatevalue)
-	c.Bind(page)
-	response, err := h.service.ListInstalledApps(page)
+	err = c.Bind(&queryParam)
 	if err != nil {
-		return res.RespError(c, err)
+		return res.RespErr(c, err)
+	}
+	helpers.ParseQueryToPaginate(queryParam, page)
+	if queryParam["registered"] != nil {
+		registered, _ = strconv.ParseBool(queryParam["registered"].(string))
+	}
+	response, err := h.service.ListInstalledApps(page, registered)
+	if err != nil {
+		return res.RespErr(c, err)
 	}
 	return res.RespSuccessInfo(c, "success", response, page)
 }
@@ -658,34 +695,40 @@ func (h *handler) UninstallApp(c echo.Context) (err error) {
 	return res.RespSuccess(c, "success", map[string]interface{}{"message": "App Successfully UnInstalled"})
 }
 
-func (h *handler) UpdateCompanyPreferences(c echo.Context) (err error) {
-	host := c.Request().Host
-	schema := c.Scheme()
-
-	var id = c.Param("id")
-	company_id, _ := strconv.Atoi(id)
-
-	data := make(map[string]interface{})
-	c.Bind(&data)
-
-	var query = make(map[string]interface{})
-	query["id"] = company_id
-	query["user_token"] = c.Request().Header.Get("Authorization")
-	data["id"] = company_id
-	var company_details Company
-	dto, _ := json.Marshal(data)
-	err = json.Unmarshal(dto, &company_details)
-
-	s := c.Get("TokenUserID").(string)
-	company_details.UpdatedByID = helpers.ConvertStringToUint(s)
-
-	result, _ := h.service.UpdateCompanyPreferences(query, company_details, host, schema)
-	if err != nil {
-		fmt.Println(err)
-		return res.RespError(c, err)
+func (h *handler) UpdateInstalledApp(c echo.Context) error {
+	get_id := c.Param("id")
+	id, _ := strconv.Atoi(get_id)
+	query := map[string]interface{}{
+		"id": id,
 	}
+	var data model_core.InstalledApps
+	err := c.Bind(&data)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	err = h.service.UpdateInstalledApp(&data, query)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "successfully Update App  details", data)
 
-	return res.RespSuccess(c, "success", map[string]interface{}{"data": result, "message": "Company Preferences Updated successfully"})
+}
+
+func (h *handler) RenewSubscription(c echo.Context) (err error) {
+	app_code := c.QueryParam("code")
+	// company_id:= c.QueryParam("company_id")
+	user_id := c.Get("TokenUserID").(string)
+	fmt.Println("userid------------>", user_id)
+	query := map[string]interface{}{
+		"app_code": app_code,
+		// "company_id": company_id,
+
+	}
+	result := h.service.RenewSubscription(query, user_id)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "Subscription is updated successfully!", result)
 }
 
 func (h *handler) GetCompanyPreferences(c echo.Context) (err error) {
@@ -694,9 +737,26 @@ func (h *handler) GetCompanyPreferences(c echo.Context) (err error) {
 	var query = make(map[string]interface{})
 	query["id"] = company_id
 
-	result, _ := h.service.GetCompanyPreferences(query)
+	result, err := h.service.GetCompanyPreferences(query)
+	if err != nil {
+		fmt.Println(err)
+	}
 
-	return res.RespSuccess(c, "success", map[string]interface{}{"data": result, "message": "Company Preferences retrieved successfully"})
+	return res.RespSuccess(c, "success", result)
+}
+
+func (h *handler) ListCompanyPreferences(c echo.Context) (err error) {
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	var data []ChannelStatusDTO
+	response, err := h.service.ListCompanies(page)
+	value, _ := json.Marshal(response)
+
+	_ = json.Unmarshal(value, &data)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccessInfo(c, "success", response, page)
 }
 
 func (h *handler) CreateAppStore(c echo.Context) error {
@@ -757,7 +817,7 @@ func (h *handler) UpdateCompany(c echo.Context) (err error) {
 	var query = make(map[string]interface{})
 	query["id"] = company_id
 
-	var company_details model_core.Company
+	var company_details Company
 	data["id"] = company_id
 	dto, _ := json.Marshal(data)
 	err = json.Unmarshal(dto, &company_details)
@@ -766,15 +826,237 @@ func (h *handler) UpdateCompany(c echo.Context) (err error) {
 		fmt.Println(err)
 		return res.RespError(c, err)
 	}
+	host := c.Request().Host
+	scheme := c.Scheme()
 
 	s := c.Get("TokenUserID").(string)
 	company_details.UpdatedByID = helpers.ConvertStringToUint(s)
-
-	err = h.service.UpdateCompany(query, company_details)
+	err = h.service.UpdateCompany(query, company_details, host, scheme)
 	if err != nil {
 		fmt.Println(err)
 		return res.RespError(c, err)
 	}
 
-	return res.RespSuccess(c, "Company Details updated succesfully", map[string]interface{}{"updated_id": company_id})
+	return res.RespSuccess(c, "Company Details updated successfully", map[string]interface{}{"updated_id": company_id})
+	// return res.RespSuccess(c, "Company Details updated successfully", map[string]interface{}{"updated_id": company_id, "ondc": ondc})
+}
+
+func (h *handler) OndcRegistration(c echo.Context) (err error) {
+	var id = c.Param("id")
+	company_id, _ := strconv.Atoi(id)
+
+	data := make(map[string]interface{})
+	c.Bind(&data)
+
+	var query = make(map[string]interface{})
+	query["id"] = company_id
+
+	var company_details Company
+	data["id"] = company_id
+	dto, _ := json.Marshal(data)
+	err = json.Unmarshal(dto, &company_details)
+
+	if err != nil {
+		fmt.Println(err)
+		return res.RespError(c, err)
+	}
+	ondc, err := h.service.OndcRegistration(query, company_details)
+	if err != nil {
+		fmt.Println(err)
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccess(c, "Company Details updated successfully", map[string]interface{}{"updated_id": company_id, "ondc": ondc})
+}
+
+// ListChannelStatus godoc
+// @Summary ListChannelStatus
+// @Description get ChannelStatus
+// @Tags Core
+// @Accept  json
+// @Produce  json
+// @Param per_page 			query int 	 false "per_page"
+// @Param page_no           query int 	 false "page_no"
+// @Param sort				query string false "sort"
+// @param filters 			query string false "Filters"
+// @param Authorization header string true "Authorization"
+// @Success 200 {object} GetAllChannelStatusResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/core/channel_status [get]
+func (h *handler) ListChannelStatus(c echo.Context) (err error) {
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	var data []ChannelStatusDTO
+	response, err := h.service.ListChannelStatus(page)
+	value, _ := json.Marshal(response)
+
+	_ = json.Unmarshal(value, &data)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccessInfo(c, "success", response, page)
+}
+
+// ViewChannelStatus godoc
+// @Summary ViewChannelStatus
+// @Description ViewChannelStatus
+// @Tags Core
+// @Accept  json
+// @Produce  json
+// @param Authorization header string true "Authorization"
+// @Param   channel_status_id  path string true "id"
+// @Success 200 {object} ChannelStatusGetResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/core/channel_status/{id} [get]
+func (h *handler) ViewChannelStatus(c echo.Context) (err error) {
+	ID := c.Param("id")
+	id, _ := strconv.Atoi(ID)
+	result, err := h.service.ViewChannelStatus(uint(id))
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "success", result)
+}
+
+// CreateChannelStatus godoc
+// @Summary Create ChannelStatus
+// @Description Create ChannelStatus
+// @Tags Core
+// @Accept  json
+// @Produce  json
+// @Security ApiKeyAuth
+// @param Authorization header string true "Authorization"
+// @param RequestBody body ChannelStatusDTO true "Channel status Request Body"
+// @Success 200 {object} ChannelStatusCreateResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/core/channel_status/create [post]
+func (h *handler) CreateChannelStatus(c echo.Context) error {
+	var data model_core.ChannelLookupCodes
+	err := c.Bind(&data)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	err = h.service.CreateChannelStatus(&data)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "channel status created successfully", data)
+}
+
+// UpdateChannelStatus godoc
+// @Summary Update ChannelStatus
+// @Description Update ChannelStatus
+// @Tags Core
+// @Accept  json
+// @Produce  json
+// @Security ApiKeyAuth
+// @param Authorization header string true "Authorization"
+// @param id path string true "channel_status_id"
+// @param RequestBody body ChannelStatusDTO true "Channel status Request Body"
+// @Success 200 {object} ChannelStatusUpdateResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/core/channel_status/{id}/update [post]
+func (h *handler) UpdateChannelStatus(c echo.Context) error {
+	ID := c.Param("id")
+	id, _ := strconv.Atoi(ID)
+	query := map[string]interface{}{
+		"id": id,
+	}
+	var data model_core.ChannelLookupCodes
+	err := c.Bind(&data)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	err = h.service.UpdateChannelStatus(&data, query)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+	return res.RespSuccess(c, "Channel Status Updated Successfully", data)
+
+}
+
+// DeleteChannelStatus godoc
+// @Summary Delete ChannelStatus
+// @Description Delete ChannelStatus
+// @Tags Core
+// @Accept  json
+// @Produce  json
+// @Security ApiKeyAuth
+// @param Authorization header string true "Authorization"
+// @param id path string true "channel_status_id"
+// @Success 200 {object} ChannelStatusDeleteResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/core/channel_status/{id}/delete [delete]
+func (h *handler) DeleteChannelStatus(c echo.Context) (err error) {
+	get_id := c.Param("id")
+	id, _ := strconv.Atoi(get_id)
+	err = h.service.DeleteChannelStatus(uint(id))
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccess(c, "Channel Status Deleted Successfully", map[string]interface{}{"deleted_id": id})
+}
+
+func (h *handler) UpdateOndcDetails(c echo.Context) (err error) {
+	company_id := c.Get("CompanyId").(string)
+
+	data := make(map[string]interface{})
+	c.Bind(&data)
+
+	query := map[string]interface{}{
+		"id": company_id,
+	}
+	result, err := h.service.GetCompanyPreferences(query)
+	if err != nil {
+		fmt.Println(err)
+	}
+	OndcID := result.OndcDetailsId
+	query = map[string]interface{}{
+		"id": OndcID,
+	}
+	err = h.service.UpdateOndcDetails(query, data)
+	if err != nil {
+		fmt.Println(err)
+		return res.RespError(c, err)
+	}
+
+	return res.RespSuccess(c, "Ondc Details updated successfully", map[string]interface{}{"updated_id": company_id})
+}
+
+func (h *handler) AadhaarValidation(c echo.Context) (err error) {
+	data := make(map[string]interface{})
+	c.Bind(&data)
+	regex, _ := regexp.MatchString("^[0-9]{4}[ -]?[0-9]{4}[ -]?[0-9]{4}$", data["aadhar_number"].(string))
+
+	return c.JSON(http.StatusOK, map[string]interface{}{"success": regex})
+}
+
+func (h *handler) RequestSolution(c echo.Context) (err error) {
+	var data model_core.CustomSolution
+	c.Bind(&data)
+	CompanyId := c.Get("CompanyId").(string)
+	data.CompanyId = helpers.ConvertStringToUint(CompanyId)
+	_ = h.service.RequestSolution(data)
+	return c.JSON(http.StatusOK, map[string]interface{}{"success": data})
+}
+
+func (h *handler) ListCompaniesAdmin(c echo.Context) (err error) {
+	page := new(pagination.Paginatevalue)
+	c.Bind(page)
+	result, err := h.service.ListCompanies(page)
+	if err != nil {
+		return res.RespError(c, err)
+	}
+	return res.RespSuccessInfo(c, "data Retrieved Successfully", result, page)
+
 }

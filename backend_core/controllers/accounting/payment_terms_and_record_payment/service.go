@@ -1,15 +1,14 @@
 package payment_terms_and_record_payment
 
 import (
-	"errors"
 	"fmt"
 
 	"fermion/backend_core/internal/model/accounting"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	accounting_repo "fermion/backend_core/internal/repository/accounting"
 	access_checker "fermion/backend_core/pkg/util/access"
 	"fermion/backend_core/pkg/util/helpers"
-	res "fermion/backend_core/pkg/util/response"
 )
 
 /*
@@ -28,119 +27,110 @@ import (
 */
 
 type Service interface {
-	CreatePaymentTerm(data *accounting.PaymentTerms, token_id string, access_template_id string) error
-	UpdatePaymentTerm(query map[string]interface{}, data *accounting.PaymentTerms, token_id string, access_template_id string) error
-	DeletePaymentTerm(query map[string]interface{}, token_id string, access_template_id string) error
-	GetPaymentTerm(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error)
-	GetPaymentTermlist(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]accounting.PaymentTerms, error)
+	CreatePaymentTerm(metaData core.MetaData, data *accounting.PaymentTerms) error
+	UpdatePaymentTerm(metaData core.MetaData, data *accounting.PaymentTerms) error
+	DeletePaymentTerm(metaData core.MetaData) error
+	GetPaymentTerm(metaData core.MetaData) (interface{}, error)
+	GetPaymentTermlist(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error)
 }
 
 type service struct {
 	payment_Repository accounting_repo.PaymentTerm
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	payment_Repository := accounting_repo.NewPaymentTerm()
-	return &service{payment_Repository}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	//payment_Repository := accounting_repo.NewPaymentTerm()
+	newServiceObj = &service{accounting_repo.NewPaymentTerm()}
+	return newServiceObj
 
 }
 
-func (s *service) CreatePaymentTerm(data *accounting.PaymentTerms, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "CREATE", "PAYMENT_TERMS_RECORD_PAYMENT", *token_user_id)
-	if !access_module_flag {
+func (s *service) CreatePaymentTerm(metaData core.MetaData, data *accounting.PaymentTerms) error {
+
+	accessModuleFlag, dataAccess := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "CREATE", "PAYMENT_TERMS_RECORD_PAYMENT", metaData.TokenUserId)
+	if !accessModuleFlag {
 		return fmt.Errorf("you dont have access for create payment terms & record payment at view level")
 	}
-	if data_access == nil {
+	if dataAccess == nil {
 		return fmt.Errorf("you dont have access for create payment terms & record payment at data level")
 	}
-	query := map[string]interface{}{
-		"payment_term_name": data.PaymentTermName,
-	}
-	_, err := s.payment_Repository.FindOnePaymentTerm(query)
+	data.CompanyId = metaData.CompanyId
+	data.CreatedByID = &metaData.TokenUserId
+	err := s.payment_Repository.CreatePaymentTerm(data)
 	if err == nil {
-		return res.BuildError(res.ErrDuplicate, errors.New("oops! Record already Exists"))
-	} else {
-		err := s.payment_Repository.CreatePaymentTerm(data)
-		if err != nil {
-			return res.BuildError(res.ErrUnprocessableEntity, err)
-		}
+		return err
 	}
 	return nil
 }
 
-func (s *service) UpdatePaymentTerm(query map[string]interface{}, data *accounting.PaymentTerms, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "UPDATE", "PAYMENT_TERMS_RECORD_PAYMENT", *token_user_id)
-	if !access_module_flag {
+func (s *service) UpdatePaymentTerm(metaData core.MetaData, data *accounting.PaymentTerms) error {
+
+	accessmoduleflag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "UPDATE", "PAYMENT_TERMS_RECORD_PAYMENT", metaData.TokenUserId)
+	if !accessmoduleflag {
 		return fmt.Errorf("you dont have access for update payment terms & record payment at view level")
 	}
 	if data_access == nil {
 		return fmt.Errorf("you dont have access for update payment terms & record payment at data level")
 	}
-	_, err := s.payment_Repository.FindOnePaymentTerm(query)
-	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
-	}
-	err = s.payment_Repository.UpdatePaymentTerm(query, data)
-	if err != nil {
-		return res.BuildError(res.ErrDataNotFound, err)
-	}
-	return nil
-}
 
-func (s *service) DeletePaymentTerm(query map[string]interface{}, token_id string, access_template_id string) error {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "DELETE", "PAYMENT_TERMS_RECORD_PAYMENT", *token_user_id)
-	if !access_module_flag {
-		return fmt.Errorf("you dont have access for delete payment terms & record payment at view level")
-	}
-	if data_access == nil {
-		return fmt.Errorf("you dont have access for delete payment terms & record payment at data level")
-	}
-	q := map[string]interface{}{
-		"id": query["id"].(int),
-	}
-	_, er := s.payment_Repository.FindOnePaymentTerm(q)
-	if er != nil {
-		return er
-	}
-	err := s.payment_Repository.DeletePaymentTerm(query)
+	data.UpdatedByID = &metaData.TokenUserId
+	err := s.payment_Repository.UpdatePaymentTerm(metaData.Query, data)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *service) GetPaymentTerm(query map[string]interface{}, token_id string, access_template_id string) (interface{}, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, "READ", "PAYMENT_TERMS_RECORD_PAYMENT", *token_user_id)
+func (s *service) DeletePaymentTerm(metaData core.MetaData) error {
+
+	accessmoduleflag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "DELETE", "PAYMENT_TERMS_RECORD_PAYMENT", metaData.TokenUserId)
+	if !accessmoduleflag {
+		return fmt.Errorf("you dont have access for delete payment terms & record payment at view level")
+	}
+	if data_access == nil {
+		return fmt.Errorf("you dont have access for delete payment terms & record payment at data level")
+	}
+	err := s.payment_Repository.DeletePaymentTerm(metaData.Query)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *service) GetPaymentTerm(metaData core.MetaData) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), "READ", "PAYMENT_TERMS_RECORD_PAYMENT", metaData.TokenUserId)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for view payment terms & record payment at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for view payment terms & record payment at data level")
 	}
-	result, err := s.payment_Repository.FindOnePaymentTerm(query)
+	response, err := s.payment_Repository.FindOnePaymentTerm(metaData.Query)
 	if err != nil {
-		return result, err
+		return nil, err
 	}
-	return result, nil
+	return response, nil
 }
 
-func (s *service) GetPaymentTermlist(query interface{}, p *pagination.Paginatevalue, token_id string, access_template_id string, access_action string) ([]accounting.PaymentTerms, error) {
-	token_user_id := helpers.ConvertStringToUint(token_id)
-	access_module_flag, data_access := access_checker.ValidateUserAccess(access_template_id, access_action, "PAYMENT_TERMS_RECORD_PAYMENT", *token_user_id)
-	fmt.Println(access_action)
+func (s *service) GetPaymentTermlist(metaData core.MetaData, p *pagination.Paginatevalue) (interface{}, error) {
+
+	access_module_flag, data_access := access_checker.ValidateUserAccess(fmt.Sprint(metaData.AccessTemplateId), metaData.ModuleAccessAction, "PAYMENT_TERMS_RECORD_PAYMENT", metaData.TokenUserId)
+	//fmt.Println(metaData.ModuleAccessAction)
 	if !access_module_flag {
 		return nil, fmt.Errorf("you dont have access for list payment terms & record payment at view level")
 	}
 	if data_access == nil {
 		return nil, fmt.Errorf("you dont have access for list payment terms & record payment at data level")
 	}
-	result, err := s.payment_Repository.FindAllPaymentTerm(query, p)
-	if err != nil {
-		return result, res.BuildError(res.ErrUnprocessableEntity, err)
-	}
-	return result, nil
+	result, err := s.payment_Repository.FindAllPaymentTerm(metaData.Query, p)
+	var response []PaymentTermsDTO
+	helpers.JsonMarshaller(result, &response)
+	return response, err
 }

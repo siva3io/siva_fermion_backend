@@ -1,9 +1,10 @@
 package uom
 
 import (
-	"encoding/json"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -31,9 +32,16 @@ type handler struct {
 	service Service
 }
 
+var UomHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if UomHandler != nil {
+		return UomHandler
+	}
 	service := NewService()
-	return &handler{service}
+	UomHandler = &handler{service}
+	return UomHandler
 }
 
 // CreateUom godoc
@@ -50,26 +58,43 @@ func NewHandler() *handler {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/create [post]
-func (h *handler) CreateUom(c echo.Context) (err error) {
-	uom := c.Get("uom").(*UomRequestDTO)
-	var request_data mdm.Uom
+func (h *handler) CreateUomEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	marshaldata, err := json.Marshal(*uom)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("uom"),
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
+
+	eda.Produce(eda.CREATE_UOM, request_payload)
+	return res.RespSuccess(c, "Uom Creation Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateUom(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(mdm.Uom)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateUom(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_UOM_ACK, responseMessage)
+		return
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.CreateUom(&request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	// updating cache
+	UpdateUomInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
 	}
-	return res.RespSuccess(c, "UOM created successfully", request_data)
+	// eda.Produce(eda.CREATE_UOM_ACK, responseMessage)
+
 }
 
 // CreateUomClass godoc
@@ -86,26 +111,43 @@ func (h *handler) CreateUom(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class/create [post]
-func (h *handler) CreateUomClass(c echo.Context) (err error) {
-	uomClass := c.Get("uom_class").(*UomClassRequestDTO)
-	var request_data mdm.UomClass
+func (h *handler) CreateUomClassEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	marshaldata, err := json.Marshal(*uomClass)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("uom_class"),
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
+	eda.Produce(eda.CREATE_UOM_CLASS, request_payload)
+	return res.RespSuccess(c, "Uom class Creation Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) CreateUomClass(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(mdm.UomClass)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateUomClass(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_UOM_CLASS_ACK, responseMessage)
+		return
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.CreateUomClass(&request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+
+	// updating cache
+	UpdateUomClassInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
 	}
-	return res.RespSuccess(c, "UomClass created successfully", request_data)
+	// eda.Produce(eda.CREATE_UOM_CLASS_ACK, responseMessage)
+
 }
 
 // UpdateUom godoc
@@ -123,30 +165,48 @@ func (h *handler) CreateUomClass(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/{id}/update [post]
-func (h *handler) UpdateUom(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	data := c.Get("uom").(*UomRequestDTO)
-	var request_data mdm.Uom
+func (h *handler) UpdateUomEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	uomId := c.Param("id")
 
-	marshaldata, err := json.Marshal(*data)
-	if err != nil {
-		return res.RespErr(c, err)
+	edaMetaData.Query = map[string]interface{}{
+		"id":         uomId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("uom"),
 	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateUom(query, &request_data, token_id, access_template_id)
+
+	eda.Produce(eda.UPDATE_UOM, request_payload)
+	return res.RespSuccess(c, "Uom Update Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateUom(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(mdm.Uom)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateUom(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_UOM_ACK, responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "UOM Details updated succesfully", request_data)
+
+	// updating cache
+	UpdateUomInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_UOM_ACK, responseMessage)
 }
 
 // UpdateUomClass godoc
@@ -164,30 +224,50 @@ func (h *handler) UpdateUom(c echo.Context) (err error) {
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class/{id}/update [post]
-func (h *handler) UpdateUomClass(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	data := c.Get("uom_class").(*UomClassRequestDTO)
-	var request_data mdm.UomClass
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	marshaldata, err := json.Marshal(*data)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) UpdateUomClassEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	uonClassId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         uonClassId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("uom_class"),
 	}
-	s := c.Get("TokenUserID").(string)
-	request_data.UpdatedByID = helpers.ConvertStringToUint(s)
-	err = h.service.UpdateUomClass(query, &request_data, token_id, access_template_id)
+	eda.Produce(eda.UPDATE_UOM_CLASS, request_payload)
+	return res.RespSuccess(c, "Uom class Update Inprogress", edaMetaData.RequestId)
+}
+
+func (h *handler) UpdateUomClass(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	updatePayload := new(mdm.UomClass)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateUomClass(edaMetaData, updatePayload)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
 	if err != nil {
-		return res.RespErr(c, err)
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_UOM_CLASS_ACK, responseMessage)
+		return
 	}
-	return res.RespSuccess(c, "UOMClass Details updated succesfully", request_data)
+
+	// updating cache
+	UpdateUomClassInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+	// eda.Produce(eda.UPDATE_UOM_CLASS_ACK, responseMessage)
+
 }
 
 // DeleteUom godoc
@@ -205,19 +285,21 @@ func (h *handler) UpdateUomClass(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/{id}/delete [delete]
 func (h *handler) DeleteUom(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteUom(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	uomId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         uomId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteUom(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
+	// updating cache
+	UpdateUomInCache(metaData)
+
+	return res.RespSuccess(c, "Record deleted successfully", uomId)
 }
 
 // DeleteUomClass godoc
@@ -235,19 +317,22 @@ func (h *handler) DeleteUom(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class/{id}/delete [delete]
 func (h *handler) DeleteUomClass(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteUomClass(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	uomClassId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         uomClassId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteUomClass(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
+
+	// updating cache
+	UpdateUomClassInCache(metaData)
+
+	return res.RespSuccess(c, "Record deleted successfully", uomClassId)
 }
 
 // UomView godoc
@@ -266,17 +351,20 @@ func (h *handler) DeleteUomClass(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/{id} [get]
 func (h *handler) GetUom(c echo.Context) error {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetUom(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	uomId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": uomId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetUom(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Uom DEtails retried succesfully", result)
+
+	var response UomResponseDTO
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccess(c, "Uom Details retried succesfully", response)
 }
 
 // UomClassView godoc
@@ -295,16 +383,20 @@ func (h *handler) GetUom(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class/{id} [get]
 func (h *handler) GetUomClass(c echo.Context) error {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetUomClass(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	uomClassId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": uomClassId,
+		// "company_id": metaData.CompanyId,
+	}
+	result, err := h.service.GetUomClass(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	var response UomClassResponseDTO
+	helpers.JsonMarshaller(result, &response)
+
 	return res.RespSuccess(c, "UomClass Details retried succesfully", result)
 }
 
@@ -326,16 +418,33 @@ func (h *handler) GetUomClass(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom [get]
 func (h *handler) GetUomList(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetUomList(query, p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []UomResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUomFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetUomList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, " List Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, " List Retrieved successfully", response, p)
 }
 
 // UomListDropdown godoc
@@ -356,16 +465,33 @@ func (h *handler) GetUomList(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/dropdown [get]
 func (h *handler) GetUomListDropdown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetUomList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []UomResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUomFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetUomList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, " List Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, " List Retrieved successfully", response, p)
 }
 
 // UomClassList godoc
@@ -386,16 +512,33 @@ func (h *handler) GetUomListDropdown(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class [get]
 func (h *handler) GetUomClassList(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetUomClassList(query, p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []UomClassResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUomClassFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetUomClassList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, " List Retrieved successfully", result, p)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, " List Retrieved successfully", response, p)
 }
 
 // UomClassListDropdown godoc
@@ -416,64 +559,31 @@ func (h *handler) GetUomClassList(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/uom/class/dropdown [get]
 func (h *handler) GetUomClassListDropdown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetUomClassList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccessInfo(c, " List Retrieved successfully", result, p)
-}
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
 
-// UomSearch godoc
-// @Summary UomSearch
-// @Description UomSearch
-// @Tags UOM
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @param q query string true "Search query"
-// @Success 200 {array} IdNameDTO
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/uom/search [get]
-func (h *handler) SearchUom(c echo.Context) (err error) {
-	q := c.QueryParam("q")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.SearchUom(q, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	return res.RespSuccess(c, "OK", result)
-}
+	var cacheResponse interface{}
+	var response []UomResponseDTO
 
-// UomClassSearch godoc
-// @Summary UomClassSearch
-// @Description UomClassSearch
-// @Tags UOM
-// @Accept json
-// @Produce json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @param q query string true "Search query"
-// @Success 200 {array} IdNameDTO
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/uom/class/search [get]
-func (h *handler) SearchUomClass(c echo.Context) (err error) {
-	q := c.QueryParam("q")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.SearchUomClass(q, token_id, access_template_id)
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUomClassFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.GetUomClassList(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "OK", result)
+
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, " List Retrieved successfully", response, p)
 }

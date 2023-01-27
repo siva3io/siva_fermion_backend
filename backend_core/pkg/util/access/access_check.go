@@ -27,7 +27,7 @@ func ValidateUserAccess(access_template_id string, module_access_action string, 
 
 	id, _ := strconv.Atoi(access_template_id)
 
-	fmt.Println("AccesstemplateId", id)
+	// fmt.Println("AccesstemplateId", id)
 
 	p := new(pagination.Paginatevalue)
 

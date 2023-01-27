@@ -1,13 +1,13 @@
 package contacts
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	mdm_base "fermion/backend_core/controllers/mdm/base"
-
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/mdm"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/pkg/util/helpers"
@@ -35,10 +35,17 @@ type handler struct {
 	base_service mdm_base.ServiceBase
 }
 
+var ContactsHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ContactsHandler != nil {
+		return ContactsHandler
+	}
 	service := NewService()
 	base_service := mdm_base.NewServiceBase()
-	return &handler{service, base_service}
+	ContactsHandler = &handler{service, base_service}
+	return ContactsHandler
 }
 
 // CreateContact godoc
@@ -49,48 +56,113 @@ func NewHandler() *handler {
 // @Produce  json
 // @Security ApiKeyAuth
 // @param Authorization header string true "Authorization"
-// @param RequestBody body SwaggerPartnerRequestDTO true "Contact Request Body"
-// @Success 200 {object} PartnerResponseDTO
+// @param RequestBody body PartnerRequestDTO true "Contact Request Body"
+// @Success 200 {object} SwaggerCreateOrUpdatePartnerResponseDTO
 // @Failure 400 {object} res.ErrorResponse
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/create [post]
-func (h *handler) CreateContact(c echo.Context) (err error) {
-	var request_data mdm.Partner
+func (h *handler) CreateContactEvent(c echo.Context) error {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	partner := c.Get("partner").(*PartnerRequestDTO)
-	s := c.Get("TokenUserID").(string)
-	partner.CreatedByID = helpers.ConvertStringToUint(s)
-
-	fmt.Println("=====>>>", &partner.CreatedByID)
-
-	marshaldata, err := json.Marshal(*partner)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.CreatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.CreateContact(&request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("partner"),
 	}
 
-	isAllowedLogin := partner.IsAllowedLogin
+	eda.Produce(eda.CREATE_CONTACTS, request_payload)
 
-	//------------check IsAllowedLogin true or false-----------------
-	if isAllowedLogin != nil && *isAllowedLogin {
-		err = h.service.CreateOrUpdateSubUser(*partner)
+	return res.RespSuccess(c, "Contact Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) CreateContact(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+
+	//================= create contact ======================
+	createPayload := new(mdm.Partner)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.Create(edaMetaData, createPayload)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_CONTACTS_ACK, responseMessage)
+		return
+	}
+
+	//================= upsert sub_user =====================
+	isAllowedLogin := data["is_allowed_login"]
+	if isAllowedLogin != nil && isAllowedLogin == true {
+		var createSubUserPayload PartnerRequestDTO
+		helpers.JsonMarshaller(data, &createSubUserPayload)
+		userId, err := h.service.CreateOrUpdateSubUser(edaMetaData, createSubUserPayload)
 		if err != nil {
-			return res.RespErr(c, errors.New("error in create subuser"))
+			fmt.Println("error in create subuser")
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_CONTACTS_ACK, responseMessage)
+			return
+		}
+		edaMetaData.Query = map[string]interface{}{
+			"id": createPayload.ID,
+		}
+
+		updatePayload := new(mdm.Partner)
+		updatePayload.UserId = userId
+		err = h.service.Update(edaMetaData, updatePayload)
+		if err != nil {
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.UPDATE_CONTACTS_ACK, responseMessage)
+			return
 		}
 	}
 
-	return res.RespSuccess(c, "Contact created successfully", request_data)
+	//================= upsert vendor =====================
+	isVendorCreate := false
+	var contactProperties []map[string]interface{}
+	helpers.JsonMarshaller(createPayload.Properties, &contactProperties)
+	for _, object := range contactProperties {
+		LookupCode, _ := helpers.GetLookupcodeName(object["id"])
+		if LookupCode == "VENDOR" {
+			isVendorCreate = true
+			break
+		}
+	}
+	if isVendorCreate {
+		vendor := new(mdm.Vendors)
+		if createPayload.FirstName != "" || createPayload.LastName != "" {
+			vendor.Name = createPayload.FirstName + " " + createPayload.LastName
+		} else {
+			if createPayload.CompanyName != "" {
+				vendor.Name = createPayload.CompanyName
+			}
+		}
+		vendor.ContactId = &createPayload.ID
+		vendor.PrimaryContactId = createPayload.ParentId
+
+		vendorPayload := []interface{}{}
+
+		vendorPayload = append(vendorPayload, vendor)
+
+		request_payload := map[string]interface{}{
+			"meta_data": edaMetaData,
+			"data":      vendorPayload,
+		}
+		eda.Produce(eda.UPSERT_VENDOR, request_payload)
+	}
+
+	//===============cache implementation=====================
+	UpdateContactInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"created_id": createPayload.ID,
+	}
+
+	// eda.Produce(eda.CREATE_CONTACTS_ACK, responseMessage)
 }
 
 // UpdateContact godoc
@@ -102,48 +174,120 @@ func (h *handler) CreateContact(c echo.Context) (err error) {
 // @param id path string true "Contact ID"
 // @Security ApiKeyAuth
 // @param Authorization header string true "Authorization"
-// @param RequestBody body SwaggerPartnerRequestDTO true "Contact  Request Body"
-// @Success 200 {object} PartnerResponseDTO
+// @param RequestBody body PartnerRequestDTO true "Contact  Request Body"
+// @Success 200 {object} SwaggerCreateOrUpdatePartnerResponseDTO
 // @Failure 400 {object} res.ErrorResponse
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/{id}/update [post]
-func (h *handler) UpdateContact(c echo.Context) (err error) {
-	var id = c.Param("id")
-	var query = make(map[string]interface{}, 0)
-	ID, _ := strconv.Atoi(id)
-	query["id"] = ID
-	partner := c.Get("partner").(*PartnerRequestDTO)
-	s := c.Get("TokenUserID").(string)
-	partner.UpdatedByID = helpers.ConvertStringToUint(s)
-	var request_data mdm.Partner
+func (h *handler) UpdateContactEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
 
-	marshaldata, err := json.Marshal(*partner)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	err = json.Unmarshal(marshaldata, &request_data)
-	if err != nil {
-		return res.RespErr(c, err)
-	}
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	request_data.UpdatedByID = helpers.ConvertStringToUint(token_id)
-	err = h.service.UpdateContact(query, &request_data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	contactId := c.Param("id")
+	edaMetaData.Query = map[string]interface{}{
+		"id":         contactId,
+		"company_id": edaMetaData.CompanyId,
 	}
 
-	isAllowedLogin := partner.IsAllowedLogin
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("partner"),
+	}
 
-	//------------check IsAllowedLogin true or false-----------------
-	if isAllowedLogin != nil && *isAllowedLogin {
-		err = h.service.CreateOrUpdateSubUser(*partner)
+	eda.Produce(eda.UPDATE_CONTACTS, request_payload)
+	return res.RespSuccess(c, "Contact Updation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateContact(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+	data := request["data"].(map[string]interface{})
+
+	updatePayload := new(mdm.Partner)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.Update(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_CONTACTS_ACK, responseMessage)
+		return
+	}
+	//================= upsert sub_user =====================
+	isAllowedLogin := data["is_allowed_login"]
+	if isAllowedLogin != nil && isAllowedLogin == true {
+		contactDetails, err := h.service.FindOne(edaMetaData)
 		if err != nil {
-			return res.RespErr(c, errors.New("error in create subuser"))
+			fmt.Println("error in create subuser")
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_CONTACTS_ACK, responseMessage)
+			return
+		}
+
+		var createSubUserPayload PartnerRequestDTO
+		helpers.JsonMarshaller(data, &createSubUserPayload)
+		helpers.JsonMarshaller(contactDetails, &createSubUserPayload)
+
+		userId, err := h.service.CreateOrUpdateSubUser(edaMetaData, createSubUserPayload)
+		if err != nil {
+			fmt.Println("error in create subuser")
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.CREATE_CONTACTS_ACK, responseMessage)
+			return
+		}
+
+		updatePayload := new(mdm.Partner)
+		updatePayload.UserId = userId
+		err = h.service.Update(edaMetaData, updatePayload)
+		if err != nil {
+			responseMessage.ErrorMessage = err
+			// eda.Produce(eda.UPDATE_CONTACTS_ACK, responseMessage)
+			return
 		}
 	}
-	return res.RespSuccess(c, "Contact updated succesfully", request_data)
+
+	//================= upsert vendor =====================
+	isVendorCreate := false
+
+	contactResponse, _ := h.service.FindOne(edaMetaData)
+	var contactDetails PartnerResponseDTO
+	helpers.JsonMarshaller(contactResponse, &contactDetails)
+	for _, object := range contactDetails.Properties {
+		LookupCode, _ := helpers.GetLookupcodeName(object.Id)
+		if LookupCode == "VENDOR" {
+			isVendorCreate = true
+			break
+		}
+	}
+	if isVendorCreate {
+		vendor := new(mdm.Vendors)
+		if contactDetails.FirstName != "" || contactDetails.LastName != "" {
+			vendor.Name = contactDetails.FirstName + " " + contactDetails.LastName
+		} else {
+			if contactDetails.CompanyName != "" {
+				vendor.Name = contactDetails.CompanyName
+			}
+		}
+		vendor.ContactId = &contactDetails.Id
+		vendor.PrimaryContactId = contactDetails.ParentId
+		vendorPayload := []interface{}{}
+		vendorPayload = append(vendorPayload, vendor)
+		request_payload := map[string]interface{}{
+			"meta_data": edaMetaData,
+			"data":      vendorPayload,
+		}
+		eda.Produce(eda.UPSERT_VENDOR, request_payload)
+	}
+
+	//===============cache implementation===================================
+	UpdateContactInCache(edaMetaData)
+
+	responseMessage.Response = map[string]interface{}{
+		"updated_id": edaMetaData.Query["id"],
+	}
+
+	// eda.Produce(eda.UPDATE_CONTACTS_ACK, responseMessage)
 }
 
 // DeleteContacts godoc
@@ -161,19 +305,23 @@ func (h *handler) UpdateContact(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/{id}/delete [delete]
 func (h *handler) DeleteContacts(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	query["user_id"] = user_id
-	err = h.service.DeleteContact(query, token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	contactId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         contactId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+
+	err = h.service.Delete(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": id})
+
+	//===============cache implementation===================================
+	UpdateContactInCache(metaData)
+
+	return res.RespSuccess(c, "Record deleted successfully", map[string]string{"deleted_id": contactId})
 }
 
 // ContactView godoc
@@ -192,46 +340,28 @@ func (h *handler) DeleteContacts(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/{id} [get]
 func (h *handler) ContactView(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	//println("--------->", ID)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetContact(query, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+	metaData := c.Get("MetaData").(core.MetaData)
+	contactId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id": contactId,
+		// "company_id": metaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Contact Details Retrieved successfully", result)
-}
 
-// GetRelatedContacts godoc
-// @Summary Get related contacts
-// @Description Get related contacts
-// @Tags Contacts
-// @Accept  json
-// @Produce  json
-// @Security ApiKeyAuth
-// @param Authorization header string true "Authorization"
-// @param id path string true "Contact ID"
-// @Success 200 {object} ContactListDTO
-// @Failure 400 {object} res.ErrorResponse
-// @Failure 404 {object} res.ErrorResponse
-// @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/contacts/{id}/related [get]
-func (h *handler) GetRelatedContacts(c echo.Context) error {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	var query = make(map[string]interface{}, 0)
-	query["id"] = ID
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.GetContact(query, token_id, access_template_id)
+	result, err := h.service.FindOne(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Contact Details Retrieved successfully", result)
+
+	var response PartnerResponseDTO
+	helpers.JsonMarshaller(result, &response)
+
+	for _, address := range response.AddressDetails {
+		if address.MarkDefaultAddress {
+			response.DefaultAddress = address
+			break
+		}
+	}
+	return res.RespSuccess(c, "Contact Details Retrieved successfully", response)
 }
 
 // GetContacts godoc
@@ -252,16 +382,41 @@ func (h *handler) GetRelatedContacts(c echo.Context) error {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts [get]
 func (h *handler) GetContacts(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetContactList(query, p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PartnerResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetContactFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", response, p)
+	}
+
+	result, err := h.service.FindAll(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+
+	for index, ContactDetails := range response {
+		for _, address := range ContactDetails.AddressDetails {
+			if address.MarkDefaultAddress {
+				response[index].DefaultAddress = address
+				break
+			}
+		}
+	}
+	return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", response, p)
 }
 
 // GetContactsDropdown godoc
@@ -282,41 +437,110 @@ func (h *handler) GetContacts(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/dropdown [get]
 func (h *handler) GetContactsDropdown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	var query = make(map[string]interface{}, 0)
-	result, err := h.service.GetContactList(query, p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []PartnerResponseDTO
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetContactFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", response, p)
+	}
+
+	result, err := h.service.FindAll(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+
+	for index, ContactDetails := range response {
+		for _, address := range ContactDetails.AddressDetails {
+			if address.MarkDefaultAddress {
+				response[index].DefaultAddress = address
+				break
+			}
+		}
+	}
+	return res.RespSuccessInfo(c, "Contact list Retrieved Successfully", response, p)
 }
 
-// SearchContacts godoc
-// @Summary Get all filtered  contacts
-// @Description Get all filtered contacts
+// GetRelatedContacts godoc
+// @Summary Get related contacts
+// @Description Get related contacts
 // @Tags Contacts
-// @Accept json
-// @Produce json
+// @Accept  json
+// @Produce  json
 // @Security ApiKeyAuth
 // @param Authorization header string true "Authorization"
-// @param q query string true "Search query"
-// @Success 200 {array} IdNameDTO
+// @param id path string true "Contact ID"
+// @Success 200 {object} ContactListDTO
 // @Failure 400 {object} res.ErrorResponse
 // @Failure 404 {object} res.ErrorResponse
 // @Failure 500 {object} res.ErrorResponse
-// @Router /api/v1/contacts/search [get]
-func (h *handler) SearchContacts(c echo.Context) (err error) {
-	q := c.QueryParam("q")
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.SearchContact(q, token_id, access_template_id)
+// @Router /api/v1/contacts/{id}/related [get]
+func (h *handler) GetRelatedContacts(c echo.Context) error {
+	metaData := c.Get("MetaData").(core.MetaData)
+	contactId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         contactId,
+		"company_id": metaData.CompanyId,
+	}
+
+	result, err := h.service.FindOne(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "OK", result)
+	return res.RespSuccess(c, "Contact Details Retrieved successfully", result)
+}
+
+// GetContactTab godoc
+// @Summary GetContactTab
+// @Summary GetContactTab
+// @Description GetContactTab
+// @Tags Contacts
+// @Accept  json
+// @Produce  json
+// @Security ApiKeyAuth
+// @param Authorization header string true "Authorization"
+// @param id path string true "id"
+// @param tab path string true "tab"
+// @Success 200 {object} res.SuccessResponse
+// @Failure 400 {object} res.ErrorResponse
+// @Failure 404 {object} res.ErrorResponse
+// @Failure 500 {object} res.ErrorResponse
+// @Router /api/v1/contacts/{id}/filter_module/{tab} [get]
+func (h *handler) GetContactTab(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	p := new(pagination.Paginatevalue)
+	err = c.Bind(p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	contactId := c.Param("id")
+	tabName := c.Param("tab")
+
+	metaData.AdditionalFields = map[string]interface{}{
+		"contact_id": contactId,
+		"tab_name":   tabName,
+	}
+
+	data, err := h.service.GetRelatedTabs(metaData, p)
+	if err != nil {
+		return res.RespErr(c, err)
+	}
+
+	return res.RespSuccessInfo(c, "success", data, p)
 }
 
 // FavouriteContacts godoc
@@ -334,27 +558,27 @@ func (h *handler) SearchContacts(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/{id}/favourite [post]
 func (h *handler) FavouriteContacts(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	contactId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         contactId,
+		"company_id": metaData.CompanyId,
+	}
+
+	_, err = h.service.FindOne(metaData)
+	if err != nil {
+		return res.RespSuccess(c, "Specified record not found", err)
+	}
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
-	}
-	q := map[string]interface{}{
-		"id": ID,
-	}
-	_, er := h.service.GetContact(q, token_id, access_template_id)
-	if er != nil {
-		return res.RespSuccess(c, "Specified record not found", er)
+		"ID":      contactId,
+		"user_id": metaData.TokenUserId,
 	}
 	err = h.base_service.FavouriteContacts(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Contact is Marked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Contact is Marked as Favourite", map[string]string{"contact_id": contactId})
 }
 
 // UnFavouriteContacts godoc
@@ -372,19 +596,19 @@ func (h *handler) FavouriteContacts(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/{id}/unfavourite [post]
 func (h *handler) UnFavouriteContacts(c echo.Context) (err error) {
-	id := c.Param("id")
-	ID, _ := strconv.Atoi(id)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	contactId := c.Param("id")
+
 	query := map[string]interface{}{
-		"ID":      ID,
-		"user_id": user_id,
+		"ID":      contactId,
+		"user_id": metaData.TokenUserId,
 	}
+
 	err = h.base_service.UnFavouriteContacts(query)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "Contact is Unmarked as Favourite", map[string]string{"record_id": id})
+	return res.RespSuccess(c, "Contact is Unmarked as Favourite", map[string]string{"contact_id": contactId})
 }
 
 // GetFavouriteContacts godoc
@@ -405,12 +629,12 @@ func (h *handler) UnFavouriteContacts(c echo.Context) (err error) {
 // @Failure 500 {object} res.ErrorResponse
 // @Router /api/v1/contacts/favourite_list [get]
 func (h *handler) FavouriteContactsView(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	data, er := h.base_service.GetArrContact(user_id)
-	if er != nil {
+	tokenUserId := int(metaData.TokenUserId)
+	data, err := h.base_service.GetArrContact(tokenUserId)
+	if err != nil {
 		return errors.New("favourite list not found for the specified user")
 	}
 	result, err := h.base_service.GetFavContactList(data, p)
@@ -418,4 +642,53 @@ func (h *handler) FavouriteContactsView(c echo.Context) (err error) {
 		return res.RespErr(c, err)
 	}
 	return res.RespSuccessInfo(c, "Favourite Contact list Retrieved Successfully", result, p)
+}
+
+func (h *handler) UpsertContactEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	var arrayData []interface{}
+	var objectData interface{}
+	var data interface{}
+
+	c.Bind(&data)
+
+	err = helpers.JsonMarshaller(data, &arrayData)
+	if err != nil {
+		helpers.JsonMarshaller(data, &objectData)
+		arrayData = append(arrayData, objectData)
+	}
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      arrayData,
+	}
+	request_payload["meta_data"] = edaMetaData
+	eda.Produce(eda.UPSERT_CONTACT, request_payload)
+
+	return res.RespSuccess(c, "Contact Upsert Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+func (h *handler) UpsertContact(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	var data []interface{}
+	helpers.JsonMarshaller(request["data"], &data)
+
+	var responseMessage eda.ConsumerResponse
+	responseMessage.MetaData = edaMetaData
+
+	response, err := h.service.Upsert(edaMetaData, data)
+	helpers.PrettyPrint("contacts upsert response", response)
+
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPSERT_CONTACTS_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{
+		"response": response,
+	}
+
+	// eda.Produce(eda.UPSERT_CONTACTS_ACK, responseMessage)
 }

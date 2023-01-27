@@ -27,8 +27,8 @@ type PurchaseReturns struct {
 	model_core.Model
 	PurchaseReturnNumber  string                       `json:"purchase_return_number" gorm:"type:text"`
 	ReferenceNumber       string                       `json:"reference_number"  gorm:"type:text"`
-	CurrencyId            uint                         `json:"currency_id" gorm:"type:int"`
-	Currency              model_core.Currency          `json:"currency" gorm:"foreignkey:CurrencyId; references:ID"`
+	CurrencyId            *uint                        `json:"currency_id" gorm:"type:int"`
+	Currency              *model_core.Currency         `json:"currency" gorm:"foreignkey:CurrencyId; references:ID"`
 	PrDate                datatypes.Date               `json:"pr_date" gorm:"type:date"`
 	ExpectedDeliveryDate  datatypes.Date               `json:"expected_delivery_date" gorm:"type:date"`
 	SourceDocuments       datatypes.JSON               `json:"source_documents" gorm:"type:json; default:'[]'; not null"`
@@ -36,10 +36,10 @@ type PurchaseReturns struct {
 	Source_document       model_core.Lookupcode        `json:"source_document" gorm:"foreignKey:Source_document_id; references:ID"`
 	VendorDetails         datatypes.JSON               `json:"vendor_details" gorm:"type:JSON"`
 	Amount                float32                      `json:"amount" gorm:"type:float"`
-	PaymentTermsId        uint                         `json:"payment_terms_id" gorm:"type:int"`
+	PaymentTermsId        *uint                        `json:"payment_terms_id" gorm:"type:int"`
 	PaymentTerms          model_core.Lookupcode        `json:"payment_terms" gorm:"foreignkey:PaymentTermsId; references:ID"`
 	PaymentDueDate        datatypes.Date               `json:"payment_due_date" gorm:"type:date"`
-	DebitNoteIssuedId     uint                         `json:"debit_note_issued_id" gorm:"type:int"`
+	DebitNoteIssuedId     *uint                        `json:"debit_note_issued_id" gorm:"type:int"`
 	DebitNoteIssued       model_core.Lookupcode        `json:"debit_note_issued" gorm:"foreignkey:DebitNoteIssuedId; references:ID"`
 	StatusId              uint                         `json:"status_id" gorm:"type:int"`
 	Status                model_core.Lookupcode        `json:"status" gorm:"foreignkey:StatusId; references:ID"`
@@ -48,6 +48,7 @@ type PurchaseReturns struct {
 	AdditionalInformation orders.AdditionalInformation `json:"additional_information" gorm:"embedded"`
 	PickupDateAndTime     orders.PickupDateAndTime     `json:"pickup_date_and_time" gorm:"embedded"`
 	PrPaymentDetails      PrPaymentDetails             `json:"pr_payment_details" gorm:"embedded"`
+	TotalQuantity         int64                        `json:"total_quantity"`
 	// AsnId uint                 `json:"asn_id" gorm:"type:int"`
 	// Asn   inventory_orders.ASN `json:"asn" gorm:"foreignkey:AsnId; references:ID"`
 	// GrnId uint                 `json:"grn_id" gorm:"type:int"`
@@ -56,25 +57,25 @@ type PurchaseReturns struct {
 
 type PurchaseReturnLines struct {
 	model_core.Model
-	PrId              uint                                  `json:"pr_id" gorm:"type:int"`
-	ProductId         uint                                  `json:"product_id" gorm:"type:int"`
-	Product           mdm.ProductVariant                    `json:"product_details" gorm:"foreignkey:ProductId; references:ID"`
-	ProductTemplateId uint                                  `json:"product_template_id" gorm:"type:INT"`
-	ProductTemplate   mdm.ProductTemplate                   `json:"product_template" gorm:"foreignkey:ProductTemplateId; references:ID"`
-	UomId             uint                                  `json:"uom_id" gorm:"type:INT"`
-	Uom               mdm.Uom                               `json:"uom" gorm:"foreignkey:UomId; references:ID"`
-	SerialNumber      string                                `json:"serial_number"  gorm:"type:text"`
-	InventoryId       uint64                                `json:"inventory_id"`
-	QuantityPurchased int                                   `json:"quantity_purchased" gorm:"type:int"`
-	QuantityReturned  int64                                 `json:"quantity_returned" gorm:"type:int"`
-	Rate              int                                   `json:"rate" gorm:"type:int"`
-	LocationID        uint                                  `json:"location_id" gorm:"type:int"`
-	ReturnLocation    shared_pricing_and_location.Locations `json:"return_location" gorm:"foreignkey:LocationID; references:ID"`
-	Discount          float32                               `json:"discount" gorm:"type:float"`
-	DiscountFormat    string                                `json:"discount_format" gorm:"type:text"`
-	Tax               float32                               `json:"tax" gorm:"type:float"`
-	TaxFormat         string                                `json:"tax_format" gorm:"type:text"`
-	Amount            float32                               `json:"amount" gorm:"type:float"`
+	PrId              uint                                   `json:"pr_id" gorm:"type:int"`
+	ProductId         *uint                                  `json:"product_id" gorm:"type:int"`
+	Product           *mdm.ProductVariant                    `json:"product_details" gorm:"foreignkey:ProductId; references:ID"`
+	ProductTemplateId *uint                                  `json:"product_template_id" gorm:"type:INT"`
+	ProductTemplate   *mdm.ProductTemplate                   `json:"product_template" gorm:"foreignkey:ProductTemplateId; references:ID"`
+	UomId             *uint                                  `json:"uom_id" gorm:"type:INT"`
+	Uom               *mdm.Uom                               `json:"uom" gorm:"foreignkey:UomId; references:ID"`
+	SerialNumber      string                                 `json:"serial_number"  gorm:"type:text"`
+	InventoryId       uint64                                 `json:"inventory_id"`
+	QuantityPurchased int                                    `json:"quantity_purchased" gorm:"type:int"`
+	QuantityReturned  int64                                  `json:"quantity_returned" gorm:"type:int"`
+	Rate              int                                    `json:"rate" gorm:"type:int"`
+	LocationID        *uint                                  `json:"location_id" gorm:"type:int"`
+	ReturnLocation    *shared_pricing_and_location.Locations `json:"return_location" gorm:"foreignkey:LocationID; references:ID"`
+	Discount          float32                                `json:"discount" gorm:"type:float"`
+	DiscountFormat    string                                 `json:"discount_format" gorm:"type:text"`
+	Tax               float32                                `json:"tax" gorm:"type:float"`
+	TaxFormat         string                                 `json:"tax_format" gorm:"type:text"`
+	Amount            float32                                `json:"amount" gorm:"type:float"`
 }
 
 type PrPaymentDetails struct {

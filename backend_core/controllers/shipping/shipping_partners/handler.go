@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
+	"fermion/backend_core/controllers/eda"
 	shipping_base "fermion/backend_core/controllers/shipping/base"
+	"fermion/backend_core/internal/model/core"
 	"fermion/backend_core/internal/model/pagination"
 	"fermion/backend_core/internal/model/shipping"
 	"fermion/backend_core/pkg/util/helpers"
@@ -32,10 +34,17 @@ type handler struct {
 	base_service shipping_base.ServiceBase
 }
 
+var ShippingPartnersHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if ShippingPartnersHandler != nil {
+		return ShippingPartnersHandler
+	}
 	service := NewService()
 	base_service := shipping_base.NewServiceBase()
-	return &handler{service, base_service}
+	ShippingPartnersHandler = &handler{service, base_service}
+	return ShippingPartnersHandler
 }
 
 // Create UserShippingPartnerRegistration godoc
@@ -52,18 +61,35 @@ func NewHandler() *handler {
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners/register [post]
-func (h *handler) CreateUserShippingPartnerRegistration(c echo.Context) (err error) {
-	data := c.Get("shipping_partners").(*UserShippingPartnerRegistrationRequest)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	userID, _ := strconv.Atoi(token_id)
-	t := uint(userID)
-	data.CreatedByID = &t
-	created_id, err := h.service.CreateUserShippingPartnerRegistration(data, uint(userID), token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) CreateUserShippingPartnerRegistrationEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("shipping_partners"),
 	}
-	return res.RespSuccess(c, "Shippings partner created", map[string]interface{}{"created_id": created_id})
+	eda.Produce(eda.CREATE_SHIPPING_PARTNER, request_payload)
+	return res.RespSuccess(c, "Shipping Partner Creation Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) CreateUserShippingPartnerRegistration(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+
+	createPayload := new(shipping.UserShippingPartnerRegistration)
+	helpers.JsonMarshaller(data, createPayload)
+
+	err := h.service.CreateUserShippingPartnerRegistration(edaMetaData, createPayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.CREATE_SHIPPING_PARTNER_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{"created_id": createPayload.ID}
+	// eda.Produce(eda.CREATE_SHIPPING_PARTNER_ACK, responseMessage)
 }
 
 // UpdateUserShippingPartnerRegistration godoc
@@ -81,19 +107,43 @@ func (h *handler) CreateUserShippingPartnerRegistration(c echo.Context) (err err
 // @Failure      404  {object}  res.ErrorResponse
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners/{id}/update [post]
-func (h *handler) UpdateUserShippingPartnerRegistration(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	data := c.Get("shipping_partners").(*UserShippingPartnerRegistrationRequest)
-	s := c.Get("TokenUserID").(string)
-	data.UpdatedByID = helpers.ConvertStringToUint(s)
-	err = h.service.UpdateUserShippingPartnerRegistration(uint(id), *data, token_id, access_template_id)
-	if err != nil {
-		return res.RespErr(c, err)
+func (h *handler) UpdateUserShippingPartnerRegistrationEvent(c echo.Context) (err error) {
+	edaMetaData := c.Get("MetaData").(core.MetaData)
+	shippingPartnerId := c.Param("id")
+
+	edaMetaData.Query = map[string]interface{}{
+		"id":         shippingPartnerId,
+		"company_id": edaMetaData.CompanyId,
 	}
-	return res.RespSuccess(c, "Shippings partner updated", map[string]interface{}{"updated_id": id})
+
+	request_payload := map[string]interface{}{
+		"meta_data": edaMetaData,
+		"data":      c.Get("shipping_partners"),
+	}
+	eda.Produce(eda.UPDATE_SHIPPING_PARTNER, request_payload)
+	return res.RespSuccess(c, "Shipping_partner Update Inprogress", map[string]interface{}{"request_id": edaMetaData.RequestId})
+}
+
+func (h *handler) UpdateUserShippingPartnerRegistration(request map[string]interface{}) {
+	var edaMetaData core.MetaData
+	helpers.JsonMarshaller(request["meta_data"], &edaMetaData)
+
+	data := request["data"].(map[string]interface{})
+	updatePayload := new(shipping.UserShippingPartnerRegistration)
+	helpers.JsonMarshaller(data, updatePayload)
+
+	err := h.service.UpdateUserShippingPartnerRegistration(edaMetaData, updatePayload)
+	var responseMessage eda.ConsumerResponse
+	if err != nil {
+		responseMessage.ErrorMessage = err
+		// eda.Produce(eda.UPDATE_SHIPPING_PARTNER_ACK, responseMessage)
+		return
+	}
+	responseMessage.Response = map[string]interface{}{"updated_id": edaMetaData.Query["id"]}
+	// eda.Produce(eda.UPDATE_SHIPPING_PARTNER_ACK, responseMessage)
+	// cache implementation
+	UpdateUserLogisticPartnerInCache(edaMetaData)
+
 }
 
 // GetUserShippingPartnerRegistration godoc
@@ -111,14 +161,18 @@ func (h *handler) UpdateUserShippingPartnerRegistration(c echo.Context) (err err
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners/registered/{id} [get]
 func (h *handler) GetUserShippingPartnerRegistration(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.UserShippingPartnerRegistrationbyid(uint(id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingPartnerId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         shippingPartnerId,
+		"company_id": metaData.CompanyId,
+	}
+	result, err := h.service.UserShippingPartnerRegistrationbyid(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+	var response UserShippingPartnerRegistrationRequest
+	helpers.JsonMarshaller(result, &response)
 	return res.RespSuccess(c, "data Retrieved successfully", result)
 }
 
@@ -140,15 +194,32 @@ func (h *handler) GetUserShippingPartnerRegistration(c echo.Context) (err error)
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners [get]
 func (h *handler) GetAllUserShippingPartnerRegistration(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllUserShippingPartnerRegistration(p, token_id, access_template_id, "LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []UserShippingPartnerRegistrationRequest
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUserLogisticPartnerFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.AllUserShippingPartnerRegistration(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "shipping data list data Retrieved successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "shipping data list data Retrieved successfully", response, p)
 }
 
 // GetAllUserShippingPartnerRegistrationDropDown godoc
@@ -169,15 +240,32 @@ func (h *handler) GetAllUserShippingPartnerRegistration(c echo.Context) (err err
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners/dropdown [get]
 func (h *handler) GetAllUserShippingPartnerRegistrationDropDown(c echo.Context) (err error) {
+	metaData := c.Get("MetaData").(core.MetaData)
+	metaData.ModuleAccessAction = "DROPDOWN_LIST"
+
 	p := new(pagination.Paginatevalue)
 	c.Bind(p)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	result, err := h.service.AllUserShippingPartnerRegistration(p, token_id, access_template_id, "DROPDOWN_LIST")
+	helpers.AddMandatoryFilters(p, "company_id", "=", metaData.CompanyId)
+
+	var cacheResponse interface{}
+	var response []UserShippingPartnerRegistrationRequest
+
+	tokenUserId := strconv.Itoa(int(metaData.TokenUserId))
+	if *p == pagination.BasePaginatevalue {
+		cacheResponse, *p = GetUserLogisticPartnerFromCache(tokenUserId)
+	}
+
+	if cacheResponse != nil {
+		helpers.JsonMarshaller(cacheResponse, &response)
+		return res.RespSuccessInfo(c, "data retrieved successfully", response, p)
+	}
+
+	result, err := h.service.AllUserShippingPartnerRegistration(metaData, p)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccessInfo(c, "shipping data dropdown list data Retrieved successfully", result, p)
+	helpers.JsonMarshaller(result, &response)
+	return res.RespSuccessInfo(c, "shipping data list data Retrieved successfully", response, p)
 }
 
 // DeleteUserShippingPartnerRegistration godoc
@@ -195,16 +283,22 @@ func (h *handler) GetAllUserShippingPartnerRegistrationDropDown(c echo.Context) 
 // @Failure      500  {object}  res.ErrorResponse
 // @Router       /api/v1/shipping_partners/{id}/delete [delete]
 func (h *handler) DeleteUserShippingPartnerRegistration(c echo.Context) (err error) {
-	ID := c.Param("id")
-	id, _ := strconv.Atoi(ID)
-	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
-	user_id, _ := strconv.Atoi(token_id)
-	err = h.service.DeleteUserShippingPartnerRegistration(uint(id), uint(user_id), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+	shippingPartnerId := c.Param("id")
+	metaData.Query = map[string]interface{}{
+		"id":         shippingPartnerId,
+		"user_id":    metaData.TokenUserId,
+		"company_id": metaData.CompanyId,
+	}
+	err = h.service.DeleteUserShippingPartnerRegistration(metaData)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	return res.RespSuccess(c, "deleted successfully", map[string]int{"deleted_id": id})
+
+	// cache implementation
+	UpdateUserLogisticPartnerInCache(metaData)
+
+	return res.RespSuccess(c, "deleted successfully", shippingPartnerId)
 }
 
 // FavouriteUserShippingPartnerRegistration godoc
@@ -225,13 +319,14 @@ func (h *handler) FavouriteUserShippingPartnerRegistration(c echo.Context) (err 
 	id := c.Param("id")
 	ID, _ := strconv.Atoi(id)
 	token_id := c.Get("TokenUserID").(string)
-	access_template_id := c.Get("AccessTemplateId").(string)
 	user_id, _ := strconv.Atoi(token_id)
 	query := map[string]interface{}{
 		"ID":      ID,
 		"user_id": user_id,
 	}
-	_, er := h.service.UserShippingPartnerRegistrationbyid(uint(ID), token_id, access_template_id)
+	metaData := c.Get("MetaData").(core.MetaData)
+
+	_, er := h.service.UserShippingPartnerRegistrationbyid(metaData)
 	if er != nil {
 		return res.RespSuccess(c, "Specified record not found", er)
 	}

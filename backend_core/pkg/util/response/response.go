@@ -65,6 +65,7 @@ const (
 	E_UNAUTHORIZED         = "unauthorized"
 	E_BAD_REQUEST          = "bad_request"
 	E_SERVER_ERROR         = "server_error"
+	E_METHOD_NOT_ALLOWED   = "method_not_allowed"
 )
 
 var (
@@ -147,6 +148,16 @@ var (
 			Error: E_SERVER_ERROR,
 		},
 		Code: http.StatusInternalServerError,
+	}
+	ErrMethodNotAllowed = ErrorConstant{
+		Response: ErrorResponse{
+			Meta: MetaResponse{
+				Success: false,
+				Message: "Method Not Allowed",
+			},
+			Error: E_METHOD_NOT_ALLOWED,
+		},
+		Code: http.StatusMethodNotAllowed,
 	}
 )
 

@@ -59,6 +59,7 @@ type CentralizedBasicInventoryDTO struct {
 	IsActive           *bool  `json:"is_active" gorm:"default:true"`
 }
 type DecentralizedBasicInventoryDTO struct {
+	CompanyId          uint   `json:"company_id"`
 	ChannelCode        string `json:"channel_code"`
 	ProductVariantId   uint   `json:"product_variant_id"`
 	PhysicalLocationId uint   `json:"physical_location_id"`
@@ -71,6 +72,8 @@ type DecentralizedBasicInventoryDTO struct {
 	StockExpected      int64  `json:"stock_expected"`
 	CommitedStock      int64  `json:"commited_stock"`
 	NoOfUnits          int64  `json:"no_of_units"`
+	CreatedByID        *uint  `json:"created_by"`
+	UpdatedByID        *uint  `json:"updated_by"`
 	IsEnabled          *bool  `json:"is_enabled" gorm:"default:true"`
 	IsActive           *bool  `json:"is_active" gorm:"default:true"`
 }

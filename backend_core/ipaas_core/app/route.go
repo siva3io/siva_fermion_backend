@@ -29,4 +29,6 @@ func (h *handler) Route(g *echo.Group) {
 	g.POST("/integrations/:collection/create", h.CreateFeature, cmiddleware.Authorization)
 	g.POST("/integrations/:collection/:id/update", h.UpdateFeature, cmiddleware.Authorization)
 	g.DELETE("/integrations/:collection/:id/delete", h.DeleteFeature, cmiddleware.Authorization)
+	g.POST("/boson_convertor", h.BosonConvertor, cmiddleware.Authorization)
+	g.GET("/integrations/app_features/:app_code", h.GetAppFeatures, cmiddleware.Authorization)
 }

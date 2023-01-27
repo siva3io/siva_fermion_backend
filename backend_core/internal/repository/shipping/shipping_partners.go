@@ -1,6 +1,7 @@
 package shipping
 
 import (
+	"errors"
 	"os"
 	"time"
 
@@ -28,11 +29,11 @@ You should have received a copy of the GNU Lesser General Public License v3.0
 along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.html/>.
 */
 type ShippingPartner interface {
-	Create(data *shipping.UserShippingPartnerRegistration, userID uint) (uint, error)
-	Update(id uint, data shipping.UserShippingPartnerRegistration) error
-	FindOne(id uint) (shipping.UserShippingPartnerRegistration, error)
-	FindAll(p *pagination.Paginatevalue) ([]shipping.UserShippingPartnerRegistration, error)
-	Delete(id uint, user_id uint) error
+	Create(data *shipping.UserShippingPartnerRegistration) error
+	Update(query map[string]interface{}, data *shipping.UserShippingPartnerRegistration) error
+	FindOne(query map[string]interface{}) (shipping.UserShippingPartnerRegistration, error)
+	FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.UserShippingPartnerRegistration, error)
+	Delete(query map[string]interface{}) error
 
 	ShippingPartnerEstimateCosts(data *shipping.RateCalculator) ([]shipping.RateCalculator, error)
 
@@ -46,15 +47,24 @@ type shippingPartner struct {
 	db *gorm.DB
 }
 
+var shippingPartnerRepository *shippingPartner //singleton object
+
+// singleton function
 func NewShipping() *shippingPartner {
+	if shippingPartnerRepository != nil {
+		return shippingPartnerRepository
+	}
 	db := db.DbManager()
-	return &shippingPartner{db}
+	shippingPartnerRepository = &shippingPartner{db}
+	return shippingPartnerRepository
 }
 
-func (r *shippingPartner) Create(data *shipping.UserShippingPartnerRegistration, userID uint) (uint, error) {
-	data.UserId = userID
-	res := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Create(&data)
-	return data.ID, res.Error
+func (r *shippingPartner) Create(data *shipping.UserShippingPartnerRegistration) error {
+	err := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Create(&data).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *shippingPartner) ShippingPartnerEstimateCosts(data *shipping.RateCalculator) ([]shipping.RateCalculator, error) {
@@ -63,21 +73,30 @@ func (r *shippingPartner) ShippingPartnerEstimateCosts(data *shipping.RateCalcul
 	return result, res.Error
 }
 
-func (r *shippingPartner) Update(id uint, data shipping.UserShippingPartnerRegistration) error {
-	res := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Where("id", id).Updates(&data)
-	return res.Error
+func (r *shippingPartner) Update(query map[string]interface{}, data *shipping.UserShippingPartnerRegistration) error {
+	err := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Where(query).Updates(&data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }
 
-func (r *shippingPartner) FindOne(id uint) (shipping.UserShippingPartnerRegistration, error) {
+func (r *shippingPartner) FindOne(query map[string]interface{}) (shipping.UserShippingPartnerRegistration, error) {
 	var data shipping.UserShippingPartnerRegistration
-	result := r.db.Preload(clause.Associations).Model(&shipping.UserShippingPartnerRegistration{}).Preload(clause.Associations).Where("id", id).First(&data)
-	if result.Error != nil {
-		return data, result.Error
+	err := r.db.Preload(clause.Associations).Model(&shipping.UserShippingPartnerRegistration{}).Preload(clause.Associations).Where(query).First(&data)
+	if err.RowsAffected == 0 {
+		return data, errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return data, err.Error
 	}
 	return data, nil
 }
 
-func (r *shippingPartner) FindAll(p *pagination.Paginatevalue) ([]shipping.UserShippingPartnerRegistration, error) {
+func (r *shippingPartner) FindAll(query map[string]interface{}, p *pagination.Paginatevalue) ([]shipping.UserShippingPartnerRegistration, error) {
 	var data []shipping.UserShippingPartnerRegistration
 	err := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Preload(clause.Associations).Scopes(helpers.Paginate(&shipping.UserShippingPartnerRegistration{}, p, r.db)).Where("is_active = true").Find(&data).Error
 	if err != nil {
@@ -85,15 +104,22 @@ func (r *shippingPartner) FindAll(p *pagination.Paginatevalue) ([]shipping.UserS
 	}
 	return data, nil
 }
-func (r *shippingPartner) Delete(id uint, user_id uint) error {
+func (r *shippingPartner) Delete(query map[string]interface{}) error {
 	zone := os.Getenv("DB_TZ")
 	loc, _ := time.LoadLocation(zone)
 	data := map[string]interface{}{
-		"deleted_by": user_id,
+		"deleted_by": query["user_id"],
 		"deleted_at": time.Now().In(loc),
 	}
-	res := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Where("id", id).Updates(data)
-	return res.Error
+	delete(query, "user_id")
+	err := r.db.Model(&shipping.UserShippingPartnerRegistration{}).Where(query).Updates(data)
+	if err.RowsAffected == 0 {
+		return errors.New("oops! record not found")
+	}
+	if err.Error != nil {
+		return err.Error
+	}
+	return nil
 }
 
 func (r shippingPartner) FindAllShippingpartner(p *pagination.Paginatevalue) ([]shipping.ShippingPartner, error) {

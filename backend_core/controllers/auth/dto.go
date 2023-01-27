@@ -108,25 +108,26 @@ type VerifyOtpDTO struct {
 	AccessTemplateId uint   `json:"access_template_id"`
 }
 type VerifyOtpResponse struct {
-	Status           bool        `json:"status"`
-	Message          string      `json:"message"`
-	Token            string      `json:"token,omitempty"`
-	AccessTemplateId uint        `json:"access_template_id"`
-	User             interface{} `json:"user,omitempty"`
+	Status           bool            `json:"status"`
+	Message          string          `json:"message"`
+	Token            string          `json:"token,omitempty"`
+	AccessTemplateId uint            `json:"access_template_id"`
+	User             UserResponseDTO `json:"user,omitempty"`
 }
 
 type UserObject struct {
-	ID           uint   `json:"id"`
-	Name         string `json:"name"`
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	Username     string `json:"username"`
-	Email        string `json:"email"`
-	MobileNumber string `json:"mobile_number"`
-	TotalPoints  int    `json:"total_points"`
-	LoginType    int32  `json:"login_type"`
-	IsEnabled    bool   `json:"is_enabled"`
-	IsActive     bool   `json:"is_active"`
+	ID           uint           `json:"id"`
+	Name         string         `json:"name"`
+	FirstName    string         `json:"first_name"`
+	LastName     string         `json:"last_name"`
+	Username     string         `json:"username"`
+	Email        string         `json:"email"`
+	MobileNumber string         `json:"mobile_number"`
+	TotalPoints  int            `json:"total_points"`
+	LoginType    int32          `json:"login_type"`
+	IsEnabled    bool           `json:"is_enabled"`
+	IsActive     bool           `json:"is_active"`
+	UserTypes    datatypes.JSON `json:"user_types,omitempty"`
 }
 
 type UpdateProfileDTO struct {
@@ -142,11 +143,12 @@ type UpdateProfileDTO struct {
 	Profile        datatypes.JSON `json:"profile,omitempty"`
 	CompanyName    string         `json:"company_name"`
 	CompanyEmail   string         `json:"company_email"`
-	FaConf         datatypes.JSON `json:"2fa_conf"`
-	DeviceIds      datatypes.JSON `json:"device_ids"`
-	Preferences    datatypes.JSON `json:"preferences"`
-	AccessIds      datatypes.JSON `json:"access_ids"`
-	AddressDetails datatypes.JSON `json:"address_details"`
+	FaConf         datatypes.JSON `json:"2fa_conf,omitempty"`
+	DeviceIds      datatypes.JSON `json:"device_ids,omitempty"`
+	Preferences    datatypes.JSON `json:"preferences,omitempty"`
+	AccessIds      datatypes.JSON `json:"access_ids,omitempty"`
+	UserTypes      datatypes.JSON `json:"user_types,omitempty"`
+	AddressDetails datatypes.JSON `json:"address_details,omitempty"`
 }
 
 type UserResponseDTO struct {
@@ -158,12 +160,13 @@ type UserResponseDTO struct {
 	Email            string         `json:"email"`
 	WorkEmail        string         `json:"work_email"`
 	MobileNumber     string         `json:"mobile_number"`
+	UserTypes        datatypes.JSON `json:"user_types"`
 	LoginType        int32          `json:"login_type"`
 	Auth             datatypes.JSON `json:"auth"`
 	FaConf           datatypes.JSON `json:"2fa_conf"`
 	DeviceIds        datatypes.JSON `json:"device_ids"`
 	Preferences      datatypes.JSON `json:"preferences"`
-	AccessIds        datatypes.JSON `json:"access_ids"`
+	AccessIds        []uint         `json:"access_ids"`
 	CompanyId        *uint          `json:"company_id"`
 	TeamHead         string         `json:"team_head"`
 	ExternalDetails  datatypes.JSON `json:"external_details"`
@@ -174,11 +177,12 @@ type UserResponseDTO struct {
 
 	//PltPointIds   *PlatformPoints `json:"plt_point_ids" gorm:"foreignkey:PltPointId"`
 	// CreatedBy []CoreUsers `gorm:"many2many:created_by"`
-	IsEnabled bool `json:"is_enabled" gorm:"default:true"`
-	IsActive  bool `json:"is_active" gorm:"default:true"`
+	IsEnabled bool   `json:"is_enabled" gorm:"default:true"`
+	IsActive  bool   `json:"is_active" gorm:"default:true"`
+	Token     string `json:"token"`
 }
 type CompanyDTO struct {
-	Name                   string         `json:"company_name"`
+	Name                   string         `json:"name"`
 	Addresses              datatypes.JSON `json:"addresses"`
 	Phone                  string         `json:"phone"`
 	Email                  string         `json:"email"`
@@ -187,7 +191,7 @@ type CompanyDTO struct {
 	ParentId               uint           `json:"parent_id"`
 	ChildIds               pq.Int64Array  `json:"child_ids"`
 	Type                   int            `json:"type"`
-	CompanyDefaults        datatypes.JSON `json:"company_defaults"`
+	CompanyDefaults        datatypes.JSON `json:"company_defaults,omitempty"`
 	NotificationSettingsId *uint          `json:"notification_settings_id"`
 	// NotificationSettings     NotificationSettings
 	NotificationTemplatesIds pq.Int32Array `json:"notification_template_id"`

@@ -22,13 +22,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/lgpl-3.0.htm
 */
 type CurrencyExchange struct {
 	model_core.Model
-	QuoteCurrencyID uint                  `json:"quote_currency_id" gorm:"type:integer"`
-	QuoteCurrency   model_core.Currency   `json:"quote_currency" gorm:"foreignKey:QuoteCurrencyID; references:ID"`
-	QuoteCountryID  uint                  `json:"quote_country_id" gorm:"type:integer"`
-	QuoteCountry    model_core.Country    `json:"country" gorm:"foreignKey:QuoteCountryID; references:ID"`
+	QuoteCurrencyID *uint                 `json:"quote_currency_id" gorm:"type:integer"`
+	QuoteCurrency   *model_core.Currency  `json:"quote_currency" gorm:"foreignKey:QuoteCurrencyID; references:ID"`
+	QuoteCountryID  *uint                 `json:"quote_country_id" gorm:"type:integer"`
+	QuoteCountry    *model_core.Country   `json:"country" gorm:"foreignKey:QuoteCountryID; references:ID"`
 	ExchangeId      *uint                 `json:"exchange_id"`
 	Exchange        model_core.Lookupcode `gorm:"foreignKey:ExchangeId;references:ID" json:"exchange"`
-	BreakDown       []BreakDownIntervals  `json:"breakdown_intervals,omitempty" gorm:"foreignkey:BreakDownId; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	BreakDown       []BreakDownIntervals  `json:"breakdown_intervals" gorm:"foreignkey:BreakDownId; references:ID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
 type BreakDownIntervals struct {

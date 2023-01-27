@@ -43,9 +43,16 @@ type serviceBase struct {
 	inventoryTasksRepository inventory_tasks_repo.InventoryTasksBase
 }
 
+var newServiceObj *serviceBase //singleton object
+
+// singleton function
 func NewServiceBase() *serviceBase {
+	if newServiceObj != nil {
+		return newServiceObj
+	}
 	inventoryTasksRepository := inventory_tasks_repo.NewInventoryTasksBase()
-	return &serviceBase{inventoryTasksRepository}
+	newServiceObj = &serviceBase{inventoryTasksRepository}
+	return newServiceObj
 }
 func (s *serviceBase) GetArrCycleCount(user_id int) (pq.Int64Array, error) {
 	query := map[string]interface{}{

@@ -29,9 +29,16 @@ type handler struct {
 	service Service
 }
 
+var AccountingHandler *handler //singleton object
+
+// singleton function
 func NewHandler() *handler {
+	if AccountingHandler != nil {
+		return AccountingHandler
+	}
 	service := NewService()
-	return &handler{service}
+	AccountingHandler = &handler{service}
+	return AccountingHandler
 }
 
 func (h *handler) CreateAccounting(c echo.Context) (err error) {
@@ -41,12 +48,18 @@ func (h *handler) CreateAccounting(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
-	s := c.Get("TokenUserID").(string)
-	data.CreatedByID = helpers.ConvertStringToUint(s)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+
+	data.CreatedByID = helpers.ConvertStringToUint(token_id)
 	err = h.service.CreateAccounting(&data)
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateUserAccountingLinkInCache(token_id, access_template_id)
+
 	return res.RespSuccess(c, "account created successfully", map[string]interface{}{"created_id": data.ID})
 }
 
@@ -61,10 +74,11 @@ func (h *handler) UpdateAccounting(c echo.Context) (err error) {
 	idString := c.Param("id")
 	id, _ := strconv.Atoi(idString)
 
-	s := c.Get("TokenUserID").(string)
-	user_id, _ := strconv.Atoi(s)
+	token_id := c.Get("TokenUserID").(string)
+	access_template_id := c.Get("AccessTemplateId").(string)
+	user_id, _ := strconv.Atoi(token_id)
 
-	data.UpdatedByID = helpers.ConvertStringToUint(s)
+	data.UpdatedByID = helpers.ConvertStringToUint(token_id)
 
 	query := map[string]interface{}{
 		"id":         id,
@@ -75,6 +89,9 @@ func (h *handler) UpdateAccounting(c echo.Context) (err error) {
 	if err != nil {
 		return res.RespErr(c, err)
 	}
+
+	// cache implementation
+	UpdateUserAccountingLinkInCache(token_id, access_template_id)
 
 	return res.RespSuccess(c, "account created successfully", map[string]interface{}{"updated_id": id})
 }

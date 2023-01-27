@@ -56,8 +56,15 @@ type service struct {
 	marketplaceRepository   omnichannel_repo.OmnichannelBase
 }
 
+var newServiceObj *service //singleton object
+
+// singleton function
 func NewService() *service {
-	return &service{omnichannel_repo.NewMarketplace(), omnichannel_repo.NewMarketPlaceDetails(), omnichannel_repo.NewmarketPlaceBase()}
+	if newServiceObj != nil {
+		return newServiceObj
+	}
+	newServiceObj = &service{omnichannel_repo.NewMarketplace(), omnichannel_repo.NewMarketPlaceDetails(), omnichannel_repo.NewmarketPlaceBase()}
+	return newServiceObj
 }
 
 // Register marketplace Services
